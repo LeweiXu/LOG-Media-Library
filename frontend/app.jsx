@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import Dashboard  from './pages/Dashboard.jsx';
 import Library    from './pages/Library.jsx';
 import Statistics from './pages/Statistics.jsx';
 import AuthModal  from './pages/components/AuthModal.jsx';
-
-const BASE = 'http://lingweispc.ddns.net:6443';
+import { BASE } from './api.jsx';
 
 export default function App() {
-  const [page,           setPage]           = useState('dashboard');
-  const [online,         setOnline]         = useState(null);   // null=checking
+  const navigate = useNavigate();
+  const [online,         setOnline]         = useState(null);
   const [libraryFilters, setLibraryFilters] = useState({});
 
   // ── Auth state ─────────────────────────────────────────────────────────────
@@ -20,6 +20,7 @@ export default function App() {
   function handleAuth(newToken, newUsername) {
     setToken(newToken);
     setUsername(newUsername);
+    navigate('/dashboard');
   }
 
   function handleLogout() {
@@ -52,12 +53,12 @@ export default function App() {
   /* Navigate to Library with pre-applied filters (called from Dashboard sidebar) */
   function handleFilterChange(filters) {
     setLibraryFilters(filters);
-    setPage('library');
+    navigate('/library');
   }
 
   function goLibrary() {
     setLibraryFilters({});
-    setPage('library');
+    navigate('/library');
   }
 
   return (
@@ -68,21 +69,16 @@ export default function App() {
         <span className="topbar-sep">|</span>
 
         <nav className="topbar-nav">
-          <a
-            className={page === 'dashboard'  ? 'active' : ''}
-            onClick={() => setPage('dashboard')}>
+          <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'active' : undefined}>
             Dashboard
-          </a>
-          <a
-            className={page === 'library'    ? 'active' : ''}
-            onClick={goLibrary}>
+          </NavLink>
+          <NavLink to="/library" className={({ isActive }) => isActive ? 'active' : undefined}
+            onClick={() => setLibraryFilters({})}>
             Library
-          </a>
-          <a
-            className={page === 'statistics' ? 'active' : ''}
-            onClick={() => setPage('statistics')}>
+          </NavLink>
+          <NavLink to="/statistics" className={({ isActive }) => isActive ? 'active' : undefined}>
             Statistics
-          </a>
+          </NavLink>
         </nav>
 
         <div className="topbar-right">
@@ -102,10 +98,15 @@ export default function App() {
       {/* ── Auth modal (shown over the page when unauthenticated) ── */}
       {!isAuthenticated && <AuthModal onAuth={handleAuth} />}
 
-      {/* ── Pages ── */}
-      {page === 'dashboard'  && <Dashboard  onFilterChange={handleFilterChange} />}
-      {page === 'library'    && <Library    initialFilters={libraryFilters} key={JSON.stringify(libraryFilters)} />}
-      {page === 'statistics' && <Statistics />}
+      {/* ── Routes ── */}
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard"  element={<Dashboard  onFilterChange={handleFilterChange} />} />
+        <Route path="/library"    element={<Library    initialFilters={libraryFilters} key={JSON.stringify(libraryFilters)} />} />
+        <Route path="/statistics" element={<Statistics />} />
+        <Route path="*"           element={<Navigate to="/dashboard" replace />} />
+      </Routes>
     </div>
   );
 }
+

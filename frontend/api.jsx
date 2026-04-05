@@ -1,4 +1,4 @@
-const BASE = 'http://localhost:6443';
+export const BASE = 'http://localhost:6443';
 
 const getToken = () => localStorage.getItem('auth_token');
 
