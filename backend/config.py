@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     IGDB_CLIENT_ID: str = ""
     IGDB_CLIENT_SECRET: str = ""
     GOOGLE_BOOKS_API_KEY: str = ""
+    RAWG_API_KEY: str = ""
+    COMICVINE_API_KEY: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
