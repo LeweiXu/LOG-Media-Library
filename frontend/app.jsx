@@ -127,10 +127,20 @@ export default function App() {
       </Routes>
 
       {/* ── Footer ── */}
-      <footer className="app-footer">
-        <span>© 2026 Lewei Xu</span>
-        <span className="footer-sep">·</span>
-        <span>LOG — personal media tracker</span>
+      <footer className="app-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <span>© 2026 Lewei Xu</span>
+          <span className="footer-sep">·</span>
+          <span>LOG — personal media tracker</span>
+        </div>
+        <a
+          href="https://github.com/LeweiXu/MediaTrack2.0"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'inherit', textDecoration: 'underline', fontSize: 11 }}
+        >
+          https://github.com/LeweiXu/MediaTrack2.0
+        </a>
       </footer>
     </div>
   );
