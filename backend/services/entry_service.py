@@ -40,6 +40,7 @@ def _apply_filters(q, *, status, medium, origin, title):
 def get_entries(
     db: Session,
     *,
+    username: str,
     status: Optional[str] = None,
     medium: Optional[str] = None,
     origin: Optional[str] = None,
@@ -52,7 +53,7 @@ def get_entries(
     sort_col = SORTABLE_COLUMNS.get(sort, Entry.updated_at)
     direction = asc if order == "asc" else desc
 
-    base_q = select(Entry)
+    base_q = select(Entry).where(Entry.username == username)
     base_q = _apply_filters(base_q, status=status, medium=medium, origin=origin, title=title)
 
     # Total count (before pagination)
@@ -78,8 +79,9 @@ def get_entry_by_id(db: Session, entry_id: int) -> Optional[Entry]:
 
 # ── Create ────────────────────────────────────────────────────────────────────
 
-def create_entry(db: Session, payload: EntryCreate) -> Entry:
-    entry = Entry(**payload.model_dump(exclude_none=False))
+def create_entry(db: Session, payload: EntryCreate, username: str) -> Entry:
+    data = payload.model_dump(exclude_none=False)
+    entry = Entry(**data, username=username)
 
     # If created as completed, stamp completed_at
     if entry.status == "completed" and entry.completed_at is None:

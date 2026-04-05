@@ -53,6 +53,7 @@ class EntryUpdate(BaseModel):
 
 class EntryRead(EntryBase):
     id:           int
+    username:     str
     created_at:   datetime
     updated_at:   datetime
     completed_at: Optional[datetime] = None
@@ -63,6 +64,22 @@ class EntryListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+# --- User Schemas ---
+
+class UserCreate(BaseModel):
+    username: str = Field(..., min_length=1, max_length=100)
+    email:    str = Field(..., max_length=320)
+    password: str = Field(..., min_length=6)
+
+class UserRead(BaseModel):
+    username: str
+    email:    str
+    model_config = {"from_attributes": True}
+
+class Token(BaseModel):
+    access_token: str
+    token_type:   str = "bearer"
 
 # --- Search Schemas ---
 from pydantic import BaseModel

@@ -1,14 +1,53 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from db import get_db
-from schemas import EntryCreate, EntryListResponse, EntryRead, EntryUpdate, SearchResult, StatsResponse
+from models import User
+from schemas import (
+    EntryCreate, EntryListResponse, EntryRead, EntryUpdate,
+    SearchResult, StatsResponse,
+    UserCreate, UserRead, Token,
+)
 from services import entry_service
+from services import auth_service
 from services.search_service import search_media
 from services.stats_service import get_stats
 
 router = APIRouter()
 
-# Entries endpoints
+# ── Auth routes ───────────────────────────────────────────────────────────────
+
+@router.post("/auth/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+def register(payload: UserCreate, db: Session = Depends(get_db)):
+    if auth_service.get_user_by_username(db, payload.username):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken")
+    if auth_service.get_user_by_email(db, payload.email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+    print(payload.username, payload.email, payload.password)  # --- DEBUG ---
+    user = User(
+        username=payload.username,
+        email=payload.email,
+        hashed_password=auth_service.hash_password(payload.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@router.post("/auth/login", response_model=Token)
+def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = auth_service.get_user_by_username(db, form.username)
+    if not user or not auth_service.verify_password(form.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return Token(access_token=auth_service.create_token(user.username))
+
+# ── Entries endpoints ─────────────────────────────────────────────────────────
+
 @router.get("/entries", response_model=EntryListResponse)
 def list_entries(
     status: str = Query(None, description="Filter by status"),
@@ -20,9 +59,11 @@ def list_entries(
     limit:  int = Query(40,  ge=1, le=2000, description="Max results to return"),
     offset: int = Query(0,   ge=0,          description="Number of results to skip"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
 ):
     return entry_service.get_entries(
         db,
+        username=current_user.username,
         status=status,
         medium=medium,
         origin=origin,
@@ -34,40 +75,62 @@ def list_entries(
     )
 
 @router.get("/entries/{entry_id}", response_model=EntryRead)
-def get_entry(entry_id: int, db: Session = Depends(get_db)):
+def get_entry(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
     entry = entry_service.get_entry_by_id(db, entry_id)
-    if not entry:
+    if not entry or entry.username != current_user.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
     return entry
 
 @router.post("/entries", response_model=EntryRead, status_code=status.HTTP_201_CREATED)
-def create_entry(payload: EntryCreate, db: Session = Depends(get_db)):
-    return entry_service.create_entry(db, payload)
+def create_entry(
+    payload: EntryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return entry_service.create_entry(db, payload, username=current_user.username)
 
 @router.put("/entries/{entry_id}", response_model=EntryRead)
-def update_entry(entry_id: int, payload: EntryUpdate, db: Session = Depends(get_db)):
+def update_entry(
+    entry_id: int,
+    payload: EntryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
     entry = entry_service.get_entry_by_id(db, entry_id)
-    if not entry:
+    if not entry or entry.username != current_user.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
     return entry_service.update_entry(db, entry, payload)
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_entry(entry_id: int, db: Session = Depends(get_db)):
+def delete_entry(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
     entry = entry_service.get_entry_by_id(db, entry_id)
-    if not entry:
+    if not entry or entry.username != current_user.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
     entry_service.delete_entry(db, entry)
 
-# Search endpoint
-from fastapi import Query
+# ── Search endpoint ───────────────────────────────────────────────────────────
+
 @router.get("/search", response_model=list[SearchResult])
 async def search(
     title:  str = Query(..., min_length=1, description="Title to search for"),
     medium: str = Query("", description="Optional medium hint"),
+    current_user: User = Depends(auth_service.get_current_user),
 ):
     return await search_media(title=title, medium=medium)
 
-# Stats endpoint
+# ── Stats endpoint ────────────────────────────────────────────────────────────
+
 @router.get("/stats", response_model=StatsResponse)
-def stats(db: Session = Depends(get_db)):
-    return get_stats(db)
+def stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return get_stats(db, username=current_user.username)

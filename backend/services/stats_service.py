@@ -10,10 +10,11 @@ from models import Entry
 from schemas import StatsResponse, MediumCount, OriginCount, MonthCount
 
 
-def get_stats(db: Session) -> StatsResponse:
+def get_stats(db: Session, username: str) -> StatsResponse:
     # ── Status counts ─────────────────────────────────────────────────────────
     status_rows = db.execute(
         select(Entry.status, func.count().label("cnt"))
+        .where(Entry.username == username)
         .group_by(Entry.status)
     ).all()
 
@@ -26,6 +27,7 @@ def get_stats(db: Session) -> StatsResponse:
     # ── Average rating (completed entries only) ───────────────────────────────
     avg_rating_row = db.execute(
         select(func.avg(Entry.rating))
+        .where(Entry.username == username)
         .where(Entry.status == "completed")
         .where(Entry.rating.is_not(None))
     ).scalar_one_or_none()
@@ -35,6 +37,7 @@ def get_stats(db: Session) -> StatsResponse:
     # ── By medium ─────────────────────────────────────────────────────────────
     medium_rows = db.execute(
         select(Entry.medium, func.count().label("cnt"))
+        .where(Entry.username == username)
         .where(Entry.medium.is_not(None))
         .group_by(Entry.medium)
         .order_by(func.count().desc())
@@ -45,6 +48,7 @@ def get_stats(db: Session) -> StatsResponse:
     # ── By origin ─────────────────────────────────────────────────────────────
     origin_rows = db.execute(
         select(Entry.origin, func.count().label("cnt"))
+        .where(Entry.username == username)
         .where(Entry.origin.is_not(None))
         .group_by(Entry.origin)
         .order_by(func.count().desc())
@@ -59,6 +63,7 @@ def get_stats(db: Session) -> StatsResponse:
             func.to_char(Entry.created_at, "Mon YY").label("label"),
             func.count().label("cnt"),
         )
+        .where(Entry.username == username)
         .group_by(
             func.to_char(Entry.created_at, "YYYY-MM"),
             func.to_char(Entry.created_at, "Mon YY"),

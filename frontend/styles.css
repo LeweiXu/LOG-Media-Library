@@ -91,6 +91,51 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 .topbar-right .online  { color: var(--green); }
 .topbar-right .offline { color: var(--red); }
 
+.topbar-right .topbar-user {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.topbar-right .btn-logout {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: 'IBM Plex Mono', monospace;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.topbar-right .btn-logout:hover { color: var(--red); border-color: var(--red); }
+
+/* ── Auth Modal ──────────────────────────────────────────────────────────── */
+.auth-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--dim);
+  font-size: 12px;
+  padding: 10px 0;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  font-family: 'IBM Plex Mono', monospace;
+  transition: color 0.15s;
+}
+
+.auth-tab:hover           { color: var(--text); }
+.auth-tab--active         { color: var(--accent); border-bottom-color: var(--accent); }
+
+.auth-error {
+  background: rgba(224, 86, 86, 0.1);
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: 11px;
+  padding: 8px 10px;
+  margin-bottom: 14px;
+}
+
 /* ── App shell ───────────────────────────────────────────────────────────── */
 .app-shell {
   padding-top: 40px;

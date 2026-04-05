@@ -31,51 +31,52 @@ The backend runs on port **6443** (`python main.py` via uvicorn).
 
 ```
 project/
-├── frontend/               React + Vite application
+├── frontend/                  # React + Vite application
 │   ├── index.html
-│   ├── index.jsx           React root mount
-│   ├── app.jsx             Root component — topbar, page router, health check
-│   ├── styles.css          Single global stylesheet (design system)
-│   ├── api.jsx             All fetch calls to the backend (single source of truth)
-│   ├── utils.jsx           Pure helpers: constants, formatters, validators
-│   ├── Dashboard.jsx       Dashboard page
-│   ├── Library.jsx         Library page
-│   ├── Statistics.jsx      Statistics page
-│   ├── AddEntryModal.jsx   Add entry modal (auto-search + manual)
-│   ├── EditEntryModal.jsx  Edit / delete entry modal
+│   ├── index.jsx
+│   ├── app.jsx
+│   ├── styles.css
+│   ├── api.jsx
+│   ├── utils.jsx
+│   ├── design.css
 │   ├── vite.config.js
-│   └── package.json
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── pages/
+│   │   ├── Dashboard.jsx
+│   │   ├── Library.jsx
+│   │   ├── Statistics.jsx
+│   │   └── components/
+│   │       ├── AddEntryModal.jsx
+│   │       └── EditEntryModal.jsx
+│   └── node_modules/
 │
-└── backend/                FastAPI application
-    ├── main.py             Entry point (runs uvicorn)
-    ├── requirements.txt
-    ├── .env.example
-    ├── alembic.ini
-    ├── alembic/
-    │   ├── env.py
-    │   └── versions/
-    │       └── 0001_create_entries_table.py
-    ├── app/
-    │   ├── main.py         FastAPI app factory, CORS, router registration
-    │   ├── config.py       Pydantic-settings, reads .env
-    │   ├── db/
-    │   │   └── session.py  Engine, SessionLocal, get_db dependency
-    │   ├── models/
-    │   │   └── entry.py    SQLAlchemy ORM model
-    │   ├── schemas/
-    │   │   ├── entry.py    EntryCreate / EntryUpdate / EntryRead / EntryListResponse
-    │   │   ├── search.py   SearchResult
-    │   │   └── stats.py    StatsResponse
-    │   ├── services/
-    │   │   ├── entry_service.py   CRUD, filtering, sorting, pagination
-    │   │   ├── stats_service.py   SQL aggregations
-    │   │   └── search_service.py  Fan-out to TMDB, AniList, IGDB, Google Books
-    │   └── routers/
-    │       ├── entries.py  GET/POST/PUT/DELETE /entries, GET /entries/{id}
-    │       ├── search.py   GET /search
-    │       └── stats.py    GET /stats
-    └── scripts/
-        └── init_db.py      Create tables + optional seed data
+└── backend/                   # FastAPI application
+  ├── main.py                # Entry point (runs uvicorn)
+  ├── run.py                 # (if present, alternate entry point)
+  ├── requirements.txt
+  ├── .env
+  ├── README.md
+  ├── alembic.ini
+  ├── alembic/
+  │   ├── env.py
+  │   ├── README
+  │   ├── script.py.mako
+  │   └── versions/
+  │       └── 0001_create_entries_table.py
+  ├── config.py
+  ├── db.py
+  ├── models.py
+  ├── routers.py
+  ├── schemas.py
+  ├── services/
+  │   ├── __init__.py
+  │   ├── entry_service.py
+  │   ├── search_service.py
+  │   └── stats_service.py
+  └── scripts/
+    ├── __init__.py
+    └── init_db.py
 ```
 
 ---

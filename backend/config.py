@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 6443
 
+    # Auth
+    SECRET_KEY: str = "changeme-replace-with-a-strong-random-secret"
+    JWT_ALGORITHM: str = "HS256"
+
     # External API keys (all optional)
     TMDB_API_KEY: str = ""
     IGDB_CLIENT_ID: str = ""
