@@ -12,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from app.db.session import Base  # noqa: E402
-import app.models  # noqa: E402, F401 — registers all ORM models
+from backend.db import Base  # noqa: E402
+import backend.models  # noqa: E402, F401 — registers all ORM models
 
 config = context.config
 

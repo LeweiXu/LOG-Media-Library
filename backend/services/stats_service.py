@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select, case
 from sqlalchemy.orm import Session
 
-from app.models.entry import Entry
-from app.schemas.stats import StatsResponse, MediumCount, OriginCount, MonthCount
+from models import Entry
+from schemas import StatsResponse, MediumCount, OriginCount, MonthCount
 
 
 def get_stats(db: Session) -> StatsResponse:

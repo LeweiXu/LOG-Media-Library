@@ -16,8 +16,8 @@ from typing import Optional
 
 import httpx
 
-from app.config import get_settings
-from app.schemas.search import SearchResult
+from config import get_settings
+from schemas import SearchResult
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

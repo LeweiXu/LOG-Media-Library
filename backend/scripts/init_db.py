@@ -16,8 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from app.db.session import engine, SessionLocal, Base
-import app.models  # noqa: F401
+from backend.db import engine, SessionLocal, Base
+import backend.models  # noqa: F401
 
 
 def create_tables() -> None:
@@ -46,7 +46,7 @@ SAMPLE_ENTRIES = [
 
 def seed_data() -> None:
     from datetime import datetime, timezone
-    from app.models.entry import Entry
+    from backend.models import Entry
 
     db = SessionLocal()
     try:

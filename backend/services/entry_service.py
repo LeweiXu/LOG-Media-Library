@@ -6,8 +6,8 @@ from typing import Optional
 from sqlalchemy import func, select, asc, desc
 from sqlalchemy.orm import Session
 
-from app.models.entry import Entry
-from app.schemas.entry import EntryCreate, EntryUpdate, EntryListResponse, EntryRead
+from models import Entry
+from schemas import EntryCreate, EntryUpdate, EntryListResponse, EntryRead
 
 # Columns that the frontend is allowed to sort by
 SORTABLE_COLUMNS: dict[str, object] = {
