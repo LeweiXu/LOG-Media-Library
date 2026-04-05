@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from models import Entry
 
 EXPORT_COLUMNS = [
-    "id", "title", "medium", "origin", "year", "cover_url", "notes",
+    "title", "medium", "origin", "year", "cover_url", "notes",
     "external_id", "source", "status", "rating", "progress", "total",
     "created_at", "updated_at", "completed_at",
 ]

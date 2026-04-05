@@ -199,7 +199,7 @@ _VALID_STATUSES = {"current", "planned", "completed", "on_hold", "dropped"}
 # ── Export-format helpers (used by preview/confirm) ───────────────────────────
 
 EXPORT_HEADERS = [
-    "id", "title", "medium", "origin", "year", "cover_url", "notes",
+    "title", "medium", "origin", "year", "cover_url", "notes",
     "external_id", "source", "status", "rating", "progress", "total",
     "created_at", "updated_at", "completed_at",
 ]
@@ -274,7 +274,7 @@ def _fields_equal(field: str, csv_val, db_val) -> bool:
 
 
 def _entry_to_dict(entry: "Entry") -> dict:
-    result = {}
+    result = {"id": entry.id}
     for col in EXPORT_HEADERS:
         val = getattr(entry, col)
         if isinstance(val, datetime):

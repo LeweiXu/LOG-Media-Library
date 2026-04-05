@@ -265,7 +265,26 @@ export default function ImportModal({ onClose, onImported }) {
               {/* Conflicts */}
               {previewData.conflicts.length > 0 && (
                 <>
-                  <p style={{ fontWeight: 600, marginBottom: 6 }}>Resolve Conflicts</p>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 6 }}>
+                    <p style={{ fontWeight: 600, margin: 0 }}>Resolve Conflicts</p>
+                    <span style={{ fontSize: 11, color: 'var(--dim)' }}>select all:</span>
+                    <button
+                      className="icon-btn"
+                      onClick={() => {
+                        const all = {};
+                        previewData.conflicts.forEach((_, i) => { all[i] = 'keep_db'; });
+                        setResolutions(all);
+                      }}
+                    >keep existing</button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => {
+                        const all = {};
+                        previewData.conflicts.forEach((_, i) => { all[i] = 'use_csv'; });
+                        setResolutions(all);
+                      }}
+                    >replace with import</button>
+                  </div>
                   <p style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 14 }}>
                     These entries share the same title, medium, and year as an existing entry but
                     differ in other fields. Choose which version to keep for each.
