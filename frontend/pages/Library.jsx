@@ -433,14 +433,14 @@ export default function Library({ initialFilters = {} }) {
 
       {showImport && (
         <ImportModal
-          onClose={() => setShowImport(false)}
+          onClose={() => { setShowImport(false); load(); }}
           onImported={() => { load(); }}
         />
       )}
 
       {showImportAuto && (
         <ImportAutoModal
-          onClose={() => setShowImportAuto(false)}
+          onClose={() => { setShowImportAuto(false); load(); }}
           onImported={() => { load(); }}
         />
       )}

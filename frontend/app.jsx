@@ -122,9 +122,9 @@ export default function App() {
       {/* ── Routes ── */}
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard"  element={<Dashboard  onFilterChange={handleFilterChange} />} />
-        <Route path="/library"    element={<Library    initialFilters={libraryFilters} key={JSON.stringify(libraryFilters)} />} />
-        <Route path="/statistics" element={<Statistics />} />
+        <Route path="/dashboard"  element={<Dashboard  key={username} onFilterChange={handleFilterChange} />} />
+        <Route path="/library"    element={<Library    key={username + JSON.stringify(libraryFilters)} initialFilters={libraryFilters} />} />
+        <Route path="/statistics" element={<Statistics key={username} />} />
         <Route path="*"           element={<Navigate to="/dashboard" replace />} />
       </Routes>
 
