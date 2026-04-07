@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { searchMedia, createEntry } from '../../api.jsx';
+import { searchMedia, createEntry, checkDuplicates } from '../../api.jsx';
 import { MEDIUMS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
-import EditEntryModal from './EditEntryModal.jsx';
+import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 
 export default function AddEntryModal({ onClose, onCreated }) {
   const [tab,          setTab]          = useState('search');
@@ -9,6 +9,7 @@ export default function AddEntryModal({ onClose, onCreated }) {
   const [source,       setSource]       = useState('');
   const [searching,    setSearching]    = useState(false);
   const [results,      setResults]      = useState(null);
+  const [inLibrary,    setInLibrary]    = useState([]);
   const [searchErr,    setSearchErr]    = useState('');
   const [saving,       setSaving]       = useState(false);
   const [saveErr,      setSaveErr]      = useState('');
@@ -38,10 +39,19 @@ export default function AddEntryModal({ onClose, onCreated }) {
   async function handleSearch(e) {
     e.preventDefault();
     if (!query.trim()) return;
-    setSearching(true); setSearchErr(''); setResults(null); setSelected(new Set());
+    setSearching(true); setSearchErr(''); setResults(null); setInLibrary([]); setSelected(new Set());
     try {
       const data = await searchMedia(query.trim(), source);
-      setResults(Array.isArray(data) ? data : data?.results ?? []);
+      const list = Array.isArray(data) ? data : data?.results ?? [];
+      setResults(list);
+      if (list.length > 0) {
+        try {
+          const check = await checkDuplicates(
+            list.map(r => ({ title: r.title, year: r.year ?? null, medium: r.medium ?? null }))
+          );
+          setInLibrary(check.exists);
+        } catch (_) { /* non-critical: ignore duplicate check errors */ }
+      }
     } catch (err) {
       setSearchErr(err.message);
     } finally {
@@ -69,11 +79,6 @@ export default function AddEntryModal({ onClose, onCreated }) {
     };
   }
 
-  function pickResult(item) {
-    setForm(resultToEntry(item));
-    setTab('manual');
-  }
-
   function toggleSelect(i) {
     setSelected(prev => {
       const next = new Set(prev);
@@ -88,13 +93,13 @@ export default function AddEntryModal({ onClose, onCreated }) {
     setConfirmQueue(queue);
   }
 
-  function advanceQueue(created) {
-    if (created) onCreated(created);
-    setConfirmQueue(q => {
-      const next = q.slice(1);
-      if (next.length === 0) onClose();
-      return next;
-    });
+  function handleQueueSave(created) {
+    onCreated(created);
+  }
+
+  function handleQueueComplete() {
+    setConfirmQueue([]);
+    onClose();
   }
 
   async function handleSave(e) {
@@ -135,12 +140,10 @@ export default function AddEntryModal({ onClose, onCreated }) {
 
   if (confirmQueue.length > 0) {
     return (
-      <EditEntryModal
-        entry={confirmQueue[0]}
-        onCreate={created => advanceQueue(created)}
-        onClose={() => advanceQueue(null)}
-        onUpdated={() => {}}
-        onDeleted={() => {}}
+      <ConfirmEntryModal
+        queue={confirmQueue}
+        onSave={handleQueueSave}
+        onComplete={handleQueueComplete}
       />
     );
   }
@@ -205,46 +208,49 @@ export default function AddEntryModal({ onClose, onCreated }) {
                     </div>
                   : <>
                       <div className="search-results">
-                        {results.map((r, i) => (
-                          <div
-                            key={i}
-                            className="search-result-item"
-                            style={{ cursor: 'pointer', background: selected.has(i) ? 'var(--hover)' : undefined }}
-                            onClick={() => toggleSelect(i)}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selected.has(i)}
-                              onChange={() => toggleSelect(i)}
-                              onClick={e => e.stopPropagation()}
-                              style={{ marginRight: 6, flexShrink: 0 }}
-                            />
-                            <div className="sr-cover">
-                              {(r.cover_url || r.cover) && <img src={r.cover_url || r.cover} alt="" />}
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div className="sr-title">{r.title}</div>
-                              <div className="sr-meta">
-                                {[r.medium, r.year, r.origin].filter(Boolean).join(' · ')}
+                        {results.map((r, i) => {
+                          const isSelected  = selected.has(i);
+                          const isInLibrary = inLibrary[i];
+                          const shadow = isSelected
+                            ? 'inset 0 0 0 2px var(--accent)'
+                            : isInLibrary
+                            ? 'inset 0 0 0 2px var(--green)'
+                            : undefined;
+                          return (
+                            <div
+                              key={i}
+                              className="search-result-item"
+                              style={{ boxShadow: shadow }}
+                              onClick={() => toggleSelect(i)}
+                            >
+                              <div className="sr-cover">
+                                {(r.cover_url || r.cover) && <img src={r.cover_url || r.cover} alt="" />}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div className="sr-title">{r.title}</div>
+                                <div className="sr-meta">
+                                  {[r.medium, r.year, r.origin].filter(Boolean).join(' · ')}
+                                </div>
                               </div>
                             </div>
-                            <button
-                              className="icon-btn"
-                              style={{ marginLeft: 'auto', flexShrink: 0 }}
-                              onClick={e => { e.stopPropagation(); pickResult(r); }}
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                      {selected.size > 0 && (
-                        <div style={{ textAlign: 'right', marginTop: 8 }}>
-                          <button className="btn" onClick={addSelected}>
-                            Add Selected ({selected.size})
-                          </button>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                        <div style={{ display: 'flex', gap: 14, fontSize: 11, color: 'var(--dim)' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: 2, boxShadow: 'inset 0 0 0 2px var(--accent)', display: 'inline-block' }} />
+                            Selected
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: 2, boxShadow: 'inset 0 0 0 2px var(--green)', display: 'inline-block' }} />
+                            Already in library
+                          </span>
                         </div>
-                      )}
+                        <button className="btn" onClick={addSelected} disabled={selected.size === 0}>
+                          Add Selected ({selected.size})
+                        </button>
+                      </div>
                     </>
               )}
 

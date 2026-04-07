@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import func, select, asc, desc
+from sqlalchemy import func, select, asc, desc, and_
 from sqlalchemy.orm import Session
 
 from models import Entry
-from schemas import EntryCreate, EntryUpdate, EntryListResponse, EntryRead
+from schemas import EntryCreate, EntryUpdate, EntryListResponse, EntryRead, DuplicateCheckItem
 
 # Columns that the frontend is allowed to sort by
 SORTABLE_COLUMNS: dict[str, object] = {
@@ -131,6 +131,24 @@ def update_entry(db: Session, entry: Entry, payload: EntryUpdate) -> Entry:
 def delete_entry(db: Session, entry: Entry) -> None:
     db.delete(entry)
     db.commit()
+
+
+def check_duplicates(db: Session, username: str, items: list[DuplicateCheckItem]) -> list[bool]:
+    results = []
+    for item in items:
+        conditions = [
+            Entry.username == username,
+            func.lower(Entry.title) == item.title.lower(),
+        ]
+        if item.medium:
+            conditions.append(Entry.medium == item.medium)
+        if item.year is not None:
+            conditions.append(Entry.year == item.year)
+        exists = db.execute(
+            select(Entry.id).where(and_(*conditions)).limit(1)
+        ).scalar() is not None
+        results.append(exists)
+    return results
 
 
 def delete_all_entries(db: Session, username: str) -> None:

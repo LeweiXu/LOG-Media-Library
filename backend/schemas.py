@@ -175,6 +175,18 @@ class ImportConfirmResponse(BaseModel):
     updated: int
     skipped: int
 
+# --- Duplicate Check Schemas ---
+class DuplicateCheckItem(BaseModel):
+    title:  str
+    year:   Optional[int] = None
+    medium: Optional[str] = None
+
+class DuplicateCheckRequest(BaseModel):
+    items: list[DuplicateCheckItem]
+
+class DuplicateCheckResponse(BaseModel):
+    exists: list[bool]
+
 # --- Stats Schemas ---
 class MediumCount(BaseModel):
     medium: str

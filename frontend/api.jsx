@@ -160,6 +160,9 @@ export async function startAutoImport(file, onEvent) {
   return { pump, abort: () => controller.abort() };
 }
 
+export const checkDuplicates = (items) =>
+  req('/entries/check-duplicates', { method: 'POST', body: JSON.stringify({ items }) });
+
 export const searchMedia = (title, source = '') => {
   const qs = new URLSearchParams({ title, ...(source && { source }) }).toString();
   return req(`/search?${qs}`);

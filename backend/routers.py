@@ -11,6 +11,7 @@ from schemas import (
     ImportConfirmRequest, ImportConfirmResponse, ImportPreviewResponse,
     SearchResult, StatsResponse,
     UserCreate, UserRead, Token, ChangePassword,
+    DuplicateCheckRequest, DuplicateCheckResponse,
 )
 from services import entry_service
 from services.entry_service import delete_all_entries
@@ -175,6 +176,15 @@ def update_entry(
     if not entry or entry.username != current_user.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
     return entry_service.update_entry(db, entry, payload)
+
+@router.post("/entries/check-duplicates", response_model=DuplicateCheckResponse)
+def check_duplicates(
+    payload: DuplicateCheckRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    exists = entry_service.check_duplicates(db, current_user.username, payload.items)
+    return DuplicateCheckResponse(exists=exists)
 
 @router.delete("/entries", status_code=status.HTTP_204_NO_CONTENT)
 def delete_all_user_entries(
