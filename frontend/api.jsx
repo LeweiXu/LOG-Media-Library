@@ -160,8 +160,8 @@ export async function startAutoImport(file, onEvent) {
   return { pump, abort: () => controller.abort() };
 }
 
-export const searchMedia = (title, medium = '') => {
-  const qs = new URLSearchParams({ title, ...(medium && { medium }) }).toString();
+export const searchMedia = (title, source = '') => {
+  const qs = new URLSearchParams({ title, ...(source && { source }) }).toString();
   return req(`/search?${qs}`);
 };
 

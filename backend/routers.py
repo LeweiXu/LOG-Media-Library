@@ -199,10 +199,10 @@ def delete_entry(
 @router.get("/search", response_model=list[SearchResult])
 async def search(
     title:  str = Query(..., min_length=1, description="Title to search for"),
-    medium: str = Query("", description="Optional medium hint"),
+    source: str = Query("", description="Optional source to search (e.g. tmdb, anilist, igdb)"),
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    return await search_media(title=title, medium=medium)
+    return await search_media(title=title, source=source)
 
 # ── Stats endpoint ────────────────────────────────────────────────────────────
 

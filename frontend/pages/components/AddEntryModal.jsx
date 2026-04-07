@@ -5,7 +5,7 @@ import { MEDIUMS, STATUSES, statusLabel } from '../../utils.jsx';
 export default function AddEntryModal({ onClose, onCreated }) {
   const [tab,        setTab]        = useState('search');
   const [query,      setQuery]      = useState('');
-  const [medium,     setMedium]     = useState('');
+  const [source,     setSource]     = useState('');
   const [searching,  setSearching]  = useState(false);
   const [results,    setResults]    = useState(null);
   const [searchErr,  setSearchErr]  = useState('');
@@ -36,7 +36,7 @@ export default function AddEntryModal({ onClose, onCreated }) {
     if (!query.trim()) return;
     setSearching(true); setSearchErr(''); setResults(null);
     try {
-      const data = await searchMedia(query.trim(), medium);
+      const data = await searchMedia(query.trim(), source);
       setResults(Array.isArray(data) ? data : data?.results ?? []);
     } catch (err) {
       setSearchErr(err.message);
@@ -48,7 +48,7 @@ export default function AddEntryModal({ onClose, onCreated }) {
   function pickResult(item) {
     setForm({
       title:       item.title       || '',
-      medium:      item.medium      || medium || '',
+      medium:      item.medium      || '',
       origin:      item.origin      || '',
       status:      'current',
       year:        item.year        || '',
@@ -129,12 +129,22 @@ export default function AddEntryModal({ onClose, onCreated }) {
                 />
                 <select
                   className="form-input"
-                  style={{ width: 130 }}
-                  value={medium}
-                  onChange={e => setMedium(e.target.value)}
+                  style={{ width: 150 }}
+                  value={source}
+                  onChange={e => setSource(e.target.value)}
                 >
-                  <option value="">Any medium</option>
-                  {MEDIUMS.map(m => <option key={m} value={m}>{m}</option>)}
+                  <option value="">Any source</option>
+                  <option value="tmdb">TMDB (Film &amp; TV)</option>
+                  <option value="anilist">AniList (Anime &amp; Manga)</option>
+                  <option value="jikan">MyAnimeList (Anime &amp; Manga)</option>
+                  <option value="kitsu">Kitsu (Anime &amp; Manga)</option>
+                  <option value="novelupdates">NovelUpdates (Novels)</option>
+                  <option value="mangadex">MangaDex (Manga)</option>
+                  <option value="igdb">IGDB (Games)</option>
+                  <option value="rawg">RAWG (Games)</option>
+                  <option value="google_books">Google Books</option>
+                  <option value="open_library">Open Library</option>
+                  <option value="comicvine">ComicVine (Comics)</option>
                 </select>
                 <button className="btn" type="submit" disabled={searching || !query.trim()}>
                   {searching ? '…' : 'Search'}
