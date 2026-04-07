@@ -63,7 +63,7 @@ def normalise_medium(raw: str | None) -> str | None:
 # ── Origins ───────────────────────────────────────────────────────────────────
 
 VALID_ORIGINS: frozenset[str] = frozenset({
-    "Japanese", "Korean", "Chinese", "Western", "Other",
+    "Japanese", "Korean", "Chinese", "Western", "Other", "",
 })
 
 ORIGIN_NORMALISE_MAP: dict[str, str] = {

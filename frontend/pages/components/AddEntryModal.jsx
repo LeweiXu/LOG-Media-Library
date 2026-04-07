@@ -172,6 +172,7 @@ export default function AddEntryModal({ onClose, onCreated }) {
                   placeholder="Title…"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
+                  autoFocus
                 />
                 <select
                   className="form-input"

@@ -56,10 +56,8 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
         completed_at: form.completed_at ? form.completed_at + 'T00:00:00Z'   : null,
       };
       const updated = await updateEntry(current.id, payload);
-      setCurrent(updated);
       onUpdated(updated);
-      setEditing(false);
-      setErr('');
+      onClose();
     } catch (ex) {
       setErr(ex.message);
     } finally {

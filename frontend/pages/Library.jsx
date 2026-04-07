@@ -83,8 +83,14 @@ export default function Library({ initialFilters = {} }) {
 
   async function handleStatusChange(id, newStatus) {
     try {
-      await updateEntry(id, { status: newStatus });
-      load();
+      const updated = await updateEntry(id, { status: newStatus });
+      setEntries(prev => {
+        const mapped = prev.map(e => e.id === id ? { ...e, ...updated } : e);
+        return (statusFilter && newStatus !== statusFilter)
+          ? mapped.filter(e => e.id !== id)
+          : mapped;
+      });
+      if (statusFilter && newStatus !== statusFilter) setTotal(t => t - 1);
     } catch (e) {
       alert('Update failed: ' + e.message);
     }
@@ -95,8 +101,8 @@ export default function Library({ initialFilters = {} }) {
     const num = parseInt(value, 10);
     if (!isNaN(num)) {
       try {
-        await updateEntry(id, { progress: num });
-        load();
+        const updated = await updateEntry(id, { progress: num });
+        setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
       } catch (e) {
         alert('Update failed: ' + e.message);
       }
@@ -107,17 +113,22 @@ export default function Library({ initialFilters = {} }) {
     try {
       await deleteEntry(id);
       setConfirmDeleteId(null);
-      load();
+      setEntries(prev => prev.filter(e => e.id !== id));
+      setTotal(t => t - 1);
     } catch (e) {
       alert('Delete failed: ' + e.message);
     }
   }
 
   const handleUpdated = (updated) => {
-    setDetailEntry(updated);
-    load();
+    setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
   };
-  const handleDeleted = (id) => { setConfirmDeleteId(null); setDetailEntry(null); load(); };
+  const handleDeleted = (id) => {
+    setConfirmDeleteId(null);
+    setDetailEntry(null);
+    setEntries(prev => prev.filter(e => e.id !== id));
+    setTotal(t => t - 1);
+  };
 
   const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); setOriginFilter(''); };
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;

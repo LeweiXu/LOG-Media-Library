@@ -105,13 +105,16 @@ export default function Dashboard({ onFilterChange }) {
 
   async function handleStatusChange(id, newStatus) {
     try {
-      await updateEntry(id, { status: newStatus });
+      const updated = await updateEntry(id, { status: newStatus });
       if (newStatus === 'current') {
-        setCurrent(c => c.map(e => e.id === id ? { ...e, status: newStatus } : e));
+        setCurrent(c => c.map(e => e.id === id ? { ...e, ...updated } : e));
       } else {
         setCurrent(c => c.filter(e => e.id !== id));
-        load();
       }
+      setRecent(r => r.map(e => e.id === id ? { ...e, ...updated } : e));
+      setActivity(a => a.map(act => act.entry.id === id
+        ? { ...act, entry: { ...act.entry, ...updated } }
+        : act));
     } catch (e) {
       alert('Failed to update: ' + e.message);
     }
@@ -120,14 +123,13 @@ export default function Dashboard({ onFilterChange }) {
   const handleUpdated = (updated) => {
     setCurrent(c => c.map(e => e.id === updated.id ? updated : e));
     setRecent(r  => r.map(e => e.id === updated.id ? updated : e));
-    setDetailEntry(updated);
   };
 
   const handleDeleted = (id) => {
     setCurrent(c => c.filter(e => e.id !== id));
     setRecent(r  => r.filter(e => e.id !== id));
+    setActivity(a => a.filter(act => act.entry.id !== id));
     setDetailEntry(null);
-    load();
   };
 
   const s            = stats || {};
