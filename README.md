@@ -17,6 +17,10 @@
 - Add 'author' field for entry table, possibly split entry table into 2: entry + media to reduce redudancy.
 - Either self cache thumbnails or fetch small thumbnails for media covers for main library thumbnail display.
 - Default sort on Library page should be "Updated" + "Desc".
+- Add refresh button: use external_url to refresh details of select or all entries. Will be difficult as need to resolve conflicting changes if user made manual edits.
+- Enable search by URL for supported sources.
+- Current auto-search for details when adding new entry is slow, may need to enforce source selection to speed things up (no way to speed up API calls).
+- Possibly write a script for auto-scraping details from URL for unsupported sites. Will be very difficult due to different site structure/html. Additionally could build companion extension to allow scraping of websites without APIs.
     
 **Scalability:**
 - Built with FastAPI and PostgreSQL, LOG is easily scalable to thousands (and potentially millions) of users, depending on your hosting resources.
