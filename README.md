@@ -30,6 +30,7 @@
 - Display source when searching new entry details.
 - Add settings page for various settings: e.g. default search on library page, default source selection when searching for new entries + currently implemented settings (change password and wipe data).
 - Allow editing of ALL entry fields, include the Genre field.
+- Sorting by Rating descending causes no rating entries to be displayed at the top first, before 10/10 entries. Need to fix this, also add functionality to directly edit rating in library page.
     
 **Scalability:**
 - Built with FastAPI and PostgreSQL, LOG is easily scalable to thousands (and potentially millions) of users, depending on your hosting resources.
