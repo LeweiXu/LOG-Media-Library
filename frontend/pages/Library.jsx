@@ -38,8 +38,8 @@ export default function Library({ initialFilters = {} }) {
   const [order,        setOrder]        = useState('asc');
   const [page,         setPage]         = useState(1);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(''); }
     try {
       const params = {
         ...(search       && { title:  search }),
@@ -66,9 +66,9 @@ export default function Library({ initialFilters = {} }) {
         setCounts(c);
       }
     } catch (e) {
-      setError(e.message);
+      if (!silent) setError(e.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [search, statusFilter, mediumFilter, originFilter, sort, order, page]);
 
@@ -91,6 +91,7 @@ export default function Library({ initialFilters = {} }) {
           : mapped;
       });
       if (statusFilter && newStatus !== statusFilter) setTotal(t => t - 1);
+      load(true);
     } catch (e) {
       alert('Update failed: ' + e.message);
     }
@@ -103,6 +104,7 @@ export default function Library({ initialFilters = {} }) {
       try {
         const updated = await updateEntry(id, { progress: num });
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
+        load(true);
       } catch (e) {
         alert('Update failed: ' + e.message);
       }
@@ -115,6 +117,7 @@ export default function Library({ initialFilters = {} }) {
       setConfirmDeleteId(null);
       setEntries(prev => prev.filter(e => e.id !== id));
       setTotal(t => t - 1);
+      load(true);
     } catch (e) {
       alert('Delete failed: ' + e.message);
     }
@@ -122,12 +125,14 @@ export default function Library({ initialFilters = {} }) {
 
   const handleUpdated = (updated) => {
     setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+    load(true);
   };
   const handleDeleted = (id) => {
     setConfirmDeleteId(null);
     setDetailEntry(null);
     setEntries(prev => prev.filter(e => e.id !== id));
     setTotal(t => t - 1);
+    load(true);
   };
 
   const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); setOriginFilter(''); };

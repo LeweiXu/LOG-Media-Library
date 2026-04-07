@@ -61,8 +61,8 @@ export default function Dashboard({ onFilterChange }) {
   const [showAdd,   setShowAdd]   = useState(false);
   const [detailEntry, setDetailEntry] = useState(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(''); }
     try {
       const [statsData, currentData, completedData, onHoldData, droppedData, plannedData] = await Promise.all([
         getStats().catch(() => null),
@@ -95,9 +95,9 @@ export default function Dashboard({ onFilterChange }) {
         .slice(0, 8);
       setActivity(acts);
     } catch (e) {
-      setError(e.message);
+      if (!silent) setError(e.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -115,6 +115,7 @@ export default function Dashboard({ onFilterChange }) {
       setActivity(a => a.map(act => act.entry.id === id
         ? { ...act, entry: { ...act.entry, ...updated } }
         : act));
+      load(true);
     } catch (e) {
       alert('Failed to update: ' + e.message);
     }
@@ -123,6 +124,7 @@ export default function Dashboard({ onFilterChange }) {
   const handleUpdated = (updated) => {
     setCurrent(c => c.map(e => e.id === updated.id ? updated : e));
     setRecent(r  => r.map(e => e.id === updated.id ? updated : e));
+    load(true);
   };
 
   const handleDeleted = (id) => {
@@ -130,6 +132,7 @@ export default function Dashboard({ onFilterChange }) {
     setRecent(r  => r.filter(e => e.id !== id));
     setActivity(a => a.filter(act => act.entry.id !== id));
     setDetailEntry(null);
+    load(true);
   };
 
   const s            = stats || {};
