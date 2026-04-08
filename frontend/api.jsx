@@ -160,6 +160,73 @@ export async function startAutoImport(file, onEvent) {
   return { pump, abort: () => controller.abort() };
 }
 
+/**
+ * Start a MAL XML import SSE stream. Returns { pump, abort }.
+ * - onEvent(event): called for each parsed SSE event object
+ * - Call abort() to cancel mid-stream
+ */
+export async function startMalImport(file, onEvent) {
+  const controller = new AbortController();
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(`${BASE}/entries/import/mal`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: form,
+    signal: controller.signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+
+  async function pump() {
+    let buffer = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop();
+        for (const chunk of chunks) {
+          const dataLine = chunk.split('\n').find(l => l.startsWith('data: '));
+          if (dataLine) {
+            try {
+              onEvent(JSON.parse(dataLine.slice(6)));
+            } catch (_) { /* ignore malformed */ }
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') throw err;
+    }
+  }
+
+  return { pump, abort: () => controller.abort() };
+}
+
+export async function confirmMalImport(entries) {
+  const res = await fetch(`${BASE}/entries/import/mal/confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify({ entries }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+  return res.json();
+}
+
 export const checkDuplicates = (items) =>
   req('/entries/check-duplicates', { method: 'POST', body: JSON.stringify({ items }) });
 

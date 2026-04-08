@@ -5,6 +5,7 @@ import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ImportModal from './components/ImportModal.jsx';
 import ImportAutoModal from './components/ImportAutoModal.jsx';
+import ImportMalModal from './components/ImportMalModal.jsx';
 
 const SORT_FIELDS = [
   { key: 'title',        label: 'Title' },
@@ -164,6 +165,7 @@ export default function Library({ initialFilters = {} }) {
 
   const [showImport,     setShowImport]     = useState(false);
   const [showImportAuto, setShowImportAuto] = useState(false);
+  const [showImportMal,  setShowImportMal]  = useState(false);
 
   async function exportCSV() {
     try {
@@ -442,6 +444,10 @@ export default function Library({ initialFilters = {} }) {
           onClick={() => setShowImportAuto(true)}>
           Import (auto-search)
         </button>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
+          onClick={() => setShowImportMal(true)}>
+          Import (MAL XML)
+        </button>
 
         <div style={{ marginTop: 20 }}>
           <p className="panel-title">Showing</p>
@@ -489,6 +495,13 @@ export default function Library({ initialFilters = {} }) {
       {showImportAuto && (
         <ImportAutoModal
           onClose={() => { setShowImportAuto(false); load(); }}
+          onImported={() => { load(); }}
+        />
+      )}
+
+      {showImportMal && (
+        <ImportMalModal
+          onClose={() => { setShowImportMal(false); load(); }}
           onImported={() => { load(); }}
         />
       )}

@@ -20,6 +20,7 @@ from services.search_service import search_media
 from services.stats_service import get_stats
 from services.export_service import export_entries_csv
 from services.import_service import preview_import, confirm_import, auto_import_rows
+from services.import_mal_service import import_mal_rows, confirm_mal_import
 
 router = APIRouter()
 
@@ -118,6 +119,38 @@ async def import_auto(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/entries/import/mal")
+async def import_mal(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    content = (await file.read()).decode("utf-8-sig")
+
+    async def event_stream():
+        async for event in import_mal_rows(content, db, current_user.username):
+            if await request.is_disconnected():
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/entries/import/mal/confirm")
+def import_mal_confirm(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    entries = payload.get("entries", [])
+    return confirm_mal_import(db, entries, current_user.username)
 
 
 @router.get("/entries", response_model=EntryListResponse)
