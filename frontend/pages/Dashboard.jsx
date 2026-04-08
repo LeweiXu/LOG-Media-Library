@@ -307,7 +307,7 @@ export default function DashboardAlt({ onFilterChange }) {
                     </tbody>
                     </table>
                     {current.length > 10 && (
-                        <button className="icon-btn" style={{ marginTop: 6, fontSize: 11 }}
+                        <button className="icon-btn" style={{ marginTop: 6, marginBottom: 24, fontSize: 11 }}
                         onClick={() => onFilterChange({ status: 'current' })}>
                         Show all ({current.length}+)
                         </button>
