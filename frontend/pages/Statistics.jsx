@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { getEntries, getStats } from '../api.jsx';
 import { extractItems } from '../utils.jsx';
 import {
@@ -58,22 +58,19 @@ function deriveStats(entries) {
     ? rated.reduce((a, e) => a + e.rating, 0) / rated.length
     : null;
 
-  // By medium
   const medMap = {};
   entries.forEach(e => { if (e.medium) medMap[e.medium] = (medMap[e.medium] || 0) + 1; });
   const by_medium = Object.entries(medMap).sort((a, b) => b[1] - a[1]).map(([medium, count]) => ({ medium, count }));
 
-  // By status
   const stMap = {};
   entries.forEach(e => { stMap[e.status] = (stMap[e.status] || 0) + 1; });
   const by_status = Object.entries(stMap).map(([status, count]) => ({ status, count }));
 
-  // By origin
   const oriMap = {};
   entries.forEach(e => { if (e.origin) oriMap[e.origin] = (oriMap[e.origin] || 0) + 1; });
   const by_origin = Object.entries(oriMap).sort((a, b) => b[1] - a[1]).map(([origin, count]) => ({ origin, count }));
 
-  // Rating distribution (0.5 increments, only buckets that exist)
+  // Rating distribution at 0.5 increments, only non-empty buckets
   const buckets = {};
   rated.forEach(e => {
     const r = Math.round(e.rating * 2) / 2;
@@ -84,7 +81,6 @@ function deriveStats(entries) {
     .sort((a, b) => a - b)
     .map(r => ({ rating: r, count: buckets[r] }));
 
-  // Consumed per month — all months, no slice (range filtering done in component)
   const monthMap = {};
   entries.forEach(e => {
     if (!e.completed_at) return;
@@ -97,51 +93,33 @@ function deriveStats(entries) {
   });
   const entries_per_month = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
 
-  // By year
   const yearMap = {};
   entries.forEach(e => { if (e.year) yearMap[e.year] = (yearMap[e.year] || 0) + 1; });
   const by_year = Object.entries(yearMap).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).map(([year, count]) => ({ year, count }));
 
-  // Top rated
   const top_rated = [...rated].sort((a, b) => b.rating - a.rating).slice(0, 10);
 
   return {
-    total: entries.length,
-    completed: completed.length,
-    avg_rating: avgRating,
-    by_medium,
-    by_status,
-    by_origin,
-    rating_dist,
-    entries_per_month,
-    by_year,
-    top_rated,
+    total: entries.length, completed: completed.length, avg_rating: avgRating,
+    by_medium, by_status, by_origin, rating_dist, entries_per_month, by_year, top_rated,
   };
 }
 
 const MONTH_INPUT_STYLE = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  color: 'var(--text)',
-  fontSize: 10,
-  padding: '2px 6px',
-  outline: 'none',
-  fontFamily: 'inherit',
-  textTransform: 'none',
-  letterSpacing: 'normal',
-  colorScheme: 'dark',
-  cursor: 'pointer',
+  background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)',
+  fontSize: 10, padding: '2px 6px', outline: 'none', fontFamily: 'inherit',
+  textTransform: 'none', letterSpacing: 'normal', colorScheme: 'dark', cursor: 'pointer',
 };
 
 export default function Statistics() {
-  const [apiStats, setApiStats]   = useState(null);
-  const [entries,  setEntries]    = useState([]);
-  const [loading,  setLoading]    = useState(true);
-  const [error,    setError]      = useState('');
+  const [apiStats,   setApiStats]   = useState(null);
+  const [entries,    setEntries]    = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState('');
   const [rangeStart, setRangeStart] = useState('');
   const [rangeEnd,   setRangeEnd]   = useState('');
   const [barsReady,  setBarsReady]  = useState(false);
-  const rangeInitialized = useRef(false);
+  const [pieAnimId,  setPieAnimId]  = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -162,50 +140,60 @@ export default function Statistics() {
     load();
   }, []);
 
-  // Merge derived stats with API stats (API wins on overlap, except entries_per_month
-  // which we compute ourselves so the range filter works across all data)
-  const derived = deriveStats(entries);
-  const s = { ...derived, ...(apiStats || {}), entries_per_month: derived.entries_per_month };
-
-  // All months from frontend data (not limited by backend)
-  const allMonths = derived.entries_per_month ?? [];
-
-  // Set default range once data loads: last 12 months
+  // Animate CSS bars after data loads. The rAF ensures this fires in a new
+  // macro-task so the cleanup+rerun from React StrictMode (dev) doesn't cancel it.
   useEffect(() => {
-    if (allMonths.length > 0 && !rangeInitialized.current) {
-      rangeInitialized.current = true;
-      const start = allMonths.length > 12
-        ? allMonths[allMonths.length - 12].key
-        : allMonths[0].key;
-      setRangeStart(start);
-      setRangeEnd(allMonths[allMonths.length - 1].key);
-    }
-  }, [allMonths.length]);
-
-  const filteredMonths = allMonths.filter(m =>
-    (!rangeStart || m.key >= rangeStart) &&
-    (!rangeEnd   || m.key <= rangeEnd)
-  );
-
-  // Trigger bar animations after data loads
-  useEffect(() => {
-    if (!loading && (s.by_medium?.length || s.rating_dist?.length)) {
+    if (!loading) {
       setBarsReady(false);
       const id = requestAnimationFrame(() => setBarsReady(true));
       return () => cancelAnimationFrame(id);
     }
-  }, [loading, s.by_medium?.length, s.rating_dist?.length]);
+  }, [loading]);
+
+  // Recharts pie animations can get stuck after reloads/HMR in some dev flows.
+  // Bumping animationId after data load forces a clean animation cycle.
+  useEffect(() => {
+    if (!loading) {
+      const id = requestAnimationFrame(() => {
+        setPieAnimId(prev => prev + 1);
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [loading, entries.length]);
+
+  // Memoize expensive derivation so references stay stable across renders
+  const derived = useMemo(() => deriveStats(entries), [entries]);
+  const s = useMemo(
+    () => ({ ...derived, ...(apiStats || {}), entries_per_month: derived.entries_per_month }),
+    [derived, apiStats],
+  );
+
+  const allMonths = s.entries_per_month ?? [];
+
+  // Compute the visible range directly in the render phase — no useEffect, no
+  // extra state update — so filteredMonths is correct on the very first render
+  // with data and never changes out from under a running recharts animation.
+  const defaultStart = allMonths.length > 12 ? allMonths[allMonths.length - 12].key : allMonths[0]?.key ?? '';
+  const defaultEnd   = allMonths[allMonths.length - 1]?.key ?? '';
+  const effectiveStart = rangeStart || defaultStart;
+  const effectiveEnd   = rangeEnd   || defaultEnd;
+
+  const filteredMonths = useMemo(
+    () => allMonths.filter(m => m.key >= effectiveStart && m.key <= effectiveEnd),
+    [allMonths, effectiveStart, effectiveEnd],
+  );
 
   const maxMedium = s.by_medium?.length ? Math.max(...s.by_medium.map(m => m.count), 1) : 1;
   const maxRating = s.rating_dist?.length ? Math.max(...s.rating_dist.map(r => r.count), 1) : 1;
 
-  const statusPieData = (s.by_status || []).map(({ status, count }) => ({
-    name: STATUS_LABELS[status] || status, value: count,
-  }));
-
-  const originPieData = (s.by_origin || []).slice(0, 6).map(({ origin, count }) => ({
-    name: origin, value: count,
-  }));
+  const statusPieData = useMemo(
+    () => (s.by_status || []).map(({ status, count }) => ({ name: STATUS_LABELS[status] || status, value: count })),
+    [s.by_status],
+  );
+  const originPieData = useMemo(
+    () => (s.by_origin || []).slice(0, 6).map(({ origin, count }) => ({ name: origin, value: count })),
+    [s.by_origin],
+  );
 
   return (
     <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -247,10 +235,10 @@ export default function Statistics() {
                 <div className="chart-section-title">
                   Consumed per Month
                   <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', letterSpacing: 'normal' }}>
-                    <input type="month" value={rangeStart} min={allMonths[0]?.key} max={rangeEnd || allMonths[allMonths.length - 1]?.key}
+                    <input type="month" value={effectiveStart} min={allMonths[0]?.key} max={effectiveEnd}
                       onChange={e => setRangeStart(e.target.value)} style={MONTH_INPUT_STYLE} />
                     <span style={{ color: 'var(--dim)' }}>–</span>
-                    <input type="month" value={rangeEnd} min={rangeStart || allMonths[0]?.key} max={allMonths[allMonths.length - 1]?.key}
+                    <input type="month" value={effectiveEnd} min={effectiveStart} max={allMonths[allMonths.length - 1]?.key}
                       onChange={e => setRangeEnd(e.target.value)} style={MONTH_INPUT_STYLE} />
                   </span>
                 </div>
@@ -261,7 +249,7 @@ export default function Statistics() {
                       <XAxis dataKey="label" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
                       <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                      <Bar dataKey="count" fill="var(--accent)" opacity={0.7} radius={[2, 2, 0, 0]} name="Consumed" isAnimationActive={true} />
+                      <Bar dataKey="count" fill="var(--accent)" opacity={0.7} radius={[2, 2, 0, 0]} name="Consumed" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -311,15 +299,19 @@ export default function Statistics() {
                 <div className="chart-box">
                   <div className="chart-box-title">By Status</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <ResponsiveContainer width={140} height={140}>
-                      <PieChart>
-                        <Pie data={statusPieData} dataKey="value" cx="50%" cy="50%"
-                          outerRadius={60} innerRadius={30} paddingAngle={2} isAnimationActive={true}>
-                          {statusPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip content={<Tooltip_ />} />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <PieChart width={140} height={140}>
+                      <Pie data={statusPieData} dataKey="value" cx="50%" cy="50%"
+                        outerRadius={60} innerRadius={30} paddingAngle={2}
+                        key={`status-pie-${pieAnimId}`}
+                        animationId={pieAnimId}
+                        isAnimationActive
+                        animationBegin={40}
+                        animationDuration={700}
+                        animationEasing="ease-out">
+                        {statusPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip content={<Tooltip_ />} />
+                    </PieChart>
                     <PieLegend data={statusPieData} colorOffset={0} />
                   </div>
                 </div>
@@ -330,15 +322,19 @@ export default function Statistics() {
                 <div className="chart-box">
                   <div className="chart-box-title">By Origin</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <ResponsiveContainer width={140} height={140}>
-                      <PieChart>
-                        <Pie data={originPieData} dataKey="value" cx="50%" cy="50%"
-                          outerRadius={60} innerRadius={30} paddingAngle={2} isAnimationActive={true}>
-                          {originPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip content={<Tooltip_ />} />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <PieChart width={140} height={140}>
+                      <Pie data={originPieData} dataKey="value" cx="50%" cy="50%"
+                        outerRadius={60} innerRadius={30} paddingAngle={2}
+                        key={`origin-pie-${pieAnimId}`}
+                        animationId={pieAnimId + 1}
+                        isAnimationActive
+                        animationBegin={80}
+                        animationDuration={750}
+                        animationEasing="ease-out">
+                        {originPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip content={<Tooltip_ />} />
+                    </PieChart>
                     <PieLegend data={originPieData} colorOffset={2} />
                   </div>
                 </div>
@@ -381,7 +377,7 @@ export default function Statistics() {
                       <XAxis dataKey="year" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
                       <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                      <Bar dataKey="count" fill="var(--green)" opacity={0.6} radius={[2, 2, 0, 0]} name="Entries" isAnimationActive={true} />
+                      <Bar dataKey="count" fill="var(--green)" opacity={0.6} radius={[2, 2, 0, 0]} name="Entries" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
