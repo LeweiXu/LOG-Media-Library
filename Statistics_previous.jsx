@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { getEntries, getStats } from '../api.jsx';
 import { extractItems } from '../utils.jsx';
 import {
@@ -73,18 +73,13 @@ function deriveStats(entries) {
   entries.forEach(e => { if (e.origin) oriMap[e.origin] = (oriMap[e.origin] || 0) + 1; });
   const by_origin = Object.entries(oriMap).sort((a, b) => b[1] - a[1]).map(([origin, count]) => ({ origin, count }));
 
-  // Rating distribution (0.5 increments, only buckets that exist)
+  // Rating distribution
   const buckets = {};
-  rated.forEach(e => {
-    const r = Math.round(e.rating * 2) / 2;
-    if (r >= 0.5 && r <= 10) buckets[r] = (buckets[r] || 0) + 1;
-  });
-  const rating_dist = Object.keys(buckets)
-    .map(r => parseFloat(r))
-    .sort((a, b) => a - b)
-    .map(r => ({ rating: r, count: buckets[r] }));
+  for (let i = 1; i <= 10; i++) buckets[i] = 0;
+  rated.forEach(e => { const r = Math.round(e.rating); if (r >= 1 && r <= 10) buckets[r]++; });
+  const rating_dist = Object.entries(buckets).map(([r, count]) => ({ rating: parseInt(r), count }));
 
-  // Consumed per month — all months, no slice (range filtering done in component)
+  // Consumed per month (completed entries only, based on completed_at)
   const monthMap = {};
   entries.forEach(e => {
     if (!e.completed_at) return;
@@ -95,7 +90,7 @@ function deriveStats(entries) {
     if (!monthMap[key]) monthMap[key] = { key, label, count: 0 };
     monthMap[key].count++;
   });
-  const entries_per_month = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
+  const entries_per_month = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key)).slice(-12);
 
   // By year
   const yearMap = {};
@@ -119,29 +114,11 @@ function deriveStats(entries) {
   };
 }
 
-const MONTH_INPUT_STYLE = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  color: 'var(--text)',
-  fontSize: 10,
-  padding: '2px 6px',
-  outline: 'none',
-  fontFamily: 'inherit',
-  textTransform: 'none',
-  letterSpacing: 'normal',
-  colorScheme: 'dark',
-  cursor: 'pointer',
-};
-
 export default function Statistics() {
   const [apiStats, setApiStats]   = useState(null);
   const [entries,  setEntries]    = useState([]);
   const [loading,  setLoading]    = useState(true);
   const [error,    setError]      = useState('');
-  const [rangeStart, setRangeStart] = useState('');
-  const [rangeEnd,   setRangeEnd]   = useState('');
-  const [barsReady,  setBarsReady]  = useState(false);
-  const rangeInitialized = useRef(false);
 
   useEffect(() => {
     async function load() {
@@ -162,39 +139,8 @@ export default function Statistics() {
     load();
   }, []);
 
-  // Merge derived stats with API stats (API wins on overlap, except entries_per_month
-  // which we compute ourselves so the range filter works across all data)
-  const derived = deriveStats(entries);
-  const s = { ...derived, ...(apiStats || {}), entries_per_month: derived.entries_per_month };
-
-  // All months from frontend data (not limited by backend)
-  const allMonths = derived.entries_per_month ?? [];
-
-  // Set default range once data loads: last 12 months
-  useEffect(() => {
-    if (allMonths.length > 0 && !rangeInitialized.current) {
-      rangeInitialized.current = true;
-      const start = allMonths.length > 12
-        ? allMonths[allMonths.length - 12].key
-        : allMonths[0].key;
-      setRangeStart(start);
-      setRangeEnd(allMonths[allMonths.length - 1].key);
-    }
-  }, [allMonths.length]);
-
-  const filteredMonths = allMonths.filter(m =>
-    (!rangeStart || m.key >= rangeStart) &&
-    (!rangeEnd   || m.key <= rangeEnd)
-  );
-
-  // Trigger bar animations after data loads
-  useEffect(() => {
-    if (!loading && (s.by_medium?.length || s.rating_dist?.length)) {
-      setBarsReady(false);
-      const id = requestAnimationFrame(() => setBarsReady(true));
-      return () => cancelAnimationFrame(id);
-    }
-  }, [loading, s.by_medium?.length, s.rating_dist?.length]);
+  // Merge derived stats with API stats (API wins on overlap)
+  const s = { ...deriveStats(entries), ...(apiStats || {}) };
 
   const maxMedium = s.by_medium?.length ? Math.max(...s.by_medium.map(m => m.count), 1) : 1;
   const maxRating = s.rating_dist?.length ? Math.max(...s.rating_dist.map(r => r.count), 1) : 1;
@@ -242,26 +188,17 @@ export default function Statistics() {
             </div>
 
             {/* Entries per month */}
-            {allMonths.length > 0 && (
+            {s.entries_per_month?.length > 0 && (
               <div className="chart-section">
-                <div className="chart-section-title">
-                  Consumed per Month
-                  <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', letterSpacing: 'normal' }}>
-                    <input type="month" value={rangeStart} min={allMonths[0]?.key} max={rangeEnd || allMonths[allMonths.length - 1]?.key}
-                      onChange={e => setRangeStart(e.target.value)} style={MONTH_INPUT_STYLE} />
-                    <span style={{ color: 'var(--dim)' }}>–</span>
-                    <input type="month" value={rangeEnd} min={rangeStart || allMonths[0]?.key} max={allMonths[allMonths.length - 1]?.key}
-                      onChange={e => setRangeEnd(e.target.value)} style={MONTH_INPUT_STYLE} />
-                  </span>
-                </div>
+                <div className="chart-section-title">Consumed per Month</div>
                 <div className="chart-box">
                   <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={filteredMonths} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                    <BarChart data={s.entries_per_month} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                       <CartesianGrid vertical={false} stroke="var(--border)" />
                       <XAxis dataKey="label" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
                       <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                      <Bar dataKey="count" fill="var(--accent)" opacity={0.7} radius={[2, 2, 0, 0]} name="Consumed" isAnimationActive={true} />
+                      <Bar dataKey="count" fill="var(--accent)" opacity={0.7} radius={[2, 2, 0, 0]} name="Consumed" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -278,7 +215,7 @@ export default function Statistics() {
                       <span className="lbl">{m.medium}</span>
                       <div className="bar-bg">
                         <div className="bar-v" style={{
-                          width: barsReady ? `${Math.round((m.count / maxMedium) * 100)}%` : '0%',
+                          width: `${Math.round((m.count / maxMedium) * 100)}%`,
                           background: COLORS[i % COLORS.length],
                         }} />
                       </div>
@@ -292,11 +229,11 @@ export default function Statistics() {
               {s.rating_dist?.length > 0 && (
                 <div className="chart-box">
                   <div className="chart-box-title">Rating Distribution</div>
-                  {s.rating_dist.map(r => (
+                  {s.rating_dist.filter(r => r.count > 0 || r.rating >= 5).map(r => (
                     <div key={r.rating} className="rating-dist-row">
                       <span className="r-lbl">{r.rating}</span>
                       <div className="r-bar-bg">
-                        <div className="r-bar-v" style={{ width: barsReady ? `${Math.round((r.count / maxRating) * 100)}%` : '0%' }} />
+                        <div className="r-bar-v" style={{ width: `${Math.round((r.count / maxRating) * 100)}%` }} />
                       </div>
                       <span className="r-cnt">{r.count}</span>
                     </div>
@@ -314,7 +251,7 @@ export default function Statistics() {
                     <ResponsiveContainer width={140} height={140}>
                       <PieChart>
                         <Pie data={statusPieData} dataKey="value" cx="50%" cy="50%"
-                          outerRadius={60} innerRadius={30} paddingAngle={2} isAnimationActive={true}>
+                          outerRadius={60} innerRadius={30} paddingAngle={2}>
                           {statusPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Pie>
                         <Tooltip content={<Tooltip_ />} />
@@ -333,7 +270,7 @@ export default function Statistics() {
                     <ResponsiveContainer width={140} height={140}>
                       <PieChart>
                         <Pie data={originPieData} dataKey="value" cx="50%" cy="50%"
-                          outerRadius={60} innerRadius={30} paddingAngle={2} isAnimationActive={true}>
+                          outerRadius={60} innerRadius={30} paddingAngle={2}>
                           {originPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
                         </Pie>
                         <Tooltip content={<Tooltip_ />} />
@@ -381,7 +318,7 @@ export default function Statistics() {
                       <XAxis dataKey="year" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
                       <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                      <Bar dataKey="count" fill="var(--green)" opacity={0.6} radius={[2, 2, 0, 0]} name="Entries" isAnimationActive={true} />
+                      <Bar dataKey="count" fill="var(--green)" opacity={0.6} radius={[2, 2, 0, 0]} name="Entries" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

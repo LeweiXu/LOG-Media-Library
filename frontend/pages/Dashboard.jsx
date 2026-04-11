@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getEntries, getStats, updateEntry } from '../api.jsx';
 import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, logDotClass } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
@@ -27,6 +27,8 @@ export default function DashboardAlt({ onFilterChange }) {
   const [detailEntry,     setDetailEntry]     = useState(null);
   const [editingProgress, setEditingProgress] = useState(null); // { id, value }
   const [editingRating,   setEditingRating]   = useState(null); // { id, value }
+  const [barsReady,       setBarsReady]       = useState(false);
+  const barsRef = useRef(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(''); }
@@ -70,6 +72,15 @@ export default function DashboardAlt({ onFilterChange }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const monthBarsData = stats?.entries_per_month ?? [];
+  useEffect(() => {
+    if (monthBarsData.length > 0) {
+      setBarsReady(false);
+      barsRef.current = requestAnimationFrame(() => setBarsReady(true));
+      return () => cancelAnimationFrame(barsRef.current);
+    }
+  }, [monthBarsData.length]);
 
   async function handleStatusChange(id, newStatus) {
     try {
@@ -136,9 +147,8 @@ export default function DashboardAlt({ onFilterChange }) {
     load(true);
   };
 
-  const s          = stats || {};
-  const monthBars  = s.entries_per_month ?? [];
-  const maxBar     = monthBars.length ? Math.max(...monthBars.map(m => m.count), 1) : 1;
+  const s       = stats || {};
+  const maxBar  = monthBarsData.length ? Math.max(...monthBarsData.map(m => m.count), 1) : 1;
 
   return (
     <div className="layout-3col">
@@ -533,14 +543,14 @@ export default function DashboardAlt({ onFilterChange }) {
           </div>
         </div>
 
-        {monthBars.length > 0 && (
+        {monthBarsData.length > 0 && (
           <>
             <p className="panel-title">Consumed / Month</p>
             <div className="chart-area">
-              {monthBars.slice(-7).map((m, i) => (
+              {monthBarsData.slice(-7).map((m, i) => (
                 <div key={i} className="bar-col">
                   <div className="bar-fill"
-                    style={{ height: `${Math.round((m.count / maxBar) * 100)}%` }} />
+                    style={{ height: barsReady ? `${Math.round((m.count / maxBar) * 100)}%` : '0%' }} />
                   <span className="bar-label">{m.month ?? m.label ?? ''}</span>
                 </div>
               ))}

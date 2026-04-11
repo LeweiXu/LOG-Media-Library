@@ -509,7 +509,7 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
   justify-content: flex-end;
 }
 
-.bar-fill  { width: 100%; background: var(--accent); opacity: 0.55; min-height: 2px; }
+.bar-fill  { width: 100%; background: var(--accent); opacity: 0.55; min-height: 2px; transition: height 0.5s ease; }
 .bar-label { font-size: 9px; color: var(--dim); letter-spacing: 0.03em; }
 
 /* ── Activity log ────────────────────────────────────────────────────────── */
@@ -752,12 +752,12 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 .h-bar-row:last-child { border-bottom: none; }
 .h-bar-row .lbl    { color: var(--text); }
 .h-bar-row .bar-bg { height: 4px; background: var(--border); position: relative; }
-.h-bar-row .bar-v  { position: absolute; left: 0; top: 0; height: 100%; background: var(--accent); }
+.h-bar-row .bar-v  { position: absolute; left: 0; top: 0; height: 100%; background: var(--accent); transition: width 0.6s ease; }
 .h-bar-row .cnt    { color: var(--dim); text-align: right; }
 
 /* rating distribution */
-.rating-dist-row { display: grid; grid-template-columns: 20px 1fr 36px; gap: 8px; align-items: center; padding: 4px 0; font-size: 11px; }
+.rating-dist-row { display: grid; grid-template-columns: 28px 1fr 36px; gap: 8px; align-items: center; padding: 4px 0; font-size: 11px; }
 .rating-dist-row .r-lbl    { color: var(--dim); text-align: right; }
 .rating-dist-row .r-bar-bg { height: 4px; background: var(--border); position: relative; }
-.rating-dist-row .r-bar-v  { position: absolute; left: 0; top: 0; height: 100%; background: var(--amber); }
+.rating-dist-row .r-bar-v  { position: absolute; left: 0; top: 0; height: 100%; background: var(--amber); transition: width 0.6s ease; }
 .rating-dist-row .r-cnt    { color: var(--dim); }

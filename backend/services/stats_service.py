@@ -69,13 +69,13 @@ def get_stats(db: Session, username: str) -> StatsResponse:
             func.to_char(Entry.completed_at, "YYYY-MM"),
             func.to_char(Entry.completed_at, "Mon YY"),
         )
-        .order_by(func.to_char(Entry.completed_at, "YYYY-MM").asc())
+        .order_by(func.to_char(Entry.completed_at, "YYYY-MM").desc())
         .limit(12)
     ).all()
 
     entries_per_month = [
         MonthCount(key=r.key, label=r.label.strip(), count=r.cnt)
-        for r in month_rows
+        for r in reversed(month_rows)
     ]
 
     return StatsResponse(

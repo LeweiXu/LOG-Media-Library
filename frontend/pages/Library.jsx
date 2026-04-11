@@ -17,7 +17,7 @@ const SORT_FIELDS = [
   { key: 'completed_at', label: 'Completed' },
 ];
 
-const LIMIT = 40;
+const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
 
 export default function Library({ initialFilters = {} }) {
   const [entries,      setEntries]      = useState([]);
@@ -39,6 +39,7 @@ export default function Library({ initialFilters = {} }) {
   const [sort,         setSort]         = useState('updated_at');
   const [order,        setOrder]        = useState('desc');
   const [page,         setPage]         = useState(1);
+  const [limit,        setLimit]        = useState(40);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(''); }
@@ -48,7 +49,7 @@ export default function Library({ initialFilters = {} }) {
         ...(statusFilter && { status: statusFilter }),
         ...(mediumFilter && { medium: mediumFilter }),
         ...(originFilter && { origin: originFilter }),
-        sort, order, limit: LIMIT, offset: (page - 1) * LIMIT,
+        sort, order, limit, offset: (page - 1) * limit,
       };
 
       const data  = await getEntries(params);
@@ -72,10 +73,10 @@ export default function Library({ initialFilters = {} }) {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [search, statusFilter, mediumFilter, originFilter, sort, order, page]);
+  }, [search, statusFilter, mediumFilter, originFilter, sort, order, page, limit]);
 
-  // reset to page 1 when filters/sort change
-  useEffect(() => { setPage(1); }, [search, statusFilter, mediumFilter, originFilter, sort, order]);
+  // reset to page 1 when filters/sort/limit change
+  useEffect(() => { setPage(1); }, [search, statusFilter, mediumFilter, originFilter, sort, order, limit]);
   useEffect(() => { load(); }, [load]);
 
   function handleSort(field) {
@@ -93,7 +94,6 @@ export default function Library({ initialFilters = {} }) {
           : mapped;
       });
       if (statusFilter && newStatus !== statusFilter) setTotal(t => t - 1);
-      load(true);
     } catch (e) {
       alert('Update failed: ' + e.message);
     }
@@ -106,7 +106,6 @@ export default function Library({ initialFilters = {} }) {
       try {
         const updated = await updateEntry(id, { progress: num });
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
-        load(true);
       } catch (e) {
         alert('Update failed: ' + e.message);
       }
@@ -120,7 +119,6 @@ export default function Library({ initialFilters = {} }) {
     try {
       const updated = await updateEntry(id, { rating: num ?? undefined });
       setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
-      load(true);
     } catch (e) {
       alert('Update failed: ' + e.message);
     }
@@ -152,7 +150,7 @@ export default function Library({ initialFilters = {} }) {
 
   const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); setOriginFilter(''); };
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;
-  const totalPages   = Math.ceil(total / LIMIT);
+  const totalPages   = Math.ceil(total / limit);
 
   const SortTh = ({ field, children }) => (
     <th className="sortable"
@@ -246,7 +244,11 @@ export default function Library({ initialFilters = {} }) {
           {hasFilters && (
             <button className="icon-btn" onClick={clearFilters}>✕ Clear</button>
           )}
-          <span className="filter-count">{loading ? '…' : `${entries.length} shown`}</span>
+          <select value={limit} onChange={e => setLimit(Number(e.target.value))}
+            style={{ marginLeft: 'auto' }}>
+            {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n} / page</option>)}
+          </select>
+          <button className="icon-btn" onClick={() => load()} title="Refresh" style={{ padding: '5px 10px' }}>Refresh</button>
         </div>
 
         {error && (
@@ -406,9 +408,11 @@ export default function Library({ initialFilters = {} }) {
 
             {totalPages > 1 && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', paddingBottom: 16 }}>
+                {page > 1 && <button className="icon-btn" onClick={() => setPage(1)}>« First</button>}
                 <button className="icon-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
                 <span style={{ fontSize: 11, color: 'var(--dim)' }}>Page {page} of {totalPages}</span>
                 <button className="icon-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
+                {page < totalPages && <button className="icon-btn" onClick={() => setPage(totalPages)}>Last »</button>}
               </div>
             )}
           </>
@@ -487,21 +491,21 @@ export default function Library({ initialFilters = {} }) {
 
       {showImport && (
         <ImportModal
-          onClose={() => { setShowImport(false); load(); }}
+          onClose={() => setShowImport(false)}
           onImported={() => { load(); }}
         />
       )}
 
       {showImportAuto && (
         <ImportAutoModal
-          onClose={() => { setShowImportAuto(false); load(); }}
+          onClose={() => setShowImportAuto(false)}
           onImported={() => { load(); }}
         />
       )}
 
       {showImportMal && (
         <ImportMalModal
-          onClose={() => { setShowImportMal(false); load(); }}
+          onClose={() => setShowImportMal(false)}
           onImported={() => { load(); }}
         />
       )}
