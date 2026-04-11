@@ -20,14 +20,15 @@
 ---
 
 **TODO**
+- **Optional:**
 - Add 'author' field for entry table, possibly split entry table into 2: entry + media to reduce redudancy.
-- Either self cache thumbnails or fetch small thumbnails for media covers for main library thumbnail display.
+- Either self cache thumbnails or fetch small thumbnails for media covers for main library thumbnail display (optional, thumbnail loading is actually that slow).
 - Add refresh button: use external_url to refresh details of select or all entries. Will be difficult as need to resolve conflicting changes if user made manual edits.
 - Enable search by URL for supported sources.
 - Possibly write a script for auto-scraping details from URL for unsupported sites. Will be very difficult due to different site structure/html. Additionally could build companion extension to allow scraping of websites without APIs.
+- **Urgent:**
 - Add settings page for various settings: e.g. default search on library page, default source selection when searching for new entries + currently implemented settings (change password and wipe data).
-- Allow editing of ALL entry fields, include the Genre field.
-- Sorting by Rating descending causes no rating entries to be displayed at the top first, before 10/10 entries. Need to fix this, also add functionality to directly edit rating in library page.
+- Add "Explore" page, fetching recent media from all sources, have some simple searching/filtering functionality (basically expand "add entry" modal to full pagge).
     
 **Scalability:**
 - Built with FastAPI and PostgreSQL, LOG is easily scalable to thousands (and potentially millions) of users, depending on your hosting resources.
