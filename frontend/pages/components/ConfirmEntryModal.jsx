@@ -175,7 +175,7 @@ export default function ConfirmEntryModal({ queue, onSave, onComplete }) {
 
             <div className="form-row">
               <label className="form-label">Rating (0–10)</label>
-              <input className="form-input" type="number" min="0" max="10" step="0.1"
+              <input className="form-input" type="number" min="0" max="10" step="0.5"
                 value={form.rating} onChange={e => setField('rating', e.target.value)} />
             </div>
 

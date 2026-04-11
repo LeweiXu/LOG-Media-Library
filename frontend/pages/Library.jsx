@@ -354,7 +354,7 @@ export default function Library({ initialFilters = {} }) {
                         {editingRating?.id === e.id ? (
                           <input
                             className="inline-select"
-                            type="number" min="0" max="10" step="0.1"
+                            type="number" min="0" max="10" step="0.5"
                             style={{ width: 64 }}
                             value={editingRating.value}
                             autoFocus

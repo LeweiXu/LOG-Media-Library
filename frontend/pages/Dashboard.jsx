@@ -309,7 +309,7 @@ export default function DashboardAlt({ onFilterChange }) {
                                 {isEditingRating ? (
                                 <input
                                     className="inline-select"
-                                    type="number" min="0" max="10" step="0.1"
+                                    type="number" min="0" max="10" step="0.5"
                                     style={{ width: 64 }}
                                     value={editingRating.value}
                                     autoFocus
@@ -410,7 +410,7 @@ export default function DashboardAlt({ onFilterChange }) {
                             {isEditingRating ? (
                                 <input
                                 className="inline-select"
-                                type="number" min="0" max="10" step="0.1"
+                                type="number" min="0" max="10" step="0.5"
                                 style={{ width: 64 }}
                                 value={editingRating.value}
                                 autoFocus
@@ -508,7 +508,7 @@ export default function DashboardAlt({ onFilterChange }) {
                         {isEditingRating ? (
                             <input
                             className="inline-select"
-                            type="number" min="0" max="10" step="0.1"
+                            type="number" min="0" max="10" step="0.5"
                             style={{ width: 64 }}
                             value={editingRating.value}
                             autoFocus
