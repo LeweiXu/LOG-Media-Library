@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getEntries, updateEntry, deleteEntry, exportEntries } from '../api.jsx';
-import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS } from '../utils.jsx';
+import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, usePageEntrance } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ImportModal from './components/ImportModal.jsx';
@@ -20,6 +20,7 @@ const SORT_FIELDS = [
 const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
 
 export default function Library({ initialFilters = {} }) {
+  const shouldAnimateOnEnter = usePageEntrance();
   const [entries,      setEntries]      = useState([]);
   const [total,        setTotal]        = useState(0);
   const [loading,      setLoading]      = useState(true);
@@ -151,6 +152,10 @@ export default function Library({ initialFilters = {} }) {
   const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); setOriginFilter(''); };
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;
   const totalPages   = Math.ceil(total / limit);
+  const enterClass = shouldAnimateOnEnter ? 'page-enter-active' : '';
+  const enterStyle = (delay) => (
+    shouldAnimateOnEnter ? { '--page-enter-delay': `${delay}ms` } : undefined
+  );
 
   const SortTh = ({ field, children }) => (
     <th className="sortable"
@@ -181,7 +186,9 @@ export default function Library({ initialFilters = {} }) {
   return (
     <div className="layout-3col">
       {/* ── Left sidebar ── */}
-      <div className="sidebar-left">
+      <div
+        className={`sidebar-left ${enterClass} page-enter-side-left`}
+        style={enterStyle(20)}>
         <div className="sidebar-section">
           <span className="sidebar-label">Status</span>
           {[['', 'All'], ['current','Current'], ['planned','Planned'],
@@ -223,7 +230,7 @@ export default function Library({ initialFilters = {} }) {
 
       {/* ── Main ── */}
       <div className="main-content">
-        <div className="page-head">
+        <div className={`page-head ${enterClass}`} style={enterStyle(70)}>
           <div className="page-head-left">
             <span className="page-title">Library</span>
             <span className="page-desc">{total} entries</span>
@@ -231,7 +238,7 @@ export default function Library({ initialFilters = {} }) {
           <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>
         </div>
 
-        <div className="filter-bar">
+        <div className={`filter-bar ${enterClass}`} style={enterStyle(110)}>
           <input placeholder="Search titles…" value={search} style={{ width: 200 }}
             onChange={e => setSearch(e.target.value)} />
           <select value={sort} onChange={e => setSort(e.target.value)}>
@@ -273,7 +280,7 @@ export default function Library({ initialFilters = {} }) {
         )}
 
         {!error && !loading && entries.length > 0 && (
-          <>
+          <div className={enterClass} style={enterStyle(160)}>
               <table className="media-table">
               <thead>
                 <tr>
@@ -415,12 +422,14 @@ export default function Library({ initialFilters = {} }) {
                 {page < totalPages && <button className="icon-btn" onClick={() => setPage(totalPages)}>Last »</button>}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
       {/* ── Right sidebar ── */}
-      <div className="sidebar-right">
+      <div
+        className={`sidebar-right ${enterClass} page-enter-side-right`}
+        style={enterStyle(90)}>
         <p className="panel-title">Sort</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
           {SORT_FIELDS.map(f => (

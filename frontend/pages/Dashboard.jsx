@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getEntries, getStats, updateEntry } from '../api.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, logDotClass } from '../utils.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, logDotClass, usePageEntrance } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 
@@ -16,6 +16,7 @@ function CoverThumb({ url, title }) {
 }
 
 export default function DashboardAlt({ onFilterChange }) {
+  const shouldAnimateOnEnter = usePageEntrance();
   const [stats,           setStats]           = useState(null);
   const [current,         setCurrent]         = useState([]);
   const [planned,         setPlanned]         = useState([]);
@@ -149,11 +150,17 @@ export default function DashboardAlt({ onFilterChange }) {
 
   const s       = stats || {};
   const maxBar  = monthBarsData.length ? Math.max(...monthBarsData.map(m => m.count), 1) : 1;
+  const enterClass = shouldAnimateOnEnter ? 'page-enter-active' : '';
+  const enterStyle = (delay) => (
+    shouldAnimateOnEnter ? { '--page-enter-delay': `${delay}ms` } : undefined
+  );
 
   return (
     <div className="layout-3col">
       {/* ── Left sidebar ── */}
-      <div className="sidebar-left">
+      <div
+        className={`sidebar-left ${enterClass} page-enter-side-left`}
+        style={enterStyle(20)}>
         <div className="sidebar-section">
           <span className="sidebar-label">Status</span>
           {[
@@ -199,7 +206,7 @@ export default function DashboardAlt({ onFilterChange }) {
 
       {/* ── Main ── */}
       <div className="main-content">
-        <div className="page-head">
+        <div className={`page-head ${enterClass}`} style={enterStyle(70)}>
           <div className="page-head-left">
             <span className="page-title">Dashboard</span>
             <span className="page-desc">personal media log</span>
@@ -224,7 +231,17 @@ export default function DashboardAlt({ onFilterChange }) {
         {!error && !loading && (
           <>
           {/* Side-by-side layout for the two tables */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px', alignItems: 'start' }}>
+            <div
+              className={enterClass}
+              style={shouldAnimateOnEnter
+                ? {
+                    '--page-enter-delay': '120ms',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0 24px',
+                    alignItems: 'start',
+                  }
+                : { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px', alignItems: 'start' }}>
 
             {/* Currently Consuming */}
             <div>
@@ -430,11 +447,12 @@ export default function DashboardAlt({ onFilterChange }) {
 
             </div>
 
-            <div className="section-header">Recently Completed</div>
-            {recent.length === 0
-            ? <div style={{ color: 'var(--dim)', fontSize: 12 }}>No completed entries yet.</div>
-            : (
-                <table className="media-table">
+            <div className={enterClass} style={enterStyle(170)}>
+      <div className="section-header">Recently Completed</div>
+      {recent.length === 0
+      ? <div style={{ color: 'var(--dim)', fontSize: 12 }}>No completed entries yet.</div>
+      : (
+        <table className="media-table">
                 <thead>
                     <tr>
                     <th>Title</th><th>Type</th><th>Progress</th><th>Completed</th>
@@ -516,13 +534,16 @@ export default function DashboardAlt({ onFilterChange }) {
                 </table>
             )
             }
+            </div>
 
         </>
         )}
       </div>
 
       {/* ── Right sidebar ── */}
-      <div className="sidebar-right">
+      <div
+        className={`sidebar-right ${enterClass} page-enter-side-right`}
+        style={enterStyle(110)}>
         <p className="panel-title">Summary</p>
         <div className="stat-grid">
           <div className="stat-box">

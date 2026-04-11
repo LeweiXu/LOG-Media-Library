@@ -1,4 +1,17 @@
+import { useEffect, useState } from 'react';
+
 export const STATUSES = ['current', 'planned', 'completed', 'on_hold', 'dropped'];
+
+export function usePageEntrance() {
+  const [shouldAnimate, setShouldAnimate] = useState(false);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShouldAnimate(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  return shouldAnimate;
+}
 
 export const MEDIUMS = [
   'Film', 'TV Show', 'Anime', 'Book', 'Manga',

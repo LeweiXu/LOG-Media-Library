@@ -290,6 +290,65 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 
 .page-desc { font-size: 11px; color: var(--dim); }
 
+/* ── Page entrance motion ───────────────────────────────────────────────── */
+.page-enter-active {
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+  animation: page-enter-rise 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--page-enter-delay, 0ms);
+}
+
+.page-enter-active.page-enter-side-left {
+  transform: translate3d(-10px, 0, 0);
+  animation-name: page-enter-left;
+}
+
+.page-enter-active.page-enter-side-right {
+  transform: translate3d(10px, 0, 0);
+  animation-name: page-enter-right;
+}
+
+@keyframes page-enter-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes page-enter-left {
+  from {
+    opacity: 0;
+    transform: translate3d(-10px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes page-enter-right {
+  from {
+    opacity: 0;
+    transform: translate3d(10px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 .btn {
   background: var(--accent);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getEntries, getStats } from '../api.jsx';
-import { extractItems } from '../utils.jsx';
+import { extractItems, usePageEntrance } from '../utils.jsx';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, PieChart, Pie, Cell,
@@ -112,6 +112,7 @@ const MONTH_INPUT_STYLE = {
 };
 
 export default function Statistics() {
+  const shouldAnimateOnEnter = usePageEntrance();
   const [apiStats,   setApiStats]   = useState(null);
   const [entries,    setEntries]    = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -194,12 +195,16 @@ export default function Statistics() {
     () => (s.by_origin || []).slice(0, 6).map(({ origin, count }) => ({ name: origin, value: count })),
     [s.by_origin],
   );
+  const enterClass = shouldAnimateOnEnter ? 'page-enter-active' : '';
+  const enterStyle = (delay) => (
+    shouldAnimateOnEnter ? { '--page-enter-delay': `${delay}ms` } : undefined
+  );
 
   return (
     <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div className="stats-layout">
 
-        <div className="page-head" style={{ marginBottom: 24 }}>
+        <div className={`page-head ${enterClass}`} style={{ ...enterStyle(40), marginBottom: 24 }}>
           <div className="page-head-left">
             <span className="page-title">Statistics</span>
             <span className="page-desc">insights into your media habits</span>
@@ -222,7 +227,7 @@ export default function Statistics() {
         {!loading && !error && (
           <>
             {/* Summary cards */}
-            <div className="stats-grid">
+            <div className={`stats-grid ${enterClass}`} style={enterStyle(85)}>
               <StatCard val={s.total}     label="Total Entries" />
               <StatCard val={s.completed} label="Completed" />
               <StatCard val={s.avg_rating != null ? s.avg_rating.toFixed(2) : '—'} label="Avg Rating" sub="rated entries" />
@@ -231,7 +236,7 @@ export default function Statistics() {
 
             {/* Entries per month */}
             {allMonths.length > 0 && (
-              <div className="chart-section">
+              <div className={`chart-section ${enterClass}`} style={enterStyle(125)}>
                 <div className="chart-section-title">
                   Consumed per Month
                   <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', letterSpacing: 'normal' }}>
@@ -256,7 +261,7 @@ export default function Statistics() {
               </div>
             )}
 
-            <div className="charts-2col" style={{ marginBottom: 28 }}>
+            <div className={`charts-2col ${enterClass}`} style={{ ...enterStyle(165), marginBottom: 28 }}>
               {/* By medium */}
               {s.by_medium?.length > 0 && (
                 <div className="chart-box">
@@ -293,7 +298,7 @@ export default function Statistics() {
               )}
             </div>
 
-            <div className="charts-2col" style={{ marginBottom: 28 }}>
+            <div className={`charts-2col ${enterClass}`} style={{ ...enterStyle(205), marginBottom: 28 }}>
               {/* Status pie */}
               {statusPieData.length > 0 && (
                 <div className="chart-box">
@@ -343,7 +348,7 @@ export default function Statistics() {
 
             {/* Top rated */}
             {s.top_rated?.length > 0 && (
-              <div className="chart-section">
+              <div className={`chart-section ${enterClass}`} style={enterStyle(245)}>
                 <div className="chart-section-title">Top Rated</div>
                 <div className="chart-box">
                   <table className="media-table">
@@ -368,7 +373,7 @@ export default function Statistics() {
 
             {/* By release year */}
             {s.by_year?.length > 0 && (
-              <div className="chart-section">
+              <div className={`chart-section ${enterClass}`} style={enterStyle(285)}>
                 <div className="chart-section-title">Entries by Release Year</div>
                 <div className="chart-box">
                   <ResponsiveContainer width="100%" height={160}>
