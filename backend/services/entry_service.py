@@ -63,8 +63,12 @@ def get_entries(
 
     # Paginated results — always put NULLs last so unrated/undated entries
     # don't float to the top when sorting descending.
+    # Secondary sort by title ASC ensures consistent ordering within ties.
+    order_clauses = [nullslast(direction(sort_col))]
+    if sort != "title":
+        order_clauses.append(asc(Entry.title))
     rows = db.execute(
-        base_q.order_by(nullslast(direction(sort_col))).limit(limit).offset(offset)
+        base_q.order_by(*order_clauses).limit(limit).offset(offset)
     ).scalars().all()
 
     return EntryListResponse(

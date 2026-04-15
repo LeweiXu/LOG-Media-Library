@@ -139,7 +139,6 @@ export default function Library({ initialFilters = {} }) {
 
   const handleUpdated = (updated) => {
     setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
-    load(true);
   };
   const handleDeleted = (id) => {
     setConfirmDeleteId(null);
