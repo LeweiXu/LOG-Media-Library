@@ -1,7 +1,20 @@
-import { useState } from 'react';
-import { changePassword, deleteAllEntries } from '../../api.jsx';
+import { useState, useEffect, useRef } from 'react';
+import { changePassword, deleteAllEntries, getSettings, updateSettings } from '../../api.jsx';
+import { MEDIUMS } from '../../utils.jsx';
 
-export default function SettingsModal({ onClose, onDataDeleted }) {
+// Must match the options surfaced on the Library page.
+const LIBRARY_SORT_FIELDS = [
+  { key: 'title',        label: 'Title' },
+  { key: 'medium',       label: 'Medium' },
+  { key: 'rating',       label: 'Rating' },
+  { key: 'status',       label: 'Status' },
+  { key: 'year',         label: 'Year' },
+  { key: 'updated_at',   label: 'Updated' },
+  { key: 'completed_at', label: 'Completed' },
+];
+const LIBRARY_PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
+
+export default function SettingsModal({ onClose, onDataDeleted, onSettingsChanged }) {
   const [currentPw,  setCurrentPw]  = useState('');
   const [newPw,      setNewPw]      = useState('');
   const [confirmPw,  setConfirmPw]  = useState('');
@@ -9,7 +22,59 @@ export default function SettingsModal({ onClose, onDataDeleted }) {
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState(false);
 
+  // Backup frequency UI is intentionally not wired to the backend yet —
+  // automatic backup scheduling is a follow-up change.
   const [backupFreq, setBackupFreq] = useState('never');
+
+  // ── Live-bound user settings (Library + Explore) ──────────────────────
+  const [exploreMedium,      setExploreMedium]      = useState('');
+  const [explorePersonalize, setExplorePersonalize] = useState(true);
+  const [exploreHideOwned,   setExploreHideOwned]   = useState(true);
+  const [librarySort,        setLibrarySort]        = useState('updated_at');
+  const [libraryPerPage,     setLibraryPerPage]     = useState(40);
+  const [prefsLoaded,        setPrefsLoaded]        = useState(false);
+  const prefsReadyRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await getSettings();
+        if (cancelled) return;
+        setExploreMedium(s.explore_default_medium || '');
+        setExplorePersonalize(s.explore_personalize ?? true);
+        setExploreHideOwned(s.explore_hide_in_library ?? true);
+        setLibrarySort(s.default_sort || 'updated_at');
+        setLibraryPerPage(s.default_entries_per_page || 40);
+      } catch { /* ignore */ }
+      finally { if (!cancelled) setPrefsLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Debounced save when any pref changes.
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    if (!prefsReadyRef.current) {
+      prefsReadyRef.current = true;
+      return;
+    }
+    const id = setTimeout(() => {
+      updateSettings({
+        explore_default_medium:   exploreMedium || null,
+        explore_personalize:      explorePersonalize,
+        explore_hide_in_library:  exploreHideOwned,
+        default_sort:             librarySort,
+        default_entries_per_page: libraryPerPage,
+      })
+        .then(saved => onSettingsChanged?.(saved))
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(id);
+  }, [
+    exploreMedium, explorePersonalize, exploreHideOwned,
+    librarySort, libraryPerPage, prefsLoaded, onSettingsChanged,
+  ]);
 
   const [screen, setScreen] = useState('settings'); // 'settings' | 'confirm-delete'
   const [deleting, setDeleting] = useState(false);
@@ -95,15 +160,17 @@ export default function SettingsModal({ onClose, onDataDeleted }) {
               <input className="form-input" type="password" autoComplete="current-password"
                 value={currentPw} onChange={e => setCurrentPw(e.target.value)} required />
             </div>
-            <div className="form-row">
-              <label className="form-label">New password</label>
-              <input className="form-input" type="password" autoComplete="new-password"
-                value={newPw} onChange={e => setNewPw(e.target.value)} required minLength={6} />
-            </div>
-            <div className="form-row">
-              <label className="form-label">Confirm new password</label>
-              <input className="form-input" type="password" autoComplete="new-password"
-                value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required minLength={6} />
+            <div className="form-row-2">
+              <div className="form-row">
+                <label className="form-label">New password</label>
+                <input className="form-input" type="password" autoComplete="new-password"
+                  value={newPw} onChange={e => setNewPw(e.target.value)} required minLength={6} />
+              </div>
+              <div className="form-row">
+                <label className="form-label">Confirm new password</label>
+                <input className="form-input" type="password" autoComplete="new-password"
+                  value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required minLength={6} />
+              </div>
             </div>
             {error   && <div className="settings-msg settings-msg-error">{error}</div>}
             {success && <div className="settings-msg settings-msg-success">Password changed.</div>}
@@ -113,6 +180,79 @@ export default function SettingsModal({ onClose, onDataDeleted }) {
               </button>
             </div>
           </form>
+
+          <div className="settings-divider" />
+
+          <p className="settings-section-label">Library</p>
+          <div className="form-row-2">
+            <div>
+              <label className="form-label">Default sort</label>
+              <select
+                className="form-input"
+                value={librarySort}
+                onChange={e => setLibrarySort(e.target.value)}
+                disabled={!prefsLoaded}
+              >
+                {LIBRARY_SORT_FIELDS.map(f => (
+                  <option key={f.key} value={f.key}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Entries per page</label>
+              <select
+                className="form-input"
+                value={libraryPerPage}
+                onChange={e => setLibraryPerPage(Number(e.target.value))}
+                disabled={!prefsLoaded}
+              >
+                {LIBRARY_PAGE_SIZE_OPTIONS.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="settings-divider" />
+
+          <p className="settings-section-label">Explore</p>
+          <div className="settings-choice-grid settings-choice-grid-explore">
+            <div className="settings-choice settings-choice-with-control is-selected">
+              <span className="settings-choice-title">Default medium</span>
+              <span className="settings-choice-detail">{exploreMedium || 'All media'}</span>
+              <select
+                className="form-input settings-choice-control"
+                value={exploreMedium}
+                onChange={e => setExploreMedium(e.target.value)}
+                disabled={!prefsLoaded}
+              >
+                <option value="">All</option>
+                {MEDIUMS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <button
+              type="button"
+              className={'settings-choice' + (explorePersonalize ? ' is-selected' : '')}
+              onClick={() => setExplorePersonalize(v => !v)}
+              disabled={!prefsLoaded}
+            >
+              <span className="settings-choice-title">Tailor recommendations</span>
+              <span className="settings-choice-detail">
+                {explorePersonalize ? 'Using your ratings and library patterns' : 'Using general popularity ranking'}
+              </span>
+            </button>
+            <button
+              type="button"
+              className={'settings-choice' + (exploreHideOwned ? ' is-selected' : '')}
+              onClick={() => setExploreHideOwned(v => !v)}
+              disabled={!prefsLoaded}
+            >
+              <span className="settings-choice-title">Hide library titles</span>
+              <span className="settings-choice-detail">
+                {exploreHideOwned ? 'Only showing titles outside your library' : 'Library titles can appear in Explore'}
+              </span>
+            </button>
+          </div>
 
           <div className="settings-divider" />
 

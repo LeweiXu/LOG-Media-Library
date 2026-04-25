@@ -83,6 +83,30 @@ export function SkeletonActivity({ rows = 6 }) {
   );
 }
 
+export function SkeletonExploreGrid({ cards = 9 }) {
+  return (
+    <div className="explore-grid" aria-hidden="true">
+      {Array.from({ length: cards }).map((_, i) => (
+        <article key={i} className="explore-card skeleton-explore-card">
+          <SkeletonLine className="explore-cover skeleton-explore-cover" />
+          <div className="explore-body" style={{ flex: 1, minWidth: 0 }}>
+            <SkeletonLine width={`${66 + (i % 3) * 10}%`} height={12} />
+            <SkeletonLine width="42%" height={9} style={{ marginTop: 8 }} />
+            <SkeletonLine width="100%" height={9} style={{ marginTop: 12 }} />
+            <SkeletonLine width="92%"  height={9} style={{ marginTop: 4 }} />
+            <SkeletonLine width="78%"  height={9} style={{ marginTop: 4 }} />
+            <div style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 8, justifyContent: 'center' }}>
+              <SkeletonLine width={68} height={20} />
+              <SkeletonLine width={68} height={20} />
+              <SkeletonLine width={84} height={20} />
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 export function SkeletonChartBox({ rows = 6, variant = 'bars' }) {
   return (
     <div className="chart-box skeleton-chart-box" aria-hidden="true">

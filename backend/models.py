@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Integer, String, Float, DateTime, Text, func, ForeignKey
+from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from db import Base
 
@@ -11,6 +11,15 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
+    # ── Settings (added 2026-04-25) ──────────────────────────────────────────
+    # Library/backup settings — UI for these lands in a later change.
+    backup_freq:              Mapped[str] = mapped_column(String(20), nullable=False, server_default="never")
+    default_sort:             Mapped[str] = mapped_column(String(30), nullable=False, server_default="updated_at")
+    default_entries_per_page: Mapped[int] = mapped_column(Integer,    nullable=False, server_default="40")
+    # Explore-page preferences.
+    explore_default_medium:   Mapped[str | None] = mapped_column(String(50), nullable=True)
+    explore_personalize:      Mapped[bool]       = mapped_column(Boolean,    nullable=False, server_default="true")
+    explore_hide_in_library:  Mapped[bool]       = mapped_column(Boolean,    nullable=False, server_default="true")
     def __repr__(self) -> str:
         return f"<User username={self.username!r} email={self.email!r}>"
 

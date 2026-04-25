@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import Dashboard   from './pages/Dashboard.jsx';
 import Library     from './pages/Library.jsx';
 import Statistics  from './pages/Statistics.jsx';
+import Explore     from './pages/Explore.jsx';
 import LandingPage from './pages/LandingPage.jsx';
 import AuthModal      from './pages/components/AuthModal.jsx';
 import SettingsModal  from './pages/components/SettingsModal.jsx';
@@ -13,6 +14,7 @@ export default function App() {
   const [online,         setOnline]         = useState(null);
   const [libraryFilters, setLibraryFilters] = useState({});
   const [showSettings,   setShowSettings]   = useState(false);
+  const [settingsVersion, setSettingsVersion] = useState(0);
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -84,6 +86,10 @@ export default function App() {
     navigate('/library');
   }
 
+  const handleSettingsChanged = useCallback(() => {
+    setSettingsVersion(v => v + 1);
+  }, []);
+
   return (
     <div className="app-shell">
       {/* ── Topbar ── */}
@@ -103,6 +109,9 @@ export default function App() {
             <NavLink to="/statistics" className={({ isActive }) => isActive ? 'active' : undefined}>
               Statistics
             </NavLink>
+            <NavLink to="/explore" className={({ isActive }) => isActive ? 'active' : undefined}>
+              Explore
+            </NavLink>
           </nav>
         )}
 
@@ -116,7 +125,15 @@ export default function App() {
           </button>
           {isAuthenticated ? (
             <>
-              <span className="topbar-user topbar-user-btn" onClick={() => setShowSettings(true)}>{username}</span>
+              <button
+                type="button"
+                className="topbar-user-btn"
+                onClick={() => setShowSettings(true)}
+                title="Settings"
+              >
+                <span className="topbar-user-icon" aria-hidden="true">⚙</span>
+                <span className="topbar-user-name">{username}</span>
+              </button>
               <button className="btn-logout" onClick={handleLogout}>logout</button>
             </>
           ) : (
@@ -149,6 +166,11 @@ export default function App() {
             ? <Library key={username + JSON.stringify(libraryFilters)} initialFilters={libraryFilters} />
             : <Navigate to="/" replace />}
         />
+        <Route path="/explore"
+          element={isAuthenticated
+            ? <Explore key={`${username}:${settingsVersion}`} />
+            : <Navigate to="/" replace />}
+        />
         <Route path="/statistics"
           element={isAuthenticated
             ? <Statistics key={username} />
@@ -157,7 +179,13 @@ export default function App() {
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
       </Routes>
 
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onDataDeleted={() => { setShowSettings(false); navigate('/library'); }} />}
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          onSettingsChanged={handleSettingsChanged}
+          onDataDeleted={() => { setShowSettings(false); navigate('/library'); }}
+        />
+      )}
 
       {/* ── Footer ── */}
       {isAuthenticated && <footer className="app-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -178,4 +206,3 @@ export default function App() {
     </div>
   );
 }
-

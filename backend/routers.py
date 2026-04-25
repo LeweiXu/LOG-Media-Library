@@ -11,7 +11,9 @@ from schemas import (
     ImportConfirmRequest, ImportConfirmResponse, ImportPreviewResponse,
     SearchResult, StatsResponse,
     UserCreate, UserRead, Token, ChangePassword,
+    UserSettings, UserSettingsUpdate,
     DuplicateCheckRequest, DuplicateCheckResponse,
+    ExploreResponse,
 )
 from services import entry_service
 from services.entry_service import delete_all_entries
@@ -21,6 +23,7 @@ from services.stats_service import get_stats
 from services.export_service import export_entries_csv
 from services.import_service import preview_import, confirm_import, auto_import_rows
 from services.import_mal_service import import_mal_rows, confirm_mal_import
+from services.explore_service import explore_media
 
 router = APIRouter()
 
@@ -65,6 +68,26 @@ def change_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
     current_user.hashed_password = auth_service.hash_password(payload.new_password)
     db.commit()
+
+# ── Settings routes ───────────────────────────────────────────────────────────
+
+@router.get("/auth/me/settings", response_model=UserSettings)
+def get_settings(
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return current_user
+
+@router.put("/auth/me/settings", response_model=UserSettings)
+def update_settings(
+    payload: UserSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 # ── Entries endpoints ─────────────────────────────────────────────────────────
 
@@ -246,6 +269,28 @@ async def search(
     current_user: User = Depends(auth_service.get_current_user),
 ):
     return await search_media(title=title, source=source)
+
+# ── Explore endpoint ──────────────────────────────────────────────────────────
+
+@router.get("/explore", response_model=ExploreResponse)
+async def explore(
+    medium:          str  = Query("", description="Optional medium filter"),
+    personalize:     bool = Query(True, description="Apply taste-based ranking"),
+    hide_in_library: bool = Query(True, description="Filter out titles already in your library"),
+    limit:           int  = Query(40, ge=1, le=80),
+    seed:            int  = Query(0,  ge=0, description="Shuffle seed; pass a fresh value to refresh"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return await explore_media(
+        db,
+        username=current_user.username,
+        medium=medium or None,
+        personalize=personalize,
+        hide_in_library=hide_in_library,
+        limit=limit,
+        seed=seed or None,
+    )
 
 # ── Stats endpoint ────────────────────────────────────────────────────────────
 

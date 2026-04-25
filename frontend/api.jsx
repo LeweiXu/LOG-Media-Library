@@ -266,3 +266,19 @@ export async function searchMedia(title, sources = [], extended = false) {
 export const getStats = () => req('/stats');
 
 export const deleteAllEntries = () => req('/entries', { method: 'DELETE' });
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+export const getSettings    = ()        => req('/auth/me/settings');
+export const updateSettings = (patch)   => req('/auth/me/settings', { method: 'PUT', body: JSON.stringify(patch) });
+
+// ── Explore ───────────────────────────────────────────────────────────────────
+
+export const getExplore = (params = {}) => {
+  const qs = new URLSearchParams(
+    Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== '' && v != null),
+    ),
+  ).toString();
+  return req(`/explore${qs ? '?' + qs : ''}`);
+};

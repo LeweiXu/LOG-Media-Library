@@ -137,6 +137,82 @@ class ChangePassword(BaseModel):
     current_password: str
     new_password:     str = Field(..., min_length=6)
 
+# --- User Settings ---
+
+_VALID_BACKUP_FREQ = {"never", "daily", "weekly", "monthly"}
+# Mirrors entry_service.SORTABLE_COLUMNS keys.
+_VALID_DEFAULT_SORT = {
+    "title", "medium", "origin", "year", "status", "rating",
+    "created_at", "updated_at", "completed_at",
+}
+
+class UserSettings(BaseModel):
+    """Read & write shape for /auth/me/settings."""
+    backup_freq:              str = "never"
+    default_sort:             str = "updated_at"
+    default_entries_per_page: int = Field(40, ge=10, le=200)
+    explore_default_medium:   Optional[str] = None
+    explore_personalize:      bool = True
+    explore_hide_in_library:  bool = True
+    model_config = {"from_attributes": True}
+
+    @field_validator("backup_freq")
+    @classmethod
+    def _v_backup(cls, v: str) -> str:
+        if v not in _VALID_BACKUP_FREQ:
+            raise ValueError(f"backup_freq must be one of {sorted(_VALID_BACKUP_FREQ)}")
+        return v
+
+    @field_validator("default_sort")
+    @classmethod
+    def _v_sort(cls, v: str) -> str:
+        if v not in _VALID_DEFAULT_SORT:
+            raise ValueError(f"default_sort must be one of {sorted(_VALID_DEFAULT_SORT)}")
+        return v
+
+    @field_validator("explore_default_medium")
+    @classmethod
+    def _v_explore_medium(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        normalised = normalise_medium(v)
+        if normalised not in VALID_MEDIUMS:
+            raise ValueError(f"medium must be one of {sorted(VALID_MEDIUMS)}")
+        return normalised
+
+class UserSettingsUpdate(BaseModel):
+    """Partial update — every field optional."""
+    backup_freq:              Optional[str]  = None
+    default_sort:             Optional[str]  = None
+    default_entries_per_page: Optional[int]  = Field(None, ge=10, le=200)
+    explore_default_medium:   Optional[str]  = None
+    explore_personalize:      Optional[bool] = None
+    explore_hide_in_library:  Optional[bool] = None
+
+    @field_validator("backup_freq")
+    @classmethod
+    def _v_backup(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_BACKUP_FREQ:
+            raise ValueError(f"backup_freq must be one of {sorted(_VALID_BACKUP_FREQ)}")
+        return v
+
+    @field_validator("default_sort")
+    @classmethod
+    def _v_sort(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_DEFAULT_SORT:
+            raise ValueError(f"default_sort must be one of {sorted(_VALID_DEFAULT_SORT)}")
+        return v
+
+    @field_validator("explore_default_medium")
+    @classmethod
+    def _v_explore_medium(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        normalised = normalise_medium(v)
+        if normalised not in VALID_MEDIUMS:
+            raise ValueError(f"medium must be one of {sorted(VALID_MEDIUMS)}")
+        return normalised
+
 # --- Search Schemas ---
 from pydantic import BaseModel
 class SearchResult(BaseModel):
@@ -186,6 +262,39 @@ class DuplicateCheckRequest(BaseModel):
 
 class DuplicateCheckResponse(BaseModel):
     exists: list[bool]
+
+# --- Explore Schemas ---
+
+class ExploreItem(BaseModel):
+    """A single explore result — a SearchResult plus personalisation metadata."""
+    title:           str
+    medium:          Optional[str]   = None
+    origin:          Optional[str]   = None
+    year:            Optional[int]   = None
+    cover_url:       Optional[str]   = None
+    total:           Optional[int]   = None
+    external_id:     Optional[str]   = None
+    source:          str             = ""
+    description:     Optional[str]   = None
+    external_url:    Optional[str]   = None
+    genres:          Optional[str]   = None
+    external_rating: Optional[float] = None
+    # Personalisation
+    in_library:      bool            = False
+    match_genres:    list[str]       = []   # empty when no overlap with affinity
+
+class AffinitySnapshot(BaseModel):
+    """Compact summary of what the explore engine learned from the user."""
+    sample_size:     int = 0          # number of rated entries used
+    top_genres:      list[str] = []   # ranked, up to 5
+    top_origins:     list[str] = []   # ranked, up to 3
+    top_mediums:     list[str] = []   # ranked, up to 3
+
+class ExploreResponse(BaseModel):
+    items:    list[ExploreItem]
+    affinity: AffinitySnapshot
+    # 'true' iff personalisation was applied to ranking
+    personalised: bool
 
 # --- Stats Schemas ---
 class MediumCount(BaseModel):

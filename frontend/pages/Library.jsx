@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getEntries, updateEntry, deleteEntry, exportEntries } from '../api.jsx';
+import { getEntries, updateEntry, deleteEntry, exportEntries, getSettings } from '../api.jsx';
 import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
@@ -39,6 +39,13 @@ export default function Library({ initialFilters = {} }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const hasUrlParams = searchParams.toString() !== '';
   const sortKeys = SORT_FIELDS.map(f => f.key);
+  // Whether the URL explicitly supplied sort/limit at mount. Saved settings
+  // are only applied if the URL did *not* — URL > settings > hard default.
+  const urlHadSortRef  = useRef(searchParams.has('sort'));
+  const urlHadLimitRef = useRef(searchParams.has('limit'));
+  // Gate the first fetch on user settings being read so we don't load
+  // 40-default rows then immediately re-load with the user's preference.
+  const [settingsApplied, setSettingsApplied] = useState(false);
   const [entries,      setEntries]      = useState([]);
   const [total,        setTotal]        = useState(0);
   const [loading,      setLoading]      = useState(true);
@@ -102,7 +109,27 @@ export default function Library({ initialFilters = {} }) {
     }
     setPage(1);
   }, [search, statusFilter, mediumFilter, originFilter, sort, order, limit]);
-  useEffect(() => { load(); }, [load]);
+
+  // Apply saved user settings on mount (only when not overridden by URL).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await getSettings();
+        if (cancelled) return;
+        if (!urlHadSortRef.current && s.default_sort && sortKeys.includes(s.default_sort)) {
+          setSort(s.default_sort);
+        }
+        if (!urlHadLimitRef.current && PAGE_SIZE_OPTIONS.includes(s.default_entries_per_page)) {
+          setLimit(s.default_entries_per_page);
+        }
+      } catch { /* fall back to current state */ }
+      finally { if (!cancelled) setSettingsApplied(true); }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { if (settingsApplied) load(); }, [load, settingsApplied]);
 
   useEffect(() => {
     const params = new URLSearchParams();
