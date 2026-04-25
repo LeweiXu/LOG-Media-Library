@@ -7,16 +7,7 @@ function toDateInput(iso) {
   return new Date(iso).toISOString().slice(0, 10);
 }
 
-/**
- * Unified form modal for both creating and editing entries.
- *
- * Props:
- *   entry     — null/undefined → create mode; object with id → edit mode
- *   onClose   — called when the user cancels (no change)
- *   onSaved   — called with the created/updated entry object
- *   onDeleted — called with the deleted entry id (edit mode only)
- */
-export default function EntryFormModal({ entry = null, onClose, onSaved, onDeleted }) {
+export function EntryForm({ entry = null, onCancel, onSaved, onDeleted }) {
   const isEdit = Boolean(entry?.id);
 
   const today = () => new Date().toISOString().slice(0, 10);
@@ -94,6 +85,164 @@ export default function EntryFormModal({ entry = null, onClose, onSaved, onDelet
   }
 
   return (
+    <form onSubmit={handleSave}>
+      <div className="form-row">
+        <label className="form-label">Title *</label>
+        <input className="form-input" value={form.title}
+          placeholder="Title"
+          onChange={e => setField('title', e.target.value)} />
+      </div>
+
+      <div className="form-row-2" style={{ marginBottom: 14 }}>
+        <div>
+          <label className="form-label">Medium</label>
+          <select className="form-input" value={form.medium}
+            onChange={e => setField('medium', e.target.value)}>
+            <option value="">—</option>
+            {MEDIUMS.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="form-label">Status</label>
+          <select className="form-input" value={form.status}
+            onChange={e => setField('status', e.target.value)}>
+            {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {form.status === 'completed' && (
+        <div className="form-row" style={{ marginBottom: 14 }}>
+          <label className="form-label">Completed Date</label>
+          <input className="form-input" type="date" value={form.completed_at}
+            onChange={e => setField('completed_at', e.target.value)} />
+        </div>
+      )}
+
+      <div className="form-row-2" style={{ marginBottom: 14 }}>
+        <div>
+          <label className="form-label">Origin</label>
+          <select className="form-input" value={form.origin}
+            onChange={e => setField('origin', e.target.value)}>
+            <option value="">—</option>
+            {ORIGINS.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="form-label">Year</label>
+          <input className="form-input" type="number" value={form.year}
+            placeholder="2024"
+            onChange={e => setField('year', e.target.value)} />
+        </div>
+      </div>
+
+      <div className="form-row-2" style={{ marginBottom: 14 }}>
+        <div>
+          <label className="form-label">Progress</label>
+          <input className="form-input" type="number" min="0" value={form.progress}
+            placeholder="0"
+            onChange={e => setField('progress', e.target.value)} />
+        </div>
+        <div>
+          <label className="form-label">Total</label>
+          <input className="form-input" type="number" min="0" value={form.total}
+            placeholder="12"
+            onChange={e => setField('total', e.target.value)} />
+        </div>
+      </div>
+
+      <div className="form-row">
+        <label className="form-label">Rating (0–10)</label>
+        <input className="form-input" type="number" min="0" max="10" step="0.5"
+          value={form.rating} placeholder="—"
+          onChange={e => setField('rating', e.target.value)} />
+      </div>
+
+      <div className="form-row">
+        <label className="form-label">Cover URL</label>
+        <input className="form-input" value={form.cover_url}
+          placeholder="https://…"
+          onChange={e => setField('cover_url', e.target.value)} />
+      </div>
+
+      <div className="form-row">
+        <label className="form-label">Source URL</label>
+        <input className="form-input" value={form.external_url}
+          placeholder="https://novelupdates.com/series/…"
+          onChange={e => setField('external_url', e.target.value)} />
+        {form.source && (
+          <span style={{ fontSize: 11, color: 'var(--accent)', marginTop: 3 }}>
+            Source: {form.source}
+          </span>
+        )}
+      </div>
+
+      <div className="form-row">
+        <label className="form-label">Genres</label>
+        <input className="form-input" value={form.genres}
+          placeholder="e.g. Action, Comedy, Drama"
+          onChange={e => setField('genres', e.target.value)}
+          onBlur={e => setField('genres',
+            e.target.value.split(',').map(s => s.trim()).filter(Boolean).join(', ')
+          )}
+        />
+      </div>
+
+      <div className="form-row">
+        <label className="form-label">Notes</label>
+        <textarea className="form-input" rows={2} value={form.notes}
+          placeholder="Optional notes…"
+          onChange={e => setField('notes', e.target.value)}
+          style={{ resize: 'vertical' }} />
+      </div>
+
+      {err && <div style={{ color: 'var(--red)', fontSize: 11, marginBottom: 8 }}>{err}</div>}
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 4 }}>
+        <div>
+          {isEdit && (!confirmDelete
+            ? <button type="button" className="icon-btn danger"
+                onClick={() => setConfirmDelete(true)}>
+                Delete
+              </button>
+            : <span style={{ fontSize: 11, color: 'var(--red)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                Confirm?
+                <button type="button" className="btn btn-danger"
+                  style={{ padding: '3px 10px', fontSize: 11 }}
+                  onClick={handleDelete} disabled={deleting}>
+                  {deleting ? '…' : 'Yes, delete'}
+                </button>
+                <button type="button" className="icon-btn"
+                  onClick={() => setConfirmDelete(false)}>
+                  No
+                </button>
+              </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="btn btn-outline" onClick={onCancel}>Cancel</button>
+          <button type="submit" className="btn" disabled={saving}>
+            {saving ? 'Saving…' : isEdit ? 'Save' : 'Add Entry'}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Unified form modal for both creating and editing entries.
+ *
+ * Props:
+ *   entry     — null/undefined → create mode; object with id → edit mode
+ *   onClose   — called when the user cancels (no change)
+ *   onSaved   — called with the created/updated entry object
+ *   onDeleted — called with the deleted entry id (edit mode only)
+ */
+export default function EntryFormModal({ entry = null, onClose, onSaved, onDeleted }) {
+  const isEdit = Boolean(entry?.id);
+
+  return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-header">
@@ -104,148 +253,12 @@ export default function EntryFormModal({ entry = null, onClose, onSaved, onDelet
         </div>
 
         <div className="modal-body">
-          <form onSubmit={handleSave}>
-            <div className="form-row">
-              <label className="form-label">Title *</label>
-              <input className="form-input" value={form.title}
-                placeholder="Title"
-                onChange={e => setField('title', e.target.value)} />
-            </div>
-
-            <div className="form-row-2" style={{ marginBottom: 14 }}>
-              <div>
-                <label className="form-label">Medium</label>
-                <select className="form-input" value={form.medium}
-                  onChange={e => setField('medium', e.target.value)}>
-                  <option value="">—</option>
-                  {MEDIUMS.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Status</label>
-                <select className="form-input" value={form.status}
-                  onChange={e => setField('status', e.target.value)}>
-                  {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {form.status === 'completed' && (
-              <div className="form-row" style={{ marginBottom: 14 }}>
-                <label className="form-label">Completed Date</label>
-                <input className="form-input" type="date" value={form.completed_at}
-                  onChange={e => setField('completed_at', e.target.value)} />
-              </div>
-            )}
-
-            <div className="form-row-2" style={{ marginBottom: 14 }}>
-              <div>
-                <label className="form-label">Origin</label>
-                <select className="form-input" value={form.origin}
-                  onChange={e => setField('origin', e.target.value)}>
-                  <option value="">—</option>
-                  {ORIGINS.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Year</label>
-                <input className="form-input" type="number" value={form.year}
-                  placeholder="2024"
-                  onChange={e => setField('year', e.target.value)} />
-              </div>
-            </div>
-
-            <div className="form-row-2" style={{ marginBottom: 14 }}>
-              <div>
-                <label className="form-label">Progress</label>
-                <input className="form-input" type="number" min="0" value={form.progress}
-                  placeholder="0"
-                  onChange={e => setField('progress', e.target.value)} />
-              </div>
-              <div>
-                <label className="form-label">Total</label>
-                <input className="form-input" type="number" min="0" value={form.total}
-                  placeholder="12"
-                  onChange={e => setField('total', e.target.value)} />
-              </div>
-            </div>
-
-            <div className="form-row">
-              <label className="form-label">Rating (0–10)</label>
-              <input className="form-input" type="number" min="0" max="10" step="0.5"
-                value={form.rating} placeholder="—"
-                onChange={e => setField('rating', e.target.value)} />
-            </div>
-
-            <div className="form-row">
-              <label className="form-label">Cover URL</label>
-              <input className="form-input" value={form.cover_url}
-                placeholder="https://…"
-                onChange={e => setField('cover_url', e.target.value)} />
-            </div>
-
-            <div className="form-row">
-              <label className="form-label">Source URL</label>
-              <input className="form-input" value={form.external_url}
-                placeholder="https://novelupdates.com/series/…"
-                onChange={e => setField('external_url', e.target.value)} />
-              {form.source && (
-                <span style={{ fontSize: 11, color: 'var(--accent)', marginTop: 3 }}>
-                  Source: {form.source}
-                </span>
-              )}
-            </div>
-
-            <div className="form-row">
-              <label className="form-label">Genres</label>
-              <input className="form-input" value={form.genres}
-                placeholder="e.g. Action, Comedy, Drama"
-                onChange={e => setField('genres', e.target.value)}
-                onBlur={e => setField('genres',
-                  e.target.value.split(',').map(s => s.trim()).filter(Boolean).join(', ')
-                )}
-              />
-            </div>
-
-            <div className="form-row">
-              <label className="form-label">Notes</label>
-              <textarea className="form-input" rows={2} value={form.notes}
-                placeholder="Optional notes…"
-                onChange={e => setField('notes', e.target.value)}
-                style={{ resize: 'vertical' }} />
-            </div>
-
-            {err && <div style={{ color: 'var(--red)', fontSize: 11, marginBottom: 8 }}>{err}</div>}
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 4 }}>
-              <div>
-                {isEdit && (!confirmDelete
-                  ? <button type="button" className="icon-btn danger"
-                      onClick={() => setConfirmDelete(true)}>
-                      Delete
-                    </button>
-                  : <span style={{ fontSize: 11, color: 'var(--red)', display: 'flex', gap: 8, alignItems: 'center' }}>
-                      Confirm?
-                      <button type="button" className="btn btn-danger"
-                        style={{ padding: '3px 10px', fontSize: 11 }}
-                        onClick={handleDelete} disabled={deleting}>
-                        {deleting ? '…' : 'Yes, delete'}
-                      </button>
-                      <button type="button" className="icon-btn"
-                        onClick={() => setConfirmDelete(false)}>
-                        No
-                      </button>
-                    </span>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button>
-                <button type="submit" className="btn" disabled={saving}>
-                  {saving ? 'Saving…' : isEdit ? 'Save' : 'Add Entry'}
-                </button>
-              </div>
-            </div>
-          </form>
+          <EntryForm
+            entry={entry}
+            onCancel={onClose}
+            onSaved={onSaved}
+            onDeleted={onDeleted}
+          />
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { searchMedia, checkDuplicates } from '../../api.jsx';
-import EntryFormModal from './EntryFormModal.jsx';
+import { EntryForm } from './EntryFormModal.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 
 const SEARCH_SOURCES = [
@@ -142,16 +142,6 @@ export default function AddEntryModal({ onClose, onCreated }) {
         queue={confirmQueue}
         onSave={handleQueueSave}
         onComplete={handleQueueComplete}
-      />
-    );
-  }
-
-  if (tab === 'manual') {
-    return (
-      <EntryFormModal
-        entry={null}
-        onClose={() => setTab('search')}
-        onSaved={(created) => { onCreated(created); onClose(); }}
       />
     );
   }
@@ -302,6 +292,14 @@ export default function AddEntryModal({ onClose, onCreated }) {
               )}
 
             </>
+          )}
+
+          {tab === 'manual' && (
+            <EntryForm
+              entry={null}
+              onCancel={() => setTab('search')}
+              onSaved={(created) => { onCreated(created); onClose(); }}
+            />
           )}
 
         </div>
