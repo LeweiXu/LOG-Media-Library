@@ -6,7 +6,7 @@
 **LOG** is a web application for tracking all types of media you consume — films, TV shows, anime, games, books, manga, light novels, web novels, and comics. Inspired by Letterboxd, MyAnimeList, Goodreads, and Backloggd, LOG unifies all your media tracking in one place.
 
 **Public Demo:**
-- Deployed and available for public use: [https://log-media-tracker.vercel.app/dashboard](https://log-media-tracker.vercel.app/dashboard)
+- Deployed and available for public use: [https://logarium.vercel.app](https://logarium.vercel.app)
 - Anyone can register an account and start using the app immediately.
 - Demo user available using:
     - username: demo_user
