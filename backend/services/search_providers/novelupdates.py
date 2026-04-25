@@ -4,24 +4,41 @@ import asyncio
 import logging
 import re
 from typing import Optional
+from urllib.parse import urlparse
 
 from schemas import SearchResult
 
 logger = logging.getLogger(__name__)
 
-_NU_ORIGIN_HINTS = {
-    "wuxia": "Chinese",
-    "xianxia": "Chinese",
-    "xuanhuan": "Chinese",
-    "manhua": "Chinese",
-    "chinese": "Chinese",
-    "manhwa": "Korean",
-    "korean": "Korean",
-    "shounen": "Japanese",
-    "shoujo": "Japanese",
-    "josei": "Japanese",
-    "seinen": "Japanese",
+_NU_ORIGIN_MAP = {
+    "CN": "Chinese",
+    "KR": "Korean",
+    "JP": "Japanese",
 }
+
+
+def _normalise_cover_url(src: str) -> Optional[str]:
+    if not src:
+        return None
+    if src.startswith("//"):
+        src = "https:" + src
+    if src.startswith("/"):
+        src = "https://cdn.novelupdates.com" + src
+    if "cdn.novelupdates.com/imgmid/" in src:
+        return src
+    filename = src.rstrip("/").split("/")[-1]
+    if filename:
+        return f"https://cdn.novelupdates.com/imgmid/{filename}"
+    return None
+
+
+def _genre_from_href(href: str) -> Optional[str]:
+    path = urlparse(href).path.strip("/")
+    parts = path.split("/")
+    if len(parts) < 2 or parts[-2] != "genre":
+        return None
+    slug = parts[-1]
+    return " ".join(word.capitalize() for word in slug.split("-") if word)
 
 
 async def search_novelupdates(
@@ -39,7 +56,7 @@ async def search_novelupdates(
         doesn't expose a year, only a date like "07-01-2024")
       - genres (stored joined in description and available as metadata)
       - series ID (external_id)
-      - origin (inferred from genre tags)
+      - origin (from NU language code)
     """
     from curl_cffi import requests as cffi_requests
     from bs4 import BeautifulSoup
@@ -77,8 +94,7 @@ async def search_novelupdates(
             cover_url: Optional[str] = None
             if img:
                 src = img.get("src") or img.get("data-src") or ""
-                if src:
-                    cover_url = src.replace("/imgmid/", "/images/")
+                cover_url = _normalise_cover_url(src)
 
             title_tag = box.select_one("div.search_title a")
             if not title_tag:
@@ -105,19 +121,14 @@ async def search_novelupdates(
                     if m:
                         last_updated = m.group(1)
 
-            genres: list[str] = [
-                a.get_text(strip=True)
-                for a in box.select("a.gennew.search")
-            ]
+            genres: list[str] = []
+            for genre_link in box.select(".search_genre a[href]"):
+                genre = _genre_from_href(genre_link.get("href", ""))
+                if genre:
+                    genres.append(genre)
 
-            origin: Optional[str] = None
-            genres_lower = " ".join(genres).lower()
-            for hint, orig in _NU_ORIGIN_HINTS.items():
-                if hint in genres_lower:
-                    origin = orig
-                    break
-                else:
-                    origin = "Other"
+            origin_code = box.select_one(".search_ratings span")
+            origin = _NU_ORIGIN_MAP.get(origin_code.get_text(strip=True).upper()) if origin_code else None
 
             year: Optional[int] = None
             if last_updated:
@@ -144,6 +155,7 @@ async def search_novelupdates(
                     source="novelupdates",
                     description=description,
                     external_url=series_url,
+                    genres=", ".join(genres) or None,
                 )
             )
 
