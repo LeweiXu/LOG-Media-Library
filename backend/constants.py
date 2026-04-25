@@ -21,7 +21,7 @@ VALID_STATUSES: frozenset[str] = frozenset({
 
 VALID_MEDIUMS: frozenset[str] = frozenset({
     "Film", "TV Show", "Anime", "Book", "Manga",
-    "Light Novel", "Web Novel", "Comics", "Game", "Visual Novel",
+    "Light Novel", "Web Novel", "Comic", "Game", "Visual Novel",
 })
 
 # Keys are lowercase aliases; values are canonical forms.
@@ -48,8 +48,8 @@ MEDIUM_NORMALISE_MAP: dict[str, str] = {
     "vn":           "Visual Novel",
     # Other
     "book":   "Book",
-    "comics": "Comics",
-    "comic":  "Comics",
+    "comics": "Comic",
+    "comic":  "Comic",
     "game":   "Game",
 }
 

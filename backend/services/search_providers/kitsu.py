@@ -55,7 +55,7 @@ async def search_kitsu(
                 if med == "Manga" and subtype in ("novel",):
                     med = "Light Novel"
                 elif med == "Manga" and subtype in ("manhwa",):
-                    med = "Comics"
+                    med = "Comic"
                 avg_rating_str = attrs.get("averageRating")
                 try:
                     ext_rating = round(float(avg_rating_str) / 10, 1) if avg_rating_str else None

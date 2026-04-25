@@ -54,7 +54,7 @@ async def search_comicvine(
             results.append(
                 SearchResult(
                     title=item.get("name", ""),
-                    medium="Comics",
+                    medium="Comic",
                     origin="Western",
                     year=year,
                     cover_url=cover,

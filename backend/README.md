@@ -153,7 +153,7 @@ Response:
 | Field        | Type    | Required | Notes                             |
 |--------------|---------|----------|-----------------------------------|
 | `title`      | string  | Yes      | 1–500 chars                       |
-| `medium`     | string  | No       | `Film` `TV Show` `Anime` `Book` `Manga` `Light Novel` `Web Novel` `Comics` `Game` |
+| `medium`     | string  | No       | `Film` `TV Show` `Anime` `Book` `Manga` `Light Novel` `Web Novel` `Comic` `Game` |
 | `origin`     | string  | No       | `Japanese` `Korean` `Chinese` `Western` `Other` |
 | `year`       | int     | No       | 1800–2100                         |
 | `status`     | string  | No       | Default `planned`                 |

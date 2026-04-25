@@ -16,7 +16,7 @@ export default function LandingPage({ onOpenAuth }) {
         <div className="landing-media-types">
           {[
             'Film', 'TV Show', 'Anime', 'Game',
-            'Book', 'Manga', 'Light Novel', 'Web Novel', 'Comics',
+            'Book', 'Manga', 'Light Novel', 'Web Novel', 'Comic',
           ].map((m, i, arr) => (
             <span key={m}>
               <span className="landing-type">{m}</span>

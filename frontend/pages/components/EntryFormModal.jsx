@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createEntry, updateEntry, deleteEntry } from '../../api.jsx';
-import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
+import { MEDIUMS, ORIGINS, RATING_OPTIONS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
 
 function toDateInput(iso) {
   if (!iso) return '';
@@ -153,7 +153,7 @@ export function EntryForm({ entry = null, onCancel, onSaved, onDeleted }) {
 
       <div className="form-row">
         <label className="form-label">Rating (0–10)</label>
-        <input className="form-input" type="number" min="0" max="10" step="0.5"
+        <input className="form-input" type="number" min="0" max="10" step="0.1"
           value={form.rating} placeholder="—"
           onChange={e => setField('rating', e.target.value)} />
       </div>

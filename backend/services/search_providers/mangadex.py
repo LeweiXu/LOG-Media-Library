@@ -58,9 +58,9 @@ async def search_mangadex(
                 {"ja": "JP", "ko": "KR", "zh": "CN", "zh-hk": "HK"}.get(orig_lang, "")
             )
             if orig_lang in ("ko",):
-                med_resolved = "Comics"
+                med_resolved = "Comic"
             elif orig_lang in ("zh", "zh-hk"):
-                med_resolved = "Comics"
+                med_resolved = "Comic"
             else:
                 novel_flag = any(
                     (t.get("attributes", {}).get("name", {}).get("en", "")).lower() == "novel"

@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 
 _MANGAUPDATES_TYPE_TO_MEDIUM: dict[str, str] = {
     "Manga": "Manga",
-    "Manhwa": "Comics",
-    "Manhua": "Comics",
+    "Manhwa": "Comic",
+    "Manhua": "Comic",
     "Novel": "Light Novel",
     "Light Novel": "Light Novel",
     "Doujinshi": "Manga",
-    "OEL": "Comics",
+    "OEL": "Comic",
     "Artbook": "Manga",
 }
 

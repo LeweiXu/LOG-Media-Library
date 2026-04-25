@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createEntry } from '../../api.jsx';
-import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
+import { MEDIUMS, ORIGINS, RATING_OPTIONS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
 
 function entryToForm(e) {
   return {
@@ -175,7 +175,7 @@ export default function ConfirmEntryModal({ queue, onSave, onComplete }) {
 
             <div className="form-row">
               <label className="form-label">Rating (0–10)</label>
-              <input className="form-input" type="number" min="0" max="10" step="0.5"
+              <input className="form-input" type="number" min="0" max="10" step="0.1"
                 value={form.rating} onChange={e => setField('rating', e.target.value)} />
             </div>
 

@@ -2,8 +2,10 @@ export const STATUSES = ['current', 'planned', 'completed', 'on_hold', 'dropped'
 
 export const MEDIUMS = [
   'Film', 'TV Show', 'Anime', 'Book', 'Manga',
-  'Light Novel', 'Web Novel', 'Comics', 'Game', 'Visual Novel',
+  'Light Novel', 'Web Novel', 'Comic', 'Game', 'Visual Novel',
 ];
+
+export const RATING_OPTIONS = Array.from({ length: 11 }, (_, i) => i);
 
 export const ORIGINS = ['Japanese', 'Korean', 'Chinese', 'Western', 'Other'];
 
@@ -60,7 +62,7 @@ export function progressLabel(entry) {
   if (!progress && !total) return '—';
   const m = medium?.toLowerCase() ?? '';
   const unit = (m === 'book' || m === 'light novel') ? 'vol.'
-             : (m === 'manga' || m === 'web novel' || m === 'comics' || m === 'visual novel') ? 'ch.'
+             : (m === 'manga' || m === 'web novel' || m === 'comic' || m === 'visual novel') ? 'ch.'
              : m === 'game' ? 'hr.'
              : 'ep.';
   if (total) return `${progress ?? '?'} / ${total} ${unit}`;

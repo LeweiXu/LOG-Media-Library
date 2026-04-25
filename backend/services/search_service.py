@@ -13,12 +13,12 @@ Source → Provider mapping:
   jikan         → MyAnimeList via Jikan (Anime & Manga)
   kitsu         → Kitsu (Anime & Manga)
   novelupdates  → NovelUpdates (Web Novel, Light Novel)
-  mangadex      → MangaDex (Manga, Comics)
+  mangadex      → MangaDex (Manga, Comic)
   igdb          → IGDB (Games)
   rawg          → RAWG (Games)
   google_books  → Google Books
   open_library  → Open Library
-  comicvine     → ComicVine (Comics)
+  comicvine     → ComicVine (Comic)
   vndb          → VNDB (Visual Novels)
 
 Keys required (all optional — provider is skipped if absent):
@@ -178,7 +178,7 @@ _MEDIUM_PROVIDERS: dict[str, list] = {
     "Web Novel":    [search_novelupdates, search_google_books, search_open_library],
     "Book":         [search_google_books, search_open_library],
     "Game":         [search_igdb, search_rawg],
-    "Comics":       [search_comicvine, search_mangadex],
+    "Comic":        [search_comicvine, search_mangadex],
     "Visual Novel": [search_vndb],
 }
 
