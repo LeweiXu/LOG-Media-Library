@@ -14,6 +14,13 @@ const LIBRARY_SORT_FIELDS = [
 ];
 const LIBRARY_PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
 
+const EXPLORE_BY_OPTIONS = [
+  { key: 'all',    label: 'All' },
+  { key: 'genre',  label: 'Genre' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'origin', label: 'Origin' },
+];
+
 export default function SettingsModal({ onClose, onDataDeleted, onSettingsChanged }) {
   const [currentPw,  setCurrentPw]  = useState('');
   const [newPw,      setNewPw]      = useState('');
@@ -27,12 +34,11 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
   const [backupFreq, setBackupFreq] = useState('never');
 
   // ── Live-bound user settings (Library + Explore) ──────────────────────
-  const [exploreMedium,      setExploreMedium]      = useState('');
-  const [explorePersonalize, setExplorePersonalize] = useState(true);
-  const [exploreHideOwned,   setExploreHideOwned]   = useState(true);
-  const [librarySort,        setLibrarySort]        = useState('updated_at');
-  const [libraryPerPage,     setLibraryPerPage]     = useState(40);
-  const [prefsLoaded,        setPrefsLoaded]        = useState(false);
+  const [exploreMedium,  setExploreMedium]  = useState('');
+  const [exploreBy,      setExploreBy]      = useState('all');
+  const [librarySort,    setLibrarySort]    = useState('updated_at');
+  const [libraryPerPage, setLibraryPerPage] = useState(40);
+  const [prefsLoaded,    setPrefsLoaded]    = useState(false);
   const prefsReadyRef = useRef(false);
 
   useEffect(() => {
@@ -42,8 +48,7 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
         const s = await getSettings();
         if (cancelled) return;
         setExploreMedium(s.explore_default_medium || '');
-        setExplorePersonalize(s.explore_personalize ?? true);
-        setExploreHideOwned(s.explore_hide_in_library ?? true);
+        setExploreBy(s.explore_by || 'all');
         setLibrarySort(s.default_sort || 'updated_at');
         setLibraryPerPage(s.default_entries_per_page || 40);
       } catch { /* ignore */ }
@@ -62,8 +67,7 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
     const id = setTimeout(() => {
       updateSettings({
         explore_default_medium:   exploreMedium || null,
-        explore_personalize:      explorePersonalize,
-        explore_hide_in_library:  exploreHideOwned,
+        explore_by:               exploreBy,
         default_sort:             librarySort,
         default_entries_per_page: libraryPerPage,
       })
@@ -72,7 +76,7 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
     }, 400);
     return () => clearTimeout(id);
   }, [
-    exploreMedium, explorePersonalize, exploreHideOwned,
+    exploreMedium, exploreBy,
     librarySort, libraryPerPage, prefsLoaded, onSettingsChanged,
   ]);
 
@@ -216,12 +220,11 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
           <div className="settings-divider" />
 
           <p className="settings-section-label">Explore</p>
-          <div className="settings-choice-grid settings-choice-grid-explore">
-            <div className="settings-choice settings-choice-with-control is-selected">
-              <span className="settings-choice-title">Default medium</span>
-              <span className="settings-choice-detail">{exploreMedium || 'All media'}</span>
+          <div className="form-row-2">
+            <div>
+              <label className="form-label">Default medium</label>
               <select
-                className="form-input settings-choice-control"
+                className="form-input"
                 value={exploreMedium}
                 onChange={e => setExploreMedium(e.target.value)}
                 disabled={!prefsLoaded}
@@ -230,28 +233,19 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
                 {MEDIUMS.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            <button
-              type="button"
-              className={'settings-choice' + (explorePersonalize ? ' is-selected' : '')}
-              onClick={() => setExplorePersonalize(v => !v)}
-              disabled={!prefsLoaded}
-            >
-              <span className="settings-choice-title">Tailor recommendations</span>
-              <span className="settings-choice-detail">
-                {explorePersonalize ? 'Using your ratings and library patterns' : 'Using general popularity ranking'}
-              </span>
-            </button>
-            <button
-              type="button"
-              className={'settings-choice' + (exploreHideOwned ? ' is-selected' : '')}
-              onClick={() => setExploreHideOwned(v => !v)}
-              disabled={!prefsLoaded}
-            >
-              <span className="settings-choice-title">Hide library titles</span>
-              <span className="settings-choice-detail">
-                {exploreHideOwned ? 'Only showing titles outside your library' : 'Library titles can appear in Explore'}
-              </span>
-            </button>
+            <div>
+              <label className="form-label">Explore by</label>
+              <select
+                className="form-input"
+                value={exploreBy}
+                onChange={e => setExploreBy(e.target.value)}
+                disabled={!prefsLoaded}
+              >
+                {EXPLORE_BY_OPTIONS.map(o => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="settings-divider" />

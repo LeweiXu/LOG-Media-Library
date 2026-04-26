@@ -1148,17 +1148,9 @@ html.light .skeleton-pie::after {
   color: var(--dim);
   font-size: 14px;
 }
-.explore-rating {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.7);
+.explore-meta-rating {
   color: var(--amber);
-  font-size: 9px;
-  letter-spacing: 0.05em;
-  text-align: center;
-  padding: 1px 0;
+  font-weight: 600;
 }
 
 .explore-body {

@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, func, ForeignKey
+from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, func, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from db import Base
 
@@ -20,6 +20,8 @@ class User(Base):
     explore_default_medium:   Mapped[str | None] = mapped_column(String(50), nullable=True)
     explore_personalize:      Mapped[bool]       = mapped_column(Boolean,    nullable=False, server_default="true")
     explore_hide_in_library:  Mapped[bool]       = mapped_column(Boolean,    nullable=False, server_default="true")
+    # Which dimension the Explore page biases toward — "all" / "genre" / "medium" / "origin".
+    explore_by:               Mapped[str]        = mapped_column(String(20), nullable=False, server_default="all")
     def __repr__(self) -> str:
         return f"<User username={self.username!r} email={self.email!r}>"
 
@@ -47,3 +49,28 @@ class Entry(Base):
     username: Mapped[str] = mapped_column(String(100), ForeignKey("users.username"), nullable=False, index=True)
     def __repr__(self) -> str:
         return f"<Entry id={self.id} title={self.title!r} status={self.status!r} username={self.username!r}>"
+
+
+class ExploreCache(Base):
+    """Per-(user, medium) cache of the latest Explore page results.
+
+    `medium` is "" for the "All" sidebar tab. Items are stored as a JSON list
+    of ExploreItem dicts in their already-ranked order. The Refresh button on
+    the Explore page is the only way to invalidate a row — otherwise reads
+    return the cached payload (with library titles re-filtered live).
+    """
+    __tablename__ = "explore_cache"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(
+        String(100), ForeignKey("users.username", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    medium:     Mapped[str] = mapped_column(String(50), nullable=False, server_default="")
+    items_json: Mapped[str] = mapped_column(Text, nullable=False)
+    cached_at:  Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+        onupdate=_utcnow, nullable=False,
+    )
+    __table_args__ = (
+        UniqueConstraint("username", "medium", name="uq_explore_cache_user_medium"),
+    )

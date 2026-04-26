@@ -274,7 +274,12 @@ export const updateSettings = (patch)   => req('/auth/me/settings', { method: 'P
 
 // ── Explore ───────────────────────────────────────────────────────────────────
 
-export const getExplore = (params = {}) => {
+// Bias dimension and "hide owned" are server-side preferences read from the
+// user's settings — they are NOT passed as query params from the page.
+// `refresh: true` bypasses the per-medium cache on the server.
+export const getExplore = ({ medium, limit, seed, refresh } = {}) => {
+  const params = { medium, limit, seed };
+  if (refresh) params.refresh = 'true';
   const qs = new URLSearchParams(
     Object.fromEntries(
       Object.entries(params).filter(([, v]) => v !== '' && v != null),

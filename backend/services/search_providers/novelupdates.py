@@ -181,3 +181,121 @@ async def search_novelupdates(
     except Exception as exc:
         logger.warning("NovelUpdates executor error: %s", exc)
         return []
+
+
+# Page index → which "Top Series" ranking URL to scrape. Cycling these on
+# Refresh gives the user a different mix instead of the same 25 titles.
+_NU_RANK_BY_PAGE = {1: "popmonth", 2: "sixmonths", 3: "popular"}
+
+
+async def discover_novelupdates(client, medium: str, page: int = 1):
+    """Scrape NovelUpdates' Top Series rankings as Explore candidates.
+
+    NU has no public API, so we go through the same Cloudflare-bypass path
+    as ``search_novelupdates`` (curl_cffi in a thread, since it's blocking).
+    Returns ExploreItems for the Web Novel medium only.
+    """
+    # Local imports — keep ExploreItem off the search-provider import path.
+    from schemas import ExploreItem
+    from curl_cffi import requests as cffi_requests
+    from bs4 import BeautifulSoup
+
+    if medium != "Web Novel":
+        return []
+
+    rank = _NU_RANK_BY_PAGE.get(page, "popmonth")
+    url = "https://www.novelupdates.com/series-ranking/"
+    params = {"rank": rank}
+
+    def _do_scrape() -> list[ExploreItem]:
+        try:
+            r = cffi_requests.get(url, params=params, timeout=15, impersonate="chrome")
+            r.raise_for_status()
+        except Exception as exc:
+            logger.warning("NovelUpdates discover fetch error: %s", exc)
+            return []
+
+        soup = BeautifulSoup(r.text, "lxml")
+        out: list[ExploreItem] = []
+
+        for box in soup.select("div.search_main_box_nu")[:20]:
+            title_tag = box.select_one("div.search_title a")
+            if not title_tag:
+                continue
+            display_title = title_tag.get_text(strip=True)
+            series_url = title_tag.get("href") or None
+
+            sid_span = box.select_one('span.rl_icons_en[id^="sid"]')
+            series_id = sid_span.get("id", "")[3:] if sid_span else ""
+            if not series_id and series_url:
+                series_id = series_url.rstrip("/").split("/")[-1]
+
+            img = box.select_one("div.search_img_nu img")
+            cover_url: Optional[str] = None
+            if img:
+                src = img.get("src") or img.get("data-src") or ""
+                cover_url = _normalise_cover_url(src)
+
+            chapters: Optional[int] = None
+            last_updated: Optional[str] = None
+            for stat_span in box.select("span.ss_desk"):
+                icon = stat_span.select_one("i[title]")
+                if not icon:
+                    continue
+                icon_title = icon.get("title", "")
+                stat_text = stat_span.get_text(strip=True)
+                if icon_title == "Chapter Count":
+                    m = re.search(r"(\d+)", stat_text)
+                    if m:
+                        chapters = int(m.group(1))
+                elif icon_title == "Last Updated":
+                    m = re.search(r"(\d{2}-\d{2}-\d{4})", stat_text)
+                    if m:
+                        last_updated = m.group(1)
+
+            genres: list[str] = []
+            for genre_link in box.select(".search_genre a[href*='/genre/']"):
+                g = _genre_from_href(genre_link.get("href", ""))
+                if g:
+                    genres.append(g)
+
+            origin_code = box.select_one(".search_ratings span")
+            origin = (
+                _NU_ORIGIN_MAP.get(origin_code.get_text(strip=True).upper())
+                if origin_code else None
+            )
+            ratings_box = box.select_one(".search_ratings")
+            external_rating = (
+                _external_rating_from_text(ratings_box.get_text(" ", strip=True))
+                if ratings_box else None
+            )
+
+            year: Optional[int] = None
+            if last_updated:
+                m = re.search(r"(\d{4})$", last_updated)
+                if m:
+                    year = int(m.group(1))
+
+            out.append(ExploreItem(
+                title=display_title,
+                medium="Web Novel",
+                origin=origin,
+                year=year,
+                cover_url=cover_url,
+                total=chapters,
+                external_id=series_id,
+                source="novelupdates",
+                description=("Genres: " + ", ".join(genres)) if genres else None,
+                external_url=series_url,
+                genres=", ".join(genres) or None,
+                external_rating=external_rating,
+            ))
+
+        return out
+
+    loop = asyncio.get_event_loop()
+    try:
+        return await loop.run_in_executor(None, _do_scrape)
+    except Exception as exc:
+        logger.warning("NovelUpdates discover executor error: %s", exc)
+        return []

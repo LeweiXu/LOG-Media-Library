@@ -145,6 +145,7 @@ _VALID_DEFAULT_SORT = {
     "title", "medium", "origin", "year", "status", "rating",
     "created_at", "updated_at", "completed_at",
 }
+_VALID_EXPLORE_BY = {"all", "genre", "medium", "origin"}
 
 class UserSettings(BaseModel):
     """Read & write shape for /auth/me/settings."""
@@ -154,6 +155,7 @@ class UserSettings(BaseModel):
     explore_default_medium:   Optional[str] = None
     explore_personalize:      bool = True
     explore_hide_in_library:  bool = True
+    explore_by:               str  = "all"
     model_config = {"from_attributes": True}
 
     @field_validator("backup_freq")
@@ -180,6 +182,13 @@ class UserSettings(BaseModel):
             raise ValueError(f"medium must be one of {sorted(VALID_MEDIUMS)}")
         return normalised
 
+    @field_validator("explore_by")
+    @classmethod
+    def _v_explore_by(cls, v: str) -> str:
+        if v not in _VALID_EXPLORE_BY:
+            raise ValueError(f"explore_by must be one of {sorted(_VALID_EXPLORE_BY)}")
+        return v
+
 class UserSettingsUpdate(BaseModel):
     """Partial update — every field optional."""
     backup_freq:              Optional[str]  = None
@@ -188,6 +197,7 @@ class UserSettingsUpdate(BaseModel):
     explore_default_medium:   Optional[str]  = None
     explore_personalize:      Optional[bool] = None
     explore_hide_in_library:  Optional[bool] = None
+    explore_by:               Optional[str]  = None
 
     @field_validator("backup_freq")
     @classmethod
@@ -212,6 +222,13 @@ class UserSettingsUpdate(BaseModel):
         if normalised not in VALID_MEDIUMS:
             raise ValueError(f"medium must be one of {sorted(VALID_MEDIUMS)}")
         return normalised
+
+    @field_validator("explore_by")
+    @classmethod
+    def _v_explore_by(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_EXPLORE_BY:
+            raise ValueError(f"explore_by must be one of {sorted(_VALID_EXPLORE_BY)}")
+        return v
 
 # --- Search Schemas ---
 from pydantic import BaseModel
@@ -281,7 +298,9 @@ class ExploreItem(BaseModel):
     external_rating: Optional[float] = None
     # Personalisation
     in_library:      bool            = False
-    match_genres:    list[str]       = []   # empty when no overlap with affinity
+    # Mixed list of overlaps with the user's most-consumed genres / origins /
+    # mediums. Empty when no overlap. Used by the UI for the "matches: …" hint.
+    matches:         list[str]       = []
 
 class AffinitySnapshot(BaseModel):
     """Compact summary of what the explore engine learned from the user."""

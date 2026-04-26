@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from db import engine, Base
-from models import Entry, User  # noqa: F401 — registers models with Base metadata
+from models import Entry, ExploreCache, User  # noqa: F401 — registers models with Base metadata
 from routers import router
 
 logging.basicConfig(

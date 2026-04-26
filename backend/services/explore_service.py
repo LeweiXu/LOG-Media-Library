@@ -1,22 +1,34 @@
 """
-Explore service — surfaces new media and ranks it against the user's taste.
+Explore service — surfaces new media and biases ranking toward whichever
+dimension the user picked in Settings (``explore_by``).
 
 Pipeline
 ────────
-1.  Build an *affinity profile* from the user's rated entries:
-      - per-genre, per-origin, per-medium signed score
-      - score = mean(rating - user_mean_rating) * sqrt(count)
-        (Bayesian-ish weighting so a single 9/10 doesn't outrank a genre
-         with five 7/10s).
-2.  Fan out to discovery endpoints across providers in parallel; each one
+1.  Build a *consumption profile* by counting how often each genre / origin /
+    medium appears in the user's library. Counts only — no rating math.
+2.  Pick the dimension to bias on from ``explore_by``:
+      - "genre"  → bias toward titles whose genres overlap with the user's
+                   most-consumed genres
+      - "medium" → bias toward titles in the user's most-consumed mediums
+      - "origin" → bias toward titles in the user's most-consumed origins
+      - "all"    → small mixed bias from all three
+3.  Fan out to discovery endpoints across providers in parallel; each one
     returns recently-popular / trending picks. Mediums are chosen either
-    explicitly via the request, or by descending affinity (when "all").
-3.  Drop titles already in the user's library when `hide_in_library`.
-4.  Rank by 50% raw popularity + 50% affinity. Without affinity (cold
-    start) fall back to popularity alone.
-5.  Tag each item with up to two "match_genres" — the genres it shares
-    with the user's top-affinity genres. Used by the UI for a *subtle*
-    "matches: action, drama" hint, not aggressive recommendations.
+    explicitly via the request, or by descending consumption when "all".
+4.  Drop titles already in the user's library (always — the toggle was
+    retired in favour of an always-on filter).
+5.  Rank by ``popularity + bias`` with seeded jitter so "Refresh" actually
+    reshuffles the result instead of returning the same order.
+6.  Tag each item with up to two ``matches`` — items the candidate shares
+    with the user's most-consumed genres / origins / mediums. Used by the
+    UI for a *subtle* "matches: action, japanese" hint.
+
+Caching
+───────
+Results are cached per ``(username, medium)`` in the ``explore_cache`` table.
+Only the Refresh button on the Explore page invalidates a cache row — every
+other request reads from cache (re-filtering library titles live so that
+adding an entry on one tab doesn't show stale "available" items on another).
 
 Discovery providers live inline below — they hit known popular/trending
 endpoints rather than reusing the title-search code paths.
@@ -24,10 +36,10 @@ endpoints rather than reusing the title-search code paths.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-import math
 import random
-from collections import defaultdict
+from collections import Counter
 from datetime import datetime
 from typing import Optional
 
@@ -36,145 +48,120 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from constants import VALID_MEDIUMS
-from models import Entry
+from models import Entry, ExploreCache
 from schemas import ExploreItem, ExploreResponse, AffinitySnapshot
 from services.search_providers.utils import (
     settings, country_to_origin, safe_year, TIMEOUT,
 )
 from services.search_providers.tmdb import _TMDB_GENRE_NAMES
+from services.search_providers.novelupdates import discover_novelupdates
 
 logger = logging.getLogger(__name__)
 
 
-# ── Affinity profile ──────────────────────────────────────────────────────────
-
-# Keep computed affinity for a moment to avoid recomputing on every page change
-# during a single browsing session. Tiny TTL — we want fresh data after edits.
-_AFFINITY_TTL_S = 60
-_affinity_cache: dict[str, tuple[float, "Affinity"]] = {}
+VALID_EXPLORE_BY = {"all", "genre", "medium", "origin"}
 
 
-class Affinity:
-    """Signed-score lookup tables built from one user's rated entries."""
+# ── Consumption profile ───────────────────────────────────────────────────────
 
-    __slots__ = ("genres", "origins", "mediums", "sample_size", "_g_top")
+# Cache the per-user counts briefly to avoid re-querying on every page change
+# during a single browsing session. Tiny TTL — fresh after edits.
+_PROFILE_TTL_S = 60
+_profile_cache: dict[str, tuple[float, "ConsumptionProfile"]] = {}
+
+
+class ConsumptionProfile:
+    """Counts of genres / origins / mediums across the user's entries."""
+
+    __slots__ = (
+        "genres", "origins", "mediums", "sample_size",
+        "_g_top", "_o_top", "_m_top",
+    )
 
     def __init__(
         self,
-        genres:   dict[str, float],
-        origins:  dict[str, float],
-        mediums:  dict[str, float],
-        sample:   int,
+        genres:  Counter[str],
+        origins: Counter[str],
+        mediums: Counter[str],
+        sample:  int,
     ) -> None:
         self.genres      = genres
         self.origins     = origins
         self.mediums     = mediums
         self.sample_size = sample
-        # Pre-compute top genres (with positive scores) for the "matches" tag.
-        self._g_top = {
-            k for k, v in
-            sorted(genres.items(), key=lambda kv: kv[1], reverse=True)[:8]
-            if v > 0
-        }
-
-    def candidate_score(self, item: ExploreItem) -> float:
-        """Return blended popularity + affinity score for ranking."""
-        # Center popularity around 5/10 so a 7-rated item gets +2 and an
-        # unrated item is neutral.
-        pop = (item.external_rating or 5.0) - 5.0
-
-        if self.sample_size == 0:
-            return pop
-
-        # Genre overlap — average score across the candidate's listed genres.
-        g_score = 0.0
-        if item.genres:
-            cg = [g.strip() for g in item.genres.split(",") if g.strip()]
-            if cg:
-                g_score = sum(self.genres.get(g, 0.0) for g in cg) / len(cg)
-
-        o_score = self.origins.get(item.origin, 0.0) if item.origin else 0.0
-        m_score = self.mediums.get(item.medium, 0.0) if item.medium else 0.0
-
-        # Genre is the strongest signal, then origin, then medium.
-        affinity = 0.55 * g_score + 0.25 * o_score + 0.20 * m_score
-        return 0.5 * pop + 0.5 * affinity
-
-    def match_genres(self, item: ExploreItem) -> list[str]:
-        if not item.genres or not self._g_top:
-            return []
-        cg = [g.strip() for g in item.genres.split(",") if g.strip()]
-        return [g for g in cg if g in self._g_top][:2]
+        # Pre-compute the top items in each dimension for the "matches" hint.
+        self._g_top = {g for g, _ in genres.most_common(8)}
+        self._o_top = {o for o, _ in origins.most_common(3)}
+        self._m_top = {m for m, _ in mediums.most_common(3)}
 
     def snapshot(self) -> AffinitySnapshot:
-        def top(d: dict[str, float], n: int) -> list[str]:
-            return [
-                k for k, v in
-                sorted(d.items(), key=lambda kv: kv[1], reverse=True)[:n]
-                if v > 0
-            ]
         return AffinitySnapshot(
             sample_size = self.sample_size,
-            top_genres  = top(self.genres,  5),
-            top_origins = top(self.origins, 3),
-            top_mediums = top(self.mediums, 3),
+            top_genres  = [g for g, _ in self.genres.most_common(5)],
+            top_origins = [o for o, _ in self.origins.most_common(3)],
+            top_mediums = [m for m, _ in self.mediums.most_common(3)],
         )
 
+    def matches(self, item: ExploreItem) -> list[str]:
+        """Mixed list of genres / origin / medium that overlap with the user's
+        most-consumed values across all three dimensions."""
+        out: list[str] = []
+        if item.genres and self._g_top:
+            for g in (g.strip() for g in item.genres.split(",") if g.strip()):
+                if g in self._g_top and g not in out:
+                    out.append(g)
+        if item.origin and item.origin in self._o_top and item.origin not in out:
+            out.append(item.origin)
+        if item.medium and item.medium in self._m_top and item.medium not in out:
+            out.append(item.medium)
+        return out[:4]
 
-def _build_affinity(db: Session, username: str) -> Affinity:
-    """Compute the affinity profile from rated entries (current/completed/on_hold/dropped all count)."""
+
+def _build_profile(db: Session, username: str) -> ConsumptionProfile:
+    """Count each dimension across all of the user's entries (no rating filter)."""
     rows = db.execute(
-        select(Entry).where(
-            Entry.username == username,
-            Entry.rating.is_not(None),
-        )
-    ).scalars().all()
+        select(Entry.genres, Entry.origin, Entry.medium)
+        .where(Entry.username == username)
+    ).all()
 
-    if not rows:
-        return Affinity({}, {}, {}, 0)
+    genre_counts:  Counter[str] = Counter()
+    origin_counts: Counter[str] = Counter()
+    medium_counts: Counter[str] = Counter()
 
-    user_mean = sum(e.rating for e in rows) / len(rows)
-
-    genre_deltas:  dict[str, list[float]] = defaultdict(list)
-    origin_deltas: dict[str, list[float]] = defaultdict(list)
-    medium_deltas: dict[str, list[float]] = defaultdict(list)
-
-    for e in rows:
-        delta = e.rating - user_mean
-        if e.genres:
-            for g in (g.strip() for g in e.genres.split(",")):
+    for genres, origin, medium in rows:
+        if genres:
+            for g in (g.strip() for g in genres.split(",")):
                 if g:
-                    genre_deltas[g].append(delta)
-        if e.origin:
-            origin_deltas[e.origin].append(delta)
-        if e.medium:
-            medium_deltas[e.medium].append(delta)
+                    genre_counts[g] += 1
+        if origin:
+            origin_counts[origin] += 1
+        if medium:
+            medium_counts[medium] += 1
 
-    def reduce(d: dict[str, list[float]]) -> dict[str, float]:
-        # mean delta * sqrt(n) — shrinks single-sample outliers, rewards
-        # consistently rated categories.
-        return {
-            k: (sum(v) / len(v)) * math.sqrt(len(v))
-            for k, v in d.items()
-        }
-
-    return Affinity(
-        genres  = reduce(genre_deltas),
-        origins = reduce(origin_deltas),
-        mediums = reduce(medium_deltas),
-        sample  = len(rows),
+    return ConsumptionProfile(
+        genres=genre_counts, origins=origin_counts,
+        mediums=medium_counts, sample=len(rows),
     )
 
 
-def _get_affinity(db: Session, username: str) -> Affinity:
+def _get_profile(db: Session, username: str) -> ConsumptionProfile:
     import time
     now = time.monotonic()
-    cached = _affinity_cache.get(username)
-    if cached and (now - cached[0]) < _AFFINITY_TTL_S:
+    cached = _profile_cache.get(username)
+    if cached and (now - cached[0]) < _PROFILE_TTL_S:
         return cached[1]
-    affinity = _build_affinity(db, username)
-    _affinity_cache[username] = (now, affinity)
-    return affinity
+    profile = _build_profile(db, username)
+    _profile_cache[username] = (now, profile)
+    return profile
+
+
+def _normalised_weights(counter: Counter[str], top_n: int = 10) -> dict[str, float]:
+    """Return a dict mapping the top-N keys to a 0..1 weight (max-normalised)."""
+    if not counter:
+        return {}
+    top = counter.most_common(top_n)
+    max_count = top[0][1] or 1
+    return {k: c / max_count for k, c in top}
 
 
 # ── Discovery providers ───────────────────────────────────────────────────────
@@ -415,11 +402,10 @@ async def _discover_igdb(client: httpx.AsyncClient, medium: str, page: int = 1) 
 async def _discover_google_books(
     client: httpx.AsyncClient, medium: str, top_genres: list[str], page: int = 1,
 ) -> list[ExploreItem]:
-    """Google Books has no global "popular" feed; use the user's top affinity
+    """Google Books has no global "popular" feed; use the user's most-consumed
     genres as subject hints, falling back to a generic bestseller query."""
     if medium != "Book":
         return []
-    # Prefer the user's top affinity genres; otherwise generic
     queries = [f"subject:{g}" for g in top_genres[:2]] or ["subject:fiction"]
     out: list[ExploreItem] = []
     start_index = max(0, (page - 1) * 20)
@@ -437,7 +423,6 @@ async def _discover_google_books(
             continue
         for item in r.json().get("items", []):
             info = item.get("volumeInfo") or {}
-            isbns = info.get("industryIdentifiers") or []
             ext_id = item.get("id") or ""
             year = safe_year(info.get("publishedDate"))
             cover = (info.get("imageLinks") or {}).get("thumbnail")
@@ -465,9 +450,96 @@ _PROVIDER_FNS_BY_MEDIUM: dict[str, list] = {
     "Anime":        [_discover_jikan, _discover_anilist],
     "Manga":        [_discover_jikan, _discover_anilist],
     "Light Novel":  [_discover_anilist],
+    "Web Novel":    [discover_novelupdates],    # scrapes NU rankings
     "Book":         [_discover_google_books],   # special-cased — needs top_genres
     "Game":         [_discover_igdb],
 }
+
+
+# ── Bias scoring ──────────────────────────────────────────────────────────────
+#
+# Bias is intentionally gentle — just enough to nudge the user's preferred
+# dimension toward the top without burying random recommendations. The ranking
+# formula is:  popularity_centered + bias_amount + jitter.
+#
+# Popularity is centered around 5.0 so it spans ~[-5, +5]. Bias amounts are
+# capped at the constants below; jitter is wider than bias so a popular
+# unrelated title can still beat a low-popularity match. This keeps the page
+# feeling *exploratory* rather than predictable.
+
+_BIAS_CAP_GENRE  = 1.6
+_BIAS_CAP_MEDIUM = 1.2
+_BIAS_CAP_ORIGIN = 1.2
+# Used when explore_by == "all" — three smaller biases combined.
+_BIAS_CAP_ALL_GENRE  = 0.7
+_BIAS_CAP_ALL_MEDIUM = 0.5
+_BIAS_CAP_ALL_ORIGIN = 0.5
+_JITTER_AMPLITUDE    = 1.5
+
+
+def _genre_bias(item: ExploreItem, weights: dict[str, float], cap: float) -> float:
+    if not item.genres or not weights:
+        return 0.0
+    cg = [g.strip() for g in item.genres.split(",") if g.strip()]
+    if not cg:
+        return 0.0
+    score = sum(weights.get(g, 0.0) for g in cg) / len(cg)
+    return score * cap
+
+
+def _scalar_bias(value: Optional[str], weights: dict[str, float], cap: float) -> float:
+    if not value or not weights:
+        return 0.0
+    return weights.get(value, 0.0) * cap
+
+
+# ── Per-(user, medium) result cache ───────────────────────────────────────────
+#
+# Stored in the ``explore_cache`` table. We only refresh on an explicit
+# request from the frontend (the Refresh button on the Explore page); every
+# other read returns the cached payload, after re-applying the live "in
+# library" filter so adding an entry on one tab doesn't leave it visible on
+# another.
+
+def _cache_key(medium: Optional[str]) -> str:
+    """Normalise a medium hint into the string used as the cache key.
+
+    Empty string is the cache key for the "All" sidebar tab.
+    """
+    return medium or ""
+
+
+def _read_cache(db: Session, username: str, medium: Optional[str]) -> Optional[list[ExploreItem]]:
+    row = db.execute(
+        select(ExploreCache.items_json).where(
+            ExploreCache.username == username,
+            ExploreCache.medium   == _cache_key(medium),
+        )
+    ).first()
+    if not row:
+        return None
+    try:
+        raw = json.loads(row[0])
+        return [ExploreItem(**d) for d in raw]
+    except Exception as exc:
+        logger.warning("Discarding malformed explore cache row: %s", exc)
+        return None
+
+
+def _write_cache(db: Session, username: str, medium: Optional[str], items: list[ExploreItem]) -> None:
+    payload = json.dumps([i.model_dump() for i in items])
+    key = _cache_key(medium)
+    existing = db.execute(
+        select(ExploreCache).where(
+            ExploreCache.username == username,
+            ExploreCache.medium   == key,
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        db.add(ExploreCache(username=username, medium=key, items_json=payload))
+    else:
+        existing.items_json = payload
+    db.commit()
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -475,44 +547,63 @@ _PROVIDER_FNS_BY_MEDIUM: dict[str, list] = {
 async def explore_media(
     db: Session,
     *,
-    username:        str,
-    medium:          Optional[str] = None,
-    personalize:     bool = True,
-    hide_in_library: bool = True,
-    limit:           int  = 40,
-    seed:            Optional[int] = None,
+    username:   str,
+    medium:     Optional[str] = None,
+    explore_by: str           = "all",
+    limit:      int           = 40,
+    seed:       Optional[int] = None,
+    refresh:    bool          = False,
 ) -> ExploreResponse:
-    """Return ranked explore items + the user's affinity snapshot.
+    """Return ranked explore items + a snapshot of the user's top consumed
+    genres / origins / mediums.
 
-    ``seed`` controls the per-call shuffle. With no seed, results are
-    deterministic (best for caching / testing). The frontend passes a fresh
-    random seed on every refresh so the user sees a different mix each time
-    while strong affinity picks still tend to surface near the top.
+    Caching: results are cached per ``(username, medium)``. ``refresh=True``
+    forces a fresh fetch and overwrites the cache; otherwise a cache hit
+    short-circuits the upstream API calls entirely.
     """
 
-    rng = random.Random(seed) if seed is not None else random.Random()
+    if explore_by not in VALID_EXPLORE_BY:
+        explore_by = "all"
 
-    affinity = _get_affinity(db, username)
+    profile = _get_profile(db, username)
+
+    if not refresh:
+        cached = _read_cache(db, username, medium)
+        if cached is not None:
+            return _finalise(db, username, profile, cached, limit)
+
+    rng = random.Random(seed) if seed is not None else random.Random()
 
     # Decide which mediums to fetch.
     if medium and medium in VALID_MEDIUMS:
         mediums_to_query = [medium]
     else:
-        # When "all": prefer mediums the user has positive affinity for, else
-        # round-robin a sensible default mix.
-        if affinity.sample_size > 0:
-            ranked = sorted(affinity.mediums.items(), key=lambda kv: kv[1], reverse=True)
-            mediums_to_query = [m for m, s in ranked if s > 0][:3]
+        # When "all": prefer mediums the user already consumes, else a
+        # sensible default mix.
+        if profile.mediums:
+            mediums_to_query = [m for m, _ in profile.mediums.most_common(3)]
         else:
             mediums_to_query = []
         if not mediums_to_query:
             mediums_to_query = ["Anime", "Film", "TV Show", "Game", "Book"]
 
-    top_genres_for_books = [
-        k for k, v in
-        sorted(affinity.genres.items(), key=lambda kv: kv[1], reverse=True)
-        if v > 0
-    ][:5]
+    top_genre_names = [g for g, _ in profile.genres.most_common(5)]
+
+    # Pre-compute weighted dicts used by the bias scorers.
+    genre_weights  = _normalised_weights(profile.genres)
+    medium_weights = _normalised_weights(profile.mediums)
+    origin_weights = _normalised_weights(profile.origins)
+
+    if explore_by == "genre":
+        gcap, mcap, ocap = _BIAS_CAP_GENRE, 0.0, 0.0
+    elif explore_by == "medium":
+        gcap, mcap, ocap = 0.0, _BIAS_CAP_MEDIUM, 0.0
+    elif explore_by == "origin":
+        gcap, mcap, ocap = 0.0, 0.0, _BIAS_CAP_ORIGIN
+    else:  # "all"
+        gcap = _BIAS_CAP_ALL_GENRE
+        mcap = _BIAS_CAP_ALL_MEDIUM
+        ocap = _BIAS_CAP_ALL_ORIGIN
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         tasks = []
@@ -522,7 +613,7 @@ async def explore_media(
                 # different titles instead of just reshuffling the same 20.
                 page = rng.randint(1, 3)
                 if fn is _discover_google_books:
-                    tasks.append(fn(client, med, top_genres_for_books, page))
+                    tasks.append(fn(client, med, top_genre_names, page))
                 else:
                     tasks.append(fn(client, med, page))
         groups = await asyncio.gather(*tasks, return_exceptions=True)
@@ -535,8 +626,7 @@ async def explore_media(
         combined.extend(g)
 
     # Deduplicate by (lowered title, medium) — keep the entry with the best
-    # external_rating as the canonical one (covers vary between sources but
-    # rating is more reliable as a tiebreaker than source priority here).
+    # external_rating as the canonical one.
     best: dict[tuple[str, str], ExploreItem] = {}
     for item in combined:
         if not item.title:
@@ -544,7 +634,6 @@ async def explore_media(
         key = (item.title.lower().strip(), item.medium or "")
         cur = best.get(key)
         if cur is None or (item.external_rating or 0) > (cur.external_rating or 0):
-            # Borrow cover_url / genres if the new item is missing them
             if cur is not None:
                 if not item.cover_url and cur.cover_url:
                     item.cover_url = cur.cover_url
@@ -553,48 +642,64 @@ async def explore_media(
             best[key] = item
     items = list(best.values())
 
-    # Drop items already in the user's library.
-    if hide_in_library:
-        existing = db.execute(
-            select(func.lower(Entry.title), Entry.medium)
-            .where(Entry.username == username)
-        ).all()
-        owned = {(t, m or "") for t, m in existing}
-        items = [i for i in items if (i.title.lower().strip(), i.medium or "") not in owned]
-    else:
-        # Still tag in_library for the UI even if we don't filter.
-        existing = db.execute(
-            select(func.lower(Entry.title), Entry.medium)
-            .where(Entry.username == username)
-        ).all()
-        owned = {(t, m or "") for t, m in existing}
-        for i in items:
-            if (i.title.lower().strip(), i.medium or "") in owned:
-                i.in_library = True
-
-    # Tag match_genres + rank with seeded jitter so refresh produces variety.
-    for i in items:
-        i.match_genres = affinity.match_genres(i)
-
-    use_affinity = personalize and affinity.sample_size > 0
-    # Jitter is a fraction of the typical score scale (~5–10 pts) so it
-    # nudges the order without burying strong affinity matches.
-    jitter_amplitude = 1.5
+    has_data = profile.sample_size > 0
+    bias_active = has_data and (gcap or mcap or ocap)
 
     def ranked_key(item: ExploreItem) -> float:
-        base = (
-            affinity.candidate_score(item) if use_affinity
-            else (item.external_rating or 0)
-        )
-        return base + rng.uniform(-jitter_amplitude, jitter_amplitude)
+        # Center popularity around 5/10 so a 7-rated item gets +2 and an
+        # unrated item is neutral.
+        pop = (item.external_rating or 5.0) - 5.0
+        bias = 0.0
+        if bias_active:
+            if gcap:
+                bias += _genre_bias(item, genre_weights, gcap)
+            if mcap:
+                bias += _scalar_bias(item.medium, medium_weights, mcap)
+            if ocap:
+                bias += _scalar_bias(item.origin, origin_weights, ocap)
+        return pop + bias + rng.uniform(-_JITTER_AMPLITUDE, _JITTER_AMPLITUDE)
 
-    # Pre-shuffle the pool first so providers don't bias the jittered sort
-    # toward whichever one returned its results first.
+    # Pre-shuffle so providers don't bias the jittered sort toward whichever
+    # one returned its results first.
     rng.shuffle(items)
     items.sort(key=ranked_key, reverse=True)
 
+    # Persist the freshly-ranked list. ``matches`` and ``in_library`` are
+    # re-applied at read time, so we strip them before caching to keep the
+    # row small and avoid serving stale "in library" tags.
+    to_cache = [i.model_copy(update={"matches": [], "in_library": False}) for i in items]
+    _write_cache(db, username, medium, to_cache)
+
+    return _finalise(db, username, profile, items, limit)
+
+
+def _finalise(
+    db:       Session,
+    username: str,
+    profile:  ConsumptionProfile,
+    items:    list[ExploreItem],
+    limit:    int,
+) -> ExploreResponse:
+    """Apply the live "in library" filter, tag matches, and trim to ``limit``.
+
+    Used both for cache hits and freshly-fetched results so behaviour stays
+    consistent.
+    """
+    existing = db.execute(
+        select(func.lower(Entry.title), Entry.medium)
+        .where(Entry.username == username)
+    ).all()
+    owned = {(t, m or "") for t, m in existing}
+    filtered = [
+        i for i in items
+        if (i.title.lower().strip(), i.medium or "") not in owned
+    ]
+
+    for i in filtered:
+        i.matches = profile.matches(i)
+
     return ExploreResponse(
-        items        = items[:limit],
-        affinity     = affinity.snapshot(),
-        personalised = use_affinity,
+        items        = filtered[:limit],
+        affinity     = profile.snapshot(),
+        personalised = profile.sample_size > 0,
     )

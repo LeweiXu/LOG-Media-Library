@@ -19,17 +19,17 @@ export default function Explore() {
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState('');
 
-  // Settings seed the defaults; medium remains a local Explore filter.
+  // Settings seed the default medium; bias dimension lives in Settings.
   const [medium,       setMedium]       = useState('');
-  const [personalize,  setPersonalize]  = useState(true);
-  const [hideOwned,    setHideOwned]    = useState(true);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // Per-card UI state — keyed by stable index because explore items have no DB id
   // until added. Tracks: 'idle' | 'adding' | 'added:<status>' | 'error:<msg>'
   const [cardState, setCardState] = useState({});
-  // Bumped on every refresh — drives a fresh server-side shuffle.
+  // Bumped on every Refresh — also flips refreshFlag so the next fetch
+  // bypasses the server-side per-medium cache.
   const [seed, setSeed] = useState(() => newSeed());
+  const [refreshFlag, setRefreshFlag] = useState(false);
 
   // ── Initial load: pull saved settings, seed filters from them ────────────
   useEffect(() => {
@@ -39,8 +39,6 @@ export default function Explore() {
         const s = await getSettings();
         if (cancelled) return;
         setMedium(s.explore_default_medium || '');
-        setPersonalize(s.explore_personalize ?? true);
-        setHideOwned(s.explore_hide_in_library ?? true);
       } catch {
         /* fall back to defaults */
       } finally {
@@ -55,11 +53,8 @@ export default function Explore() {
     setLoading(true); setError(''); setCardState({});
     try {
       const data = await getExplore({
-        medium,
-        personalize,
-        hide_in_library: hideOwned,
-        limit: 30,
-        seed,
+        medium, limit: 30, seed,
+        refresh: refreshFlag,
       });
       setItems(data.items || []);
       setAffinity(data.affinity || null);
@@ -68,16 +63,20 @@ export default function Explore() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setRefreshFlag(false);
     }
-  }, [medium, personalize, hideOwned, seed]);
+  }, [medium, seed, refreshFlag]);
 
   useEffect(() => {
     if (!settingsLoaded) return;
     fetchExplore();
   }, [fetchExplore, settingsLoaded]);
 
-  // Refresh = new seed = new shuffle on the server.
-  const handleRefresh = () => setSeed(newSeed());
+  // Refresh = bypass server cache + new shuffle seed.
+  const handleRefresh = () => {
+    setRefreshFlag(true);
+    setSeed(newSeed());
+  };
 
   async function quickAdd(idx, item, statusValue) {
     setCardState(s => ({ ...s, [idx]: 'adding' }));
@@ -122,18 +121,6 @@ export default function Explore() {
               <span>{m}</span>
             </div>
           ))}
-        </div>
-
-        <div className="sidebar-divider" />
-
-        <div className="sidebar-section">
-          <span className="sidebar-label">Preferences</span>
-          <div className="sidebar-item sidebar-item-static">
-            <span>{personalize ? 'Tailored ranking' : 'General ranking'}</span>
-          </div>
-          <div className="sidebar-item sidebar-item-static">
-            <span>{hideOwned ? 'Hiding library titles' : 'Including library titles'}</span>
-          </div>
         </div>
       </aside>
 
@@ -193,9 +180,6 @@ export default function Explore() {
                   {item.cover_url
                     ? <img src={item.cover_url} alt="" loading="lazy" />
                     : <div className="explore-cover-empty">—</div>}
-                  {item.external_rating != null && (
-                    <span className="explore-rating">★ {item.external_rating.toFixed(1)}</span>
-                  )}
                 </div>
 
                 <div className="explore-body">
@@ -210,11 +194,15 @@ export default function Explore() {
                     {item.medium && <span>{item.medium}</span>}
                     {item.year   && <span> · {item.year}</span>}
                     {item.origin && <span> · {item.origin}</span>}
+                    {item.external_rating != null && <span> · </span>}
+                    {item.external_rating != null && (
+                      <span className="explore-meta-rating">★ {item.external_rating.toFixed(1)}</span>
+                    )}
                   </div>
 
-                  {personalised && item.match_genres && item.match_genres.length > 0 && (
-                    <div className="explore-match" title="Genres you've rated highly in your library">
-                      matches: {item.match_genres.join(', ')}
+                  {personalised && item.matches && item.matches.length > 0 && (
+                    <div className="explore-match" title="Genres, origin, or medium you consume most in your library">
+                      matches: {item.matches.join(', ')}
                     </div>
                   )}
 
@@ -255,15 +243,15 @@ export default function Explore() {
 
       {/* ── Right sidebar: affinity snapshot ─────────────────────────────── */}
       <aside className="sidebar-right">
-        <div className="panel-title">Your affinity</div>
+        <div className="panel-title">Your library</div>
         {!affinity || affinity.sample_size === 0 ? (
           <p className="explore-affinity-empty">
-            Rate a few entries in your library to teach the recommender what you enjoy.
+            Add a few entries to your library to bias what shows up here.
           </p>
         ) : (
           <>
             <div className="explore-affinity-meta">
-              {affinity.sample_size} rated entries · {personalised ? 'engine on' : 'engine off'}
+              {affinity.sample_size} entries · {personalised ? 'bias on' : 'bias off'}
             </div>
 
             {affinity.top_genres.length > 0 && (
@@ -300,8 +288,8 @@ export default function Explore() {
             )}
 
             <div className="explore-affinity-note">
-              Ranking blends each title's popularity with how its genres,
-              origin, and medium align with your higher-rated library entries.
+              Ranking nudges results toward your most-consumed genres, origins,
+              and mediums. Change the bias dimension in Settings → Explore.
             </div>
           </>
         )}

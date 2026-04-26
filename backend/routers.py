@@ -274,11 +274,10 @@ async def search(
 
 @router.get("/explore", response_model=ExploreResponse)
 async def explore(
-    medium:          str  = Query("", description="Optional medium filter"),
-    personalize:     bool = Query(True, description="Apply taste-based ranking"),
-    hide_in_library: bool = Query(True, description="Filter out titles already in your library"),
-    limit:           int  = Query(40, ge=1, le=80),
-    seed:            int  = Query(0,  ge=0, description="Shuffle seed; pass a fresh value to refresh"),
+    medium:  str  = Query("", description="Optional medium filter"),
+    limit:   int  = Query(40, ge=1, le=80),
+    seed:    int  = Query(0,  ge=0, description="Shuffle seed; only consulted on a fresh fetch"),
+    refresh: bool = Query(False, description="Bypass and overwrite the per-medium cache"),
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
@@ -286,10 +285,10 @@ async def explore(
         db,
         username=current_user.username,
         medium=medium or None,
-        personalize=personalize,
-        hide_in_library=hide_in_library,
+        explore_by=current_user.explore_by or "all",
         limit=limit,
         seed=seed or None,
+        refresh=refresh,
     )
 
 # ── Stats endpoint ────────────────────────────────────────────────────────────
