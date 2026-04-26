@@ -71,7 +71,7 @@ async def search_kitsu(
                         total=ep_count,
                         external_id=kitsu_id,
                         source="kitsu",
-                        description=(attrs.get("synopsis") or "")[:200] or None,
+                        description=attrs.get("synopsis") or None,
                         external_url=f"https://kitsu.app/{kitsu_type}/{attrs.get('slug', kitsu_id)}",
                         external_rating=ext_rating,
                     )

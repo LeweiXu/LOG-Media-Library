@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from schemas import SearchResult
+from schemas import ExploreItem, SearchResult
 from .utils import settings, safe_year
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ async def search_google_books(
                     total=pages,
                     external_id=book_id,
                     source="google_books",
-                    description=(info.get("description") or "")[:200] or None,
+                    description=info.get("description") or None,
                     external_url=f"https://books.google.com/books?id={book_id}" if book_id else None,
                     genres=genres_str,
                     external_rating=ext_rating,
@@ -63,3 +63,47 @@ async def search_google_books(
     except Exception as exc:
         logger.warning("Google Books search error: %s", exc)
         return []
+
+
+async def _discover_google_books(
+    client: httpx.AsyncClient, medium: str, top_genres: list[str], page: int = 1,
+) -> list[ExploreItem]:
+    """Google Books has no global popular feed; use consumed genres as subject hints."""
+    if medium != "Book":
+        return []
+    queries = [f"subject:{g}" for g in top_genres[:2]] or ["subject:fiction"]
+    out: list[ExploreItem] = []
+    start_index = max(0, (page - 1) * 20)
+    for q in queries:
+        try:
+            params = {"q": q, "orderBy": "relevance", "maxResults": 20,
+                      "printType": "books", "startIndex": start_index}
+            api_key = settings.GOOGLE_BOOKS_API_KEY
+            if api_key:
+                params["key"] = api_key
+            r = await client.get("https://www.googleapis.com/books/v1/volumes", params=params)
+            r.raise_for_status()
+        except Exception as exc:
+            logger.warning("Google Books discover error: %s", exc)
+            continue
+        for item in r.json().get("items", []):
+            info = item.get("volumeInfo") or {}
+            ext_id = item.get("id") or ""
+            year = safe_year(info.get("publishedDate"))
+            cover = (info.get("imageLinks") or {}).get("thumbnail")
+            if cover and cover.startswith("http://"):
+                cover = "https://" + cover[len("http://"):]
+            avg = info.get("averageRating")
+            out.append(ExploreItem(
+                title=info.get("title") or "",
+                medium="Book",
+                year=year,
+                cover_url=cover,
+                external_id=ext_id,
+                source="google_books",
+                description=info.get("description") or None,
+                external_url=info.get("infoLink") or info.get("previewLink"),
+                genres=", ".join((info.get("categories") or [])[:3]) or None,
+                external_rating=round(float(avg) * 2, 1) if avg else None,
+            ))
+    return out

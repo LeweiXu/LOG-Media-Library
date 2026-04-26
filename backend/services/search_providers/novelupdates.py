@@ -188,7 +188,7 @@ async def search_novelupdates(
 _NU_RANK_BY_PAGE = {1: "popmonth", 2: "sixmonths", 3: "popular"}
 
 
-async def discover_novelupdates(client, medium: str, page: int = 1):
+async def _discover_novelupdates(client, medium: str, page: int = 1):
     """Scrape NovelUpdates' Top Series rankings as Explore candidates.
 
     NU has no public API, so we go through the same Cloudflare-bypass path

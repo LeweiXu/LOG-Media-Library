@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from schemas import SearchResult
+from schemas import ExploreItem, SearchResult
 from .utils import settings, safe_year
 
 logger = logging.getLogger(__name__)
@@ -59,3 +59,45 @@ async def search_rawg(
     except Exception as exc:
         logger.warning("RAWG search error: %s", exc)
         return []
+
+
+async def _discover_rawg(client: httpx.AsyncClient, medium: str, page: int = 1) -> list[ExploreItem]:
+    if medium != "Game":
+        return []
+    api_key = settings.RAWG_API_KEY
+    if not api_key:
+        return []
+    try:
+        r = await client.get(
+            "https://api.rawg.io/api/games",
+            params={
+                "key": api_key,
+                "ordering": "-added",
+                "page": page,
+                "page_size": 25,
+            },
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        logger.warning("RAWG discover error: %s", exc)
+        return []
+
+    out: list[ExploreItem] = []
+    for item in r.json().get("results", []):
+        rawg_id = str(item.get("id") or "")
+        if not rawg_id:
+            continue
+        slug = item.get("slug") or rawg_id
+        rating = item.get("rating")
+        out.append(ExploreItem(
+            title=item.get("name") or "",
+            medium="Game",
+            year=safe_year(item.get("released")),
+            cover_url=item.get("background_image"),
+            external_id=rawg_id,
+            source="rawg",
+            external_url=f"https://rawg.io/games/{slug}",
+            genres=", ".join(g["name"] for g in (item.get("genres") or [])[:5] if g.get("name")) or None,
+            external_rating=round(float(rating) * 2, 1) if rating else None,
+        ))
+    return out

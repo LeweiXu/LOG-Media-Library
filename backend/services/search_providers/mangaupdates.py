@@ -81,7 +81,7 @@ async def search_mangaupdates(
                     cover_url=cover,
                     external_id=mu_id,
                     source="mangaupdates",
-                    description=desc[:200] or None,
+                    description=desc or None,
                     external_url=record.get("url"),
                     genres=genres_str,
                     external_rating=ext_rating,

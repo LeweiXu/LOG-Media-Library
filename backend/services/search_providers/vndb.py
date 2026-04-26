@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from schemas import SearchResult
+from schemas import ExploreItem, SearchResult
 from .utils import safe_year, country_to_origin
 
 logger = logging.getLogger(__name__)
@@ -89,3 +89,51 @@ async def search_vndb(
         )
 
     return results
+
+
+async def _discover_vndb(client: httpx.AsyncClient, medium: str, page: int = 1) -> list[ExploreItem]:
+    if medium != "Visual Novel":
+        return []
+    try:
+        r = await client.post(
+            "https://api.vndb.org/kana/vn",
+            json={
+                "filters": ["rating", ">", 70],
+                "fields": "id,title,released,rating,image.url,olang,tags.name",
+                "sort": "rating",
+                "reverse": True,
+                "results": 25,
+                "page": page,
+            },
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        logger.warning("VNDB discover error: %s", exc)
+        return []
+
+    out: list[ExploreItem] = []
+    for item in r.json().get("results", []):
+        vndb_id = item.get("id") or ""
+        title = item.get("title") or ""
+        if not vndb_id or not title:
+            continue
+        raw_rating = item.get("rating")
+        try:
+            ext_rating = round(float(raw_rating) / 10, 1) if raw_rating else None
+        except (ValueError, TypeError):
+            ext_rating = None
+        lang = (item.get("olang") or "").lower()
+        tags = item.get("tags") or []
+        out.append(ExploreItem(
+            title=title,
+            medium="Visual Novel",
+            origin=_LANG_TO_ORIGIN.get(lang, "Other") if lang else None,
+            year=safe_year(item.get("released")),
+            cover_url=(item.get("image") or {}).get("url"),
+            external_id=vndb_id,
+            source="vndb",
+            external_url=f"https://vndb.org/{vndb_id}",
+            genres=", ".join(t["name"] for t in tags[:8] if t.get("name")) or None,
+            external_rating=ext_rating,
+        ))
+    return out

@@ -1118,12 +1118,27 @@ html.light .skeleton-pie::after {
   background: var(--surface);
   border: 1px solid var(--border);
   padding: 12px;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, filter 0.15s, background 0.15s;
   position: relative;
-  min-height: 168px;
+  height: 158px;
+  cursor: pointer;
+  overflow: hidden;
 }
-.explore-card:hover { border-color: var(--border2); }
-.explore-card.is-owned { opacity: 0.55; }
+.explore-card:hover {
+  border-color: var(--border2);
+  filter: brightness(0.86);
+}
+.explore-card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  filter: brightness(0.86);
+}
+.explore-card.is-owned {
+  cursor: default;
+  filter: none;
+}
+.explore-card.is-owned:hover { filter: none; }
 
 .explore-cover {
   width: 92px;
@@ -1156,9 +1171,11 @@ html.light .skeleton-pie::after {
 .explore-body {
   flex: 1;
   min-width: 0;
+  height: 132px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow: hidden;
 }
 
 .explore-title-row {
@@ -1198,30 +1215,64 @@ a.explore-title:hover { color: var(--accent); }
   color: var(--text);
   opacity: 0.78;
   line-height: 1.45;
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
   margin: 4px 0 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+.explore-desc.no-match {
+  -webkit-line-clamp: 5;
 }
 
-.explore-actions {
+.explore-card-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
   display: flex;
-  gap: 6px;
-  margin-top: auto;
-  padding-top: 8px;
-  justify-content: center;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.52);
+  pointer-events: none;
+  transition: opacity 0.15s;
 }
 
-.explore-owned-tag {
+.explore-card-overlay span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 118px;
+  padding: 7px 12px;
+  border: 1px solid currentColor;
+  background: var(--surface);
   font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.explore-card-added-overlay {
+  opacity: 1;
+}
+
+.explore-card-added-overlay span {
   color: var(--green);
-  letter-spacing: 0.05em;
-  padding: 3px 0;
-  text-align: center;
-  width: 100%;
+  background: rgba(8, 18, 12, 0.94);
+  border-color: currentColor;
+}
+.explore-card-added-overlay.status-current span {
+  color: var(--accent);
+}
+.explore-card-added-overlay.status-planned span {
+  color: var(--dim);
+}
+.explore-card-added-overlay.status-completed span {
+  color: var(--green);
+}
+.explore-card-added-overlay.status-on_hold span {
+  color: var(--amber);
+}
+.explore-card-added-overlay.status-dropped span {
+  color: var(--red);
 }
 
 .explore-err {

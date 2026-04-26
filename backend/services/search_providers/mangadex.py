@@ -87,7 +87,7 @@ async def search_mangadex(
                     total=total,
                     external_id=mdx_id,
                     source="mangadex",
-                    description=(attrs.get("description", {}).get("en") or "")[:200] or None,
+                    description=attrs.get("description", {}).get("en") or None,
                     external_url=f"https://mangadex.org/title/{mdx_id}",
                     genres=genres_str,
                 )

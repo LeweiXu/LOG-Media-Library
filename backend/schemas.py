@@ -298,6 +298,7 @@ class ExploreItem(BaseModel):
     external_rating: Optional[float] = None
     # Personalisation
     in_library:      bool            = False
+    bias_matched:    bool            = False
     # Mixed list of overlaps with the user's most-consumed genres / origins /
     # mediums. Empty when no overlap. Used by the UI for the "matches: …" hint.
     matches:         list[str]       = []

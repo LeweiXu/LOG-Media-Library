@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from schemas import SearchResult
+from schemas import ExploreItem, SearchResult
 from .utils import settings, safe_year
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ async def search_tmdb(
                         cover_url=cover,
                         external_id=item_id,
                         source="tmdb",
-                        description=(item.get("overview") or "")[:200] or None,
+                        description=item.get("overview") or None,
                         external_url=f"https://www.themoviedb.org/{tmdb_type}/{item_id}",
                         genres=genres_str,
                         external_rating=ext_rating,
@@ -74,3 +74,43 @@ async def search_tmdb(
             logger.warning("TMDB search error: %s", exc)
 
     return results
+
+
+async def _discover_tmdb(client: httpx.AsyncClient, medium: str, page: int = 1) -> list[ExploreItem]:
+    api_key = settings.TMDB_API_KEY
+    if not api_key or medium not in ("Film", "TV Show"):
+        return []
+    tmdb_type = "movie" if medium == "Film" else "tv"
+    try:
+        r = await client.get(
+            f"https://api.themoviedb.org/3/trending/{tmdb_type}/week",
+            params={"api_key": api_key, "page": page},
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        logger.warning("TMDB trending error: %s", exc)
+        return []
+
+    out: list[ExploreItem] = []
+    for item in r.json().get("results", [])[:20]:
+        item_id = str(item.get("id") or "")
+        if not item_id:
+            continue
+        poster = item.get("poster_path")
+        cover = f"https://image.tmdb.org/t/p/w780{poster}" if poster else None
+        gids = item.get("genre_ids") or []
+        genres_str = ", ".join(_TMDB_GENRE_NAMES[g] for g in gids if g in _TMDB_GENRE_NAMES) or None
+        vote = item.get("vote_average")
+        out.append(ExploreItem(
+            title=item.get("title") or item.get("name") or "",
+            medium=medium,
+            year=safe_year(item.get("release_date") or item.get("first_air_date")),
+            cover_url=cover,
+            external_id=item_id,
+            source="tmdb",
+            description=item.get("overview") or None,
+            external_url=f"https://www.themoviedb.org/{tmdb_type}/{item_id}",
+            genres=genres_str,
+            external_rating=round(float(vote), 1) if vote else None,
+        ))
+    return out

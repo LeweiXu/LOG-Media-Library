@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from schemas import SearchResult
+from schemas import ExploreItem, SearchResult
 from .utils import country_to_origin
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,24 @@ _ANILIST_FORMAT_TO_MEDIUM: dict[str, str] = {
     "NOVEL": "Light Novel",
     "ONE_SHOT": "Manga",
 }
+
+_ANILIST_TRENDING = """
+query ($type: MediaType, $perPage: Int!, $page: Int!) {
+  Page(page: $page, perPage: $perPage) {
+    media(type: $type, sort: TRENDING_DESC, isAdult: false) {
+      id
+      title { english romaji native }
+      type format episodes chapters
+      startDate { year }
+      coverImage { extraLarge large }
+      countryOfOrigin
+      description(asHtml: false)
+      genres
+      averageScore
+    }
+  }
+}
+"""
 
 
 async def search_anilist(
@@ -95,7 +113,7 @@ async def search_anilist(
                         total=total,
                         external_id=anilist_id,
                         source="anilist",
-                        description=desc[:200] or None,
+                        description=desc or None,
                         external_url=f"https://anilist.co/{anilist_type}/{anilist_id}",
                         genres=genres_str,
                         external_rating=ext_rating,
@@ -105,3 +123,50 @@ async def search_anilist(
             logger.warning("AniList search error: %s", exc)
 
     return results
+
+
+async def _discover_anilist(client: httpx.AsyncClient, medium: str, page: int = 1) -> list[ExploreItem]:
+    if medium not in ("Anime", "Manga", "Light Novel"):
+        return []
+    media_type = "ANIME" if medium == "Anime" else "MANGA"
+    try:
+        r = await client.post(
+            "https://graphql.anilist.co",
+            json={"query": _ANILIST_TRENDING, "variables": {"type": media_type, "perPage": 30, "page": page}},
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        logger.warning("AniList trending error: %s", exc)
+        return []
+
+    out: list[ExploreItem] = []
+    for item in r.json().get("data", {}).get("Page", {}).get("media", []):
+        t = item.get("title") or {}
+        display = t.get("english") or t.get("romaji") or t.get("native") or ""
+        fmt = item.get("format") or ""
+        med = _ANILIST_FORMAT_TO_MEDIUM.get(fmt, "Anime" if media_type == "ANIME" else "Manga")
+        if medium == "Light Novel" and med != "Light Novel":
+            continue
+        if medium == "Manga" and med == "Light Novel":
+            continue
+        if medium == "Anime" and med != "Anime":
+            continue
+        anilist_id = str(item.get("id") or "")
+        cover_img = item.get("coverImage") or {}
+        cover = cover_img.get("extraLarge") or cover_img.get("large")
+        score = item.get("averageScore")
+        out.append(ExploreItem(
+            title=display,
+            medium=med,
+            origin=country_to_origin(item.get("countryOfOrigin")),
+            year=(item.get("startDate") or {}).get("year"),
+            cover_url=cover,
+            total=item.get("episodes") or item.get("chapters"),
+            external_id=anilist_id,
+            source="anilist",
+            description=item.get("description") or None,
+            external_url=f"https://anilist.co/{'anime' if media_type == 'ANIME' else 'manga'}/{anilist_id}",
+            genres=", ".join((item.get("genres") or [])[:5]) or None,
+            external_rating=round(score / 10, 1) if score else None,
+        ))
+    return out

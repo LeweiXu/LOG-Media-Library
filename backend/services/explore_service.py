@@ -40,7 +40,6 @@ import json
 import logging
 import random
 from collections import Counter
-from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -50,16 +49,23 @@ from sqlalchemy.orm import Session
 from constants import VALID_MEDIUMS
 from models import Entry, ExploreCache
 from schemas import ExploreItem, ExploreResponse, AffinitySnapshot
-from services.search_providers.utils import (
-    settings, country_to_origin, safe_year, TIMEOUT,
-)
-from services.search_providers.tmdb import _TMDB_GENRE_NAMES
-from services.search_providers.novelupdates import discover_novelupdates
+from services.search_providers.utils import TIMEOUT
+from services.search_providers.anilist import _discover_anilist
+from services.search_providers.comicvine import _discover_comicvine
+from services.search_providers.google_books import _discover_google_books
+from services.search_providers.igdb import _discover_igdb
+from services.search_providers.jikan import _discover_jikan
+from services.search_providers.novelupdates import _discover_novelupdates
+from services.search_providers.rawg import _discover_rawg
+from services.search_providers.tmdb import _discover_tmdb
+from services.search_providers.vndb import _discover_vndb
 
 logger = logging.getLogger(__name__)
 
 
 VALID_EXPLORE_BY = {"all", "genre", "medium", "origin"}
+_MIN_RECOMMENDATIONS_PER_MEDIUM = 30
+_MAX_DISCOVERY_PAGES_PER_PROVIDER = 10
 
 
 # ── Consumption profile ───────────────────────────────────────────────────────
@@ -165,295 +171,96 @@ def _normalised_weights(counter: Counter[str], top_n: int = 10) -> dict[str, flo
 
 
 # ── Discovery providers ───────────────────────────────────────────────────────
-# Each returns up to ~20 ExploreItems for a given medium hint. They all
-# silently return [] when their API key / endpoint is unavailable.
-
-async def _discover_tmdb(client: httpx.AsyncClient, medium: str, page: int = 1) -> list[ExploreItem]:
-    api_key = settings.TMDB_API_KEY
-    if not api_key or medium not in ("Film", "TV Show"):
-        return []
-    tmdb_type = "movie" if medium == "Film" else "tv"
-    try:
-        r = await client.get(
-            f"https://api.themoviedb.org/3/trending/{tmdb_type}/week",
-            params={"api_key": api_key, "page": page},
-        )
-        r.raise_for_status()
-    except Exception as exc:
-        logger.warning("TMDB trending error: %s", exc)
-        return []
-
-    out: list[ExploreItem] = []
-    for item in r.json().get("results", [])[:20]:
-        item_id = str(item.get("id") or "")
-        if not item_id:
-            continue
-        poster = item.get("poster_path")
-        cover = f"https://image.tmdb.org/t/p/w780{poster}" if poster else None
-        gids = item.get("genre_ids") or []
-        genres_str = ", ".join(_TMDB_GENRE_NAMES[g] for g in gids if g in _TMDB_GENRE_NAMES) or None
-        vote = item.get("vote_average")
-        out.append(ExploreItem(
-            title=item.get("title") or item.get("name") or "",
-            medium=medium,
-            year=safe_year(item.get("release_date") or item.get("first_air_date")),
-            cover_url=cover,
-            external_id=item_id,
-            source="tmdb",
-            description=(item.get("overview") or "")[:200] or None,
-            external_url=f"https://www.themoviedb.org/{tmdb_type}/{item_id}",
-            genres=genres_str,
-            external_rating=round(float(vote), 1) if vote else None,
-        ))
-    return out
-
-
-_ANILIST_TRENDING = """
-query ($type: MediaType, $perPage: Int!, $page: Int!) {
-  Page(page: $page, perPage: $perPage) {
-    media(type: $type, sort: TRENDING_DESC, isAdult: false) {
-      id
-      title { english romaji native }
-      type format episodes chapters
-      startDate { year }
-      coverImage { extraLarge large }
-      countryOfOrigin
-      description(asHtml: false)
-      genres
-      averageScore
-    }
-  }
-}
-"""
-
-_ANILIST_FORMAT_TO_MEDIUM = {
-    "TV": "Anime", "TV_SHORT": "Anime", "MOVIE": "Anime",
-    "SPECIAL": "Anime", "OVA": "Anime", "ONA": "Anime", "MUSIC": "Anime",
-    "MANGA": "Manga", "NOVEL": "Light Novel", "ONE_SHOT": "Manga",
-}
-
-
-async def _discover_anilist(client: httpx.AsyncClient, medium: str, page: int = 1) -> list[ExploreItem]:
-    if medium not in ("Anime", "Manga", "Light Novel"):
-        return []
-    media_type = "ANIME" if medium == "Anime" else "MANGA"
-    try:
-        r = await client.post(
-            "https://graphql.anilist.co",
-            json={"query": _ANILIST_TRENDING, "variables": {"type": media_type, "perPage": 30, "page": page}},
-        )
-        r.raise_for_status()
-    except Exception as exc:
-        logger.warning("AniList trending error: %s", exc)
-        return []
-
-    out: list[ExploreItem] = []
-    for item in r.json().get("data", {}).get("Page", {}).get("media", []):
-        t = item.get("title") or {}
-        display = t.get("english") or t.get("romaji") or t.get("native") or ""
-        fmt = item.get("format") or ""
-        med = _ANILIST_FORMAT_TO_MEDIUM.get(fmt, "Anime" if media_type == "ANIME" else "Manga")
-        # Filter to the requested medium when possible (Light Novel vs Manga from AniList NOVEL format)
-        if medium == "Light Novel" and med != "Light Novel":
-            continue
-        if medium == "Manga" and med == "Light Novel":
-            continue
-        if medium == "Anime" and med != "Anime":
-            continue
-        anilist_id = str(item.get("id") or "")
-        cover_img = item.get("coverImage") or {}
-        cover = cover_img.get("extraLarge") or cover_img.get("large")
-        score = item.get("averageScore")
-        out.append(ExploreItem(
-            title=display,
-            medium=med,
-            origin=country_to_origin(item.get("countryOfOrigin")),
-            year=(item.get("startDate") or {}).get("year"),
-            cover_url=cover,
-            total=item.get("episodes") or item.get("chapters"),
-            external_id=anilist_id,
-            source="anilist",
-            description=(item.get("description") or "")[:200] or None,
-            external_url=f"https://anilist.co/{'anime' if media_type == 'ANIME' else 'manga'}/{anilist_id}",
-            genres=", ".join((item.get("genres") or [])[:5]) or None,
-            external_rating=round(score / 10, 1) if score else None,
-        ))
-    return out
-
-
-async def _discover_jikan(client: httpx.AsyncClient, medium: str, page: int = 1) -> list[ExploreItem]:
-    """Jikan top anime / top manga — no API key required."""
-    if medium not in ("Anime", "Manga"):
-        return []
-    endpoint = f"https://api.jikan.moe/v4/top/{'anime' if medium == 'Anime' else 'manga'}"
-    try:
-        r = await client.get(endpoint, params={"limit": 25, "filter": "bypopularity", "page": page})
-        r.raise_for_status()
-    except Exception as exc:
-        logger.warning("Jikan top error: %s", exc)
-        return []
-
-    out: list[ExploreItem] = []
-    for item in r.json().get("data", []):
-        titles = item.get("titles") or []
-        display = next((t["title"] for t in titles if t.get("type") == "English"), None) or item.get("title") or ""
-        images = item.get("images") or {}
-        jpg = images.get("jpg") or {}
-        webp = images.get("webp") or {}
-        cover = (
-            webp.get("large_image_url") or jpg.get("large_image_url")
-            or webp.get("image_url")    or jpg.get("image_url")
-        )
-        mal_id = str(item.get("mal_id") or "")
-        aired = item.get("aired") or item.get("published") or {}
-        prop = (aired.get("prop") or {}).get("from") or {}
-        year = prop.get("year") or safe_year((aired.get("from") or "")[:10] or None)
-        type_field = (item.get("type") or "").lower()
-        med = "Light Novel" if (medium == "Manga" and "novel" in type_field) else medium
-        score = item.get("score")
-        out.append(ExploreItem(
-            title=display,
-            medium=med,
-            origin="Japanese",
-            year=year,
-            cover_url=cover,
-            total=item.get("episodes") or item.get("chapters"),
-            external_id=mal_id,
-            source="jikan",
-            description=(item.get("synopsis") or "")[:200] or None,
-            external_url=f"https://myanimelist.net/{'anime' if medium == 'Anime' else 'manga'}/{mal_id}",
-            genres=", ".join(g["name"] for g in (item.get("genres") or [])[:5] if g.get("name")) or None,
-            external_rating=round(float(score), 1) if score else None,
-        ))
-    return out
-
-
-async def _igdb_token(client: httpx.AsyncClient) -> Optional[str]:
-    cid, csecret = settings.IGDB_CLIENT_ID, settings.IGDB_CLIENT_SECRET
-    if not cid or not csecret:
-        return None
-    try:
-        r = await client.post(
-            "https://id.twitch.tv/oauth2/token",
-            params={"client_id": cid, "client_secret": csecret, "grant_type": "client_credentials"},
-        )
-        r.raise_for_status()
-        return r.json().get("access_token")
-    except Exception as exc:
-        logger.warning("IGDB token error: %s", exc)
-        return None
-
-
-async def _discover_igdb(client: httpx.AsyncClient, medium: str, page: int = 1) -> list[ExploreItem]:
-    if medium != "Game":
-        return []
-    cid = settings.IGDB_CLIENT_ID
-    if not cid:
-        return []
-    token = await _igdb_token(client)
-    if not token:
-        return []
-    # Games released in the last ~3 years, ordered by total rating count (popularity).
-    cutoff = int(datetime.utcnow().timestamp()) - (3 * 365 * 86400)
-    offset = max(0, (page - 1) * 25)
-    try:
-        r = await client.post(
-            "https://api.igdb.com/v4/games",
-            headers={"Client-ID": cid, "Authorization": f"Bearer {token}"},
-            content=(
-                f"fields name,first_release_date,cover.image_id,"
-                f"summary,url,genres.name,rating,total_rating_count; "
-                f"where first_release_date > {cutoff} & cover != null & total_rating_count > 25; "
-                f"sort total_rating_count desc; "
-                f"limit 25; offset {offset};"
-            ),
-        )
-        r.raise_for_status()
-    except Exception as exc:
-        logger.warning("IGDB discover error: %s", exc)
-        return []
-
-    out: list[ExploreItem] = []
-    for item in r.json():
-        cover = item.get("cover") or {}
-        image_id = cover.get("image_id")
-        cover_url = (
-            f"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/{image_id}.jpg"
-            if image_id else None
-        )
-        ts = item.get("first_release_date")
-        year = datetime.fromtimestamp(ts).year if ts else None
-        rating = item.get("rating")
-        out.append(ExploreItem(
-            title=item.get("name") or "",
-            medium="Game",
-            year=year,
-            cover_url=cover_url,
-            external_id=str(item.get("id") or ""),
-            source="igdb",
-            description=(item.get("summary") or "")[:200] or None,
-            external_url=item.get("url"),
-            genres=", ".join(g["name"] for g in (item.get("genres") or [])[:5] if g.get("name")) or None,
-            external_rating=round(rating / 10, 1) if rating else None,
-        ))
-    return out
-
-
-async def _discover_google_books(
-    client: httpx.AsyncClient, medium: str, top_genres: list[str], page: int = 1,
-) -> list[ExploreItem]:
-    """Google Books has no global "popular" feed; use the user's most-consumed
-    genres as subject hints, falling back to a generic bestseller query."""
-    if medium != "Book":
-        return []
-    queries = [f"subject:{g}" for g in top_genres[:2]] or ["subject:fiction"]
-    out: list[ExploreItem] = []
-    start_index = max(0, (page - 1) * 20)
-    for q in queries:
-        try:
-            params = {"q": q, "orderBy": "relevance", "maxResults": 20,
-                      "printType": "books", "startIndex": start_index}
-            api_key = settings.GOOGLE_BOOKS_API_KEY
-            if api_key:
-                params["key"] = api_key
-            r = await client.get("https://www.googleapis.com/books/v1/volumes", params=params)
-            r.raise_for_status()
-        except Exception as exc:
-            logger.warning("Google Books discover error: %s", exc)
-            continue
-        for item in r.json().get("items", []):
-            info = item.get("volumeInfo") or {}
-            ext_id = item.get("id") or ""
-            year = safe_year(info.get("publishedDate"))
-            cover = (info.get("imageLinks") or {}).get("thumbnail")
-            if cover and cover.startswith("http://"):
-                cover = "https://" + cover[len("http://"):]
-            avg = info.get("averageRating")
-            out.append(ExploreItem(
-                title=info.get("title") or "",
-                medium="Book",
-                year=year,
-                cover_url=cover,
-                external_id=ext_id,
-                source="google_books",
-                description=(info.get("description") or "")[:200] or None,
-                external_url=info.get("infoLink") or info.get("previewLink"),
-                genres=", ".join((info.get("categories") or [])[:3]) or None,
-                external_rating=round(float(avg) * 2, 1) if avg else None,  # 5-scale → 10-scale
-            ))
-    return out
-
+# Provider implementations live in services/search_providers/*.py. The Explore
+# service only owns provider ordering, fallback, cache, filtering, and ranking.
 
 _PROVIDER_FNS_BY_MEDIUM: dict[str, list] = {
     "Film":         [_discover_tmdb],
     "TV Show":      [_discover_tmdb],
     "Anime":        [_discover_jikan, _discover_anilist],
     "Manga":        [_discover_jikan, _discover_anilist],
-    "Light Novel":  [_discover_anilist],
-    "Web Novel":    [discover_novelupdates],    # scrapes NU rankings
+    "Light Novel":  [_discover_jikan, _discover_anilist],
+    "Web Novel":    [_discover_novelupdates],    # scrapes NU rankings
+    "Comic":        [_discover_comicvine],
     "Book":         [_discover_google_books],   # special-cased — needs top_genres
-    "Game":         [_discover_igdb],
+    "Game":         [_discover_rawg, _discover_igdb],
+    "Visual Novel": [_discover_vndb],
 }
+
+
+async def _call_discover_provider(
+    fn,
+    client: httpx.AsyncClient,
+    medium: str,
+    top_genres: list[str],
+    page: int,
+) -> list[ExploreItem]:
+    if fn is _discover_google_books:
+        return await fn(client, medium, top_genres, page)
+    return await fn(client, medium, page)
+
+
+def _item_key(item: ExploreItem) -> tuple[str, str]:
+    return (item.title.lower().strip(), item.medium or "")
+
+
+def _dedupe_best(items: list[ExploreItem]) -> list[ExploreItem]:
+    """Deduplicate by (lowered title, medium), keeping the best-rated copy."""
+    best: dict[tuple[str, str], ExploreItem] = {}
+    for item in items:
+        if not item.title:
+            continue
+        key = _item_key(item)
+        cur = best.get(key)
+        if cur is None or (item.external_rating or 0) > (cur.external_rating or 0):
+            if cur is not None:
+                if not item.cover_url and cur.cover_url:
+                    item.cover_url = cur.cover_url
+                if not item.genres and cur.genres:
+                    item.genres = cur.genres
+            best[key] = item
+    return list(best.values())
+
+
+def _visible_count(items: list[ExploreItem], owned: set[tuple[str, str]]) -> int:
+    return sum(1 for item in _dedupe_best(items) if _item_key(item) not in owned)
+
+
+async def _discover_medium_with_fallback(
+    client: httpx.AsyncClient,
+    medium: str,
+    top_genres: list[str],
+    rng: random.Random,
+    target_visible: int,
+    owned: set[tuple[str, str]],
+) -> list[ExploreItem]:
+    """Try providers by priority, querying more pages until enough items exist.
+
+    A fallback provider is only used when the higher-priority provider returns
+    nothing useful or cannot fill the remaining visible recommendations after
+    several pages.
+    """
+    combined: list[ExploreItem] = []
+    for fn in _PROVIDER_FNS_BY_MEDIUM.get(medium, []):
+        pages = list(range(1, _MAX_DISCOVERY_PAGES_PER_PROVIDER + 1))
+        rng.shuffle(pages)
+
+        for page in pages:
+            try:
+                items = await _call_discover_provider(fn, client, medium, top_genres, page)
+            except Exception as exc:
+                logger.warning("Explore provider exception for %s: %s", medium, exc)
+                break
+
+            if not items:
+                continue
+
+            combined.extend(items)
+
+            if _visible_count(combined, owned) >= target_visible:
+                return _dedupe_best(combined)
+
+    return _dedupe_best(combined)
 
 
 # ── Bias scoring ──────────────────────────────────────────────────────────────
@@ -467,14 +274,15 @@ _PROVIDER_FNS_BY_MEDIUM: dict[str, list] = {
 # unrelated title can still beat a low-popularity match. This keeps the page
 # feeling *exploratory* rather than predictable.
 
-_BIAS_CAP_GENRE  = 1.6
-_BIAS_CAP_MEDIUM = 1.2
-_BIAS_CAP_ORIGIN = 1.2
+_BIAS_CAP_GENRE  = 0.8
+_BIAS_CAP_MEDIUM = 0.5
+_BIAS_CAP_ORIGIN = 0.5
 # Used when explore_by == "all" — three smaller biases combined.
-_BIAS_CAP_ALL_GENRE  = 0.7
-_BIAS_CAP_ALL_MEDIUM = 0.5
-_BIAS_CAP_ALL_ORIGIN = 0.5
-_JITTER_AMPLITUDE    = 1.5
+_BIAS_CAP_ALL_GENRE  = 0.35
+_BIAS_CAP_ALL_MEDIUM = 0.25
+_BIAS_CAP_ALL_ORIGIN = 0.25
+_JITTER_AMPLITUDE    = 2.4
+_BIAS_MATCH_THRESHOLD = 0.25
 
 
 def _genre_bias(item: ExploreItem, weights: dict[str, float], cap: float) -> float:
@@ -542,6 +350,14 @@ def _write_cache(db: Session, username: str, medium: Optional[str], items: list[
     db.commit()
 
 
+def _owned_entry_keys(db: Session, username: str) -> set[tuple[str, str]]:
+    existing = db.execute(
+        select(func.lower(Entry.title), Entry.medium)
+        .where(Entry.username == username)
+    ).all()
+    return {(t, m or "") for t, m in existing}
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 async def explore_media(
@@ -566,6 +382,8 @@ async def explore_media(
         explore_by = "all"
 
     profile = _get_profile(db, username)
+    target_limit = max(limit, _MIN_RECOMMENDATIONS_PER_MEDIUM)
+    owned = _owned_entry_keys(db, username)
 
     if not refresh:
         cached = _read_cache(db, username, medium)
@@ -585,7 +403,10 @@ async def explore_media(
         else:
             mediums_to_query = []
         if not mediums_to_query:
-            mediums_to_query = ["Anime", "Film", "TV Show", "Game", "Book"]
+            mediums_to_query = [
+                "Anime", "Manga", "Film", "TV Show", "Game", "Book",
+                "Light Novel", "Web Novel", "Comic", "Visual Novel",
+            ]
 
     top_genre_names = [g for g, _ in profile.genres.most_common(5)]
 
@@ -607,15 +428,18 @@ async def explore_media(
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         tasks = []
+        target_per_medium = (
+            target_limit
+            if len(mediums_to_query) == 1
+            else max(8, target_limit // max(len(mediums_to_query), 1))
+        )
         for med in mediums_to_query:
-            for fn in _PROVIDER_FNS_BY_MEDIUM.get(med, []):
-                # Vary the upstream page per call so refresh actually pulls
-                # different titles instead of just reshuffling the same 20.
-                page = rng.randint(1, 3)
-                if fn is _discover_google_books:
-                    tasks.append(fn(client, med, top_genre_names, page))
-                else:
-                    tasks.append(fn(client, med, page))
+            medium_rng = random.Random(rng.randint(0, 2**31 - 1))
+            tasks.append(
+                _discover_medium_with_fallback(
+                    client, med, top_genre_names, medium_rng, target_per_medium, owned
+                )
+            )
         groups = await asyncio.gather(*tasks, return_exceptions=True)
 
     combined: list[ExploreItem] = []
@@ -625,30 +449,12 @@ async def explore_media(
             continue
         combined.extend(g)
 
-    # Deduplicate by (lowered title, medium) — keep the entry with the best
-    # external_rating as the canonical one.
-    best: dict[tuple[str, str], ExploreItem] = {}
-    for item in combined:
-        if not item.title:
-            continue
-        key = (item.title.lower().strip(), item.medium or "")
-        cur = best.get(key)
-        if cur is None or (item.external_rating or 0) > (cur.external_rating or 0):
-            if cur is not None:
-                if not item.cover_url and cur.cover_url:
-                    item.cover_url = cur.cover_url
-                if not item.genres and cur.genres:
-                    item.genres = cur.genres
-            best[key] = item
-    items = list(best.values())
+    items = _dedupe_best(combined)
 
     has_data = profile.sample_size > 0
     bias_active = has_data and (gcap or mcap or ocap)
 
-    def ranked_key(item: ExploreItem) -> float:
-        # Center popularity around 5/10 so a 7-rated item gets +2 and an
-        # unrated item is neutral.
-        pop = (item.external_rating or 5.0) - 5.0
+    def bias_value(item: ExploreItem) -> float:
         bias = 0.0
         if bias_active:
             if gcap:
@@ -657,6 +463,16 @@ async def explore_media(
                 bias += _scalar_bias(item.medium, medium_weights, mcap)
             if ocap:
                 bias += _scalar_bias(item.origin, origin_weights, ocap)
+        return bias
+
+    for item in items:
+        item.bias_matched = bias_value(item) >= _BIAS_MATCH_THRESHOLD
+
+    def ranked_key(item: ExploreItem) -> float:
+        # Center popularity around 5/10 so a 7-rated item gets +2 and an
+        # unrated item is neutral.
+        pop = (item.external_rating or 5.0) - 5.0
+        bias = bias_value(item)
         return pop + bias + rng.uniform(-_JITTER_AMPLITUDE, _JITTER_AMPLITUDE)
 
     # Pre-shuffle so providers don't bias the jittered sort toward whichever
@@ -685,18 +501,14 @@ def _finalise(
     Used both for cache hits and freshly-fetched results so behaviour stays
     consistent.
     """
-    existing = db.execute(
-        select(func.lower(Entry.title), Entry.medium)
-        .where(Entry.username == username)
-    ).all()
-    owned = {(t, m or "") for t, m in existing}
+    owned = _owned_entry_keys(db, username)
     filtered = [
         i for i in items
-        if (i.title.lower().strip(), i.medium or "") not in owned
+        if _item_key(i) not in owned
     ]
 
     for i in filtered:
-        i.matches = profile.matches(i)
+        i.matches = profile.matches(i) if i.bias_matched else []
 
     return ExploreResponse(
         items        = filtered[:limit],

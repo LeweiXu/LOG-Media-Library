@@ -1,14 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getExplore, getSettings } from '../api.jsx';
-import { MEDIUMS } from '../utils.jsx';
+import { MEDIUMS, statusLabel } from '../utils.jsx';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
-
-const QUICK_STATUSES = [
-  { value: 'planned',   label: '+ Planned',   hint: 'Add to your plan list' },
-  { value: 'current',   label: '+ Current',   hint: 'Mark as currently consuming' },
-  { value: 'completed', label: '+ Completed', hint: 'Mark as already completed' },
-];
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it.
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
@@ -108,9 +102,22 @@ export default function Explore() {
     });
   }
 
+  function handleCardClick(idx, item, owned) {
+    if (owned) return;
+    openAddModal(idx, item, 'planned');
+  }
+
+  function handleCardKeyDown(e, idx, item, owned) {
+    if (owned) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openAddModal(idx, item, 'planned');
+    }
+  }
+
   function handleEntryCreated(created) {
     if (!pendingAdd) return;
-    setCardState(s => ({ ...s, [pendingAdd.idx]: `added:${pendingAdd.status}` }));
+    setCardState(s => ({ ...s, [pendingAdd.idx]: `added:${created?.status || pendingAdd.status}` }));
     setPendingAdd(null);
   }
 
@@ -186,10 +193,15 @@ export default function Explore() {
             const errMsg  = isError ? state.slice('error:'.length) : '';
             const addedAs = isAdded ? state.slice('added:'.length) : '';
             const owned   = item.in_library || isAdded;
+            const hasMatches = personalised && item.matches && item.matches.length > 0;
 
             return (
               <article key={`${item.source}:${item.external_id || item.title}:${idx}`}
-                       className={'explore-card' + (owned ? ' is-owned' : '')}>
+                       className={'explore-card' + (owned ? ' is-owned' : '')}
+                       role={owned ? undefined : 'button'}
+                       tabIndex={owned ? undefined : 0}
+                       onClick={() => handleCardClick(idx, item, owned)}
+                       onKeyDown={e => handleCardKeyDown(e, idx, item, owned)}>
                 <div className="explore-cover">
                   {item.cover_url
                     ? <img src={item.cover_url} alt="" loading="lazy" />
@@ -200,6 +212,7 @@ export default function Explore() {
                   <div className="explore-title-row">
                     {item.external_url
                       ? <a href={item.external_url} target="_blank" rel="noopener noreferrer"
+                           onClick={e => e.stopPropagation()}
                            className="explore-title">{item.title}</a>
                       : <span className="explore-title">{item.title}</span>}
                   </div>
@@ -214,39 +227,24 @@ export default function Explore() {
                     )}
                   </div>
 
-                  {personalised && item.matches && item.matches.length > 0 && (
+                  {hasMatches && (
                     <div className="explore-match" title="Genres, origin, or medium you consume most in your library">
                       matches: {item.matches.join(', ')}
                     </div>
                   )}
 
                   {item.description && (
-                    <p className="explore-desc">{item.description}</p>
+                    <p className={'explore-desc' + (!hasMatches ? ' no-match' : '')}>{item.description}</p>
                   )}
-
-                  <div className="explore-actions">
-                    {owned ? (
-                      <span className="explore-owned-tag">
-                        {addedAs ? `✓ added · ${addedAs}` : '✓ in library'}
-                      </span>
-                    ) : (
-                      <>
-                        {QUICK_STATUSES.map(qs => (
-                          <button
-                            key={qs.value}
-                            className="icon-btn"
-                            onClick={() => openAddModal(idx, item, qs.value)}
-                            title={qs.hint}
-                          >
-                            {qs.label}
-                          </button>
-                        ))}
-                      </>
-                    )}
-                  </div>
 
                   {isError && <div className="explore-err">{errMsg}</div>}
                 </div>
+
+                {owned && (
+                  <div className={'explore-card-overlay explore-card-added-overlay' + (addedAs ? ` status-${addedAs}` : '')}>
+                    <span>{addedAs ? `✓ added · ${statusLabel(addedAs)}` : '✓ in library'}</span>
+                  </div>
+                )}
               </article>
             );
           })}
