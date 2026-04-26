@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { searchMedia, checkDuplicates } from '../../api.jsx';
-import { EntryForm } from './EntryFormModal.jsx';
+import { searchMedia, checkDuplicates, createEntry } from '../../api.jsx';
+import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 
 const SEARCH_SOURCES = [
@@ -37,8 +37,8 @@ function saveSources(set) {
   localStorage.setItem(LS_SOURCES_KEY, JSON.stringify([...set]));
 }
 
-export default function AddEntryModal({ onClose, onCreated }) {
-  const [tab,             setTab]             = useState('search');
+export default function AddEntryModal({ onClose, onCreated, initialEntry = null, initialTab = 'search', hideTabs = false }) {
+  const [tab,             setTab]             = useState(initialTab);
   const [query,           setQuery]           = useState('');
   const [selectedSources, setSelectedSources] = useState(() => loadSavedSources());
   const [extended,        setExtended]        = useState(false);
@@ -124,6 +124,12 @@ export default function AddEntryModal({ onClose, onCreated }) {
     onClose();
   }
 
+  async function handleManualSubmit(form) {
+    const created = await createEntry(formToPayload(form));
+    onCreated(created);
+    onClose();
+  }
+
   const tabStyle = (t) => ({
     background: 'none',
     border: 'none',
@@ -154,10 +160,12 @@ export default function AddEntryModal({ onClose, onCreated }) {
           <button className="icon-btn" onClick={onClose}>✕</button>
         </div>
 
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-          <button style={tabStyle('search')} onClick={() => setTab('search')}>Auto Search</button>
-          <button style={tabStyle('manual')} onClick={() => setTab('manual')}>Manual Entry</button>
-        </div>
+        {!hideTabs && (
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+            <button style={tabStyle('search')} onClick={() => setTab('search')}>Auto Search</button>
+            <button style={tabStyle('manual')} onClick={() => setTab('manual')}>Manual Entry</button>
+          </div>
+        )}
 
         <div className="modal-body">
           {/* ── Auto-search tab ── */}
@@ -296,9 +304,10 @@ export default function AddEntryModal({ onClose, onCreated }) {
 
           {tab === 'manual' && (
             <EntryForm
-              entry={null}
-              onCancel={() => setTab('search')}
-              onSaved={(created) => { onCreated(created); onClose(); }}
+              entry={initialEntry}
+              onCancel={() => initialTab === 'manual' ? onClose() : setTab('search')}
+              onSubmit={handleManualSubmit}
+              submitLabel="Add Entry"
             />
           )}
 

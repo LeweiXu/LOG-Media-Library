@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getExplore, getSettings, createEntry } from '../api.jsx';
+import { getExplore, getSettings } from '../api.jsx';
 import { MEDIUMS } from '../utils.jsx';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
+import AddEntryModal from './components/AddEntryModal.jsx';
 
 const QUICK_STATUSES = [
   { value: 'planned',   label: '+ Planned',   hint: 'Add to your plan list' },
@@ -26,6 +27,7 @@ export default function Explore() {
   // Per-card UI state — keyed by stable index because explore items have no DB id
   // until added. Tracks: 'idle' | 'adding' | 'added:<status>' | 'error:<msg>'
   const [cardState, setCardState] = useState({});
+  const [pendingAdd, setPendingAdd] = useState(null);
   // Bumped on every Refresh — also flips refreshFlag so the next fetch
   // bypasses the server-side per-medium cache.
   const [seed, setSeed] = useState(() => newSeed());
@@ -78,26 +80,38 @@ export default function Explore() {
     setSeed(newSeed());
   };
 
-  async function quickAdd(idx, item, statusValue) {
-    setCardState(s => ({ ...s, [idx]: 'adding' }));
-    try {
-      await createEntry({
-        title:           item.title,
-        medium:          item.medium || null,
-        origin:          item.origin || null,
-        year:            item.year ?? null,
-        cover_url:       item.cover_url || null,
-        external_id:     item.external_id || null,
-        source:          item.source || null,
-        external_url:    item.external_url || null,
-        genres:          item.genres || null,
-        external_rating: item.external_rating ?? null,
-        status:          statusValue,
-      });
-      setCardState(s => ({ ...s, [idx]: `added:${statusValue}` }));
-    } catch (e) {
-      setCardState(s => ({ ...s, [idx]: `error:${e.message}` }));
-    }
+  function entryFromExploreItem(item, statusValue) {
+    return {
+      title:           item.title           || '',
+      medium:          item.medium          || '',
+      origin:          item.origin          || '',
+      status:          statusValue,
+      year:            item.year            || '',
+      rating:          '',
+      progress:        statusValue === 'completed' && item.total ? item.total : '',
+      total:           item.total           || '',
+      cover_url:       item.cover_url       || '',
+      notes:           '',
+      external_id:     item.external_id     || '',
+      source:          item.source          || '',
+      external_url:    item.external_url    || '',
+      genres:          item.genres          || '',
+      external_rating: item.external_rating ?? '',
+    };
+  }
+
+  function openAddModal(idx, item, statusValue) {
+    setPendingAdd({
+      idx,
+      status: statusValue,
+      entry: entryFromExploreItem(item, statusValue),
+    });
+  }
+
+  function handleEntryCreated(created) {
+    if (!pendingAdd) return;
+    setCardState(s => ({ ...s, [pendingAdd.idx]: `added:${pendingAdd.status}` }));
+    setPendingAdd(null);
   }
 
   return (
@@ -221,8 +235,7 @@ export default function Explore() {
                           <button
                             key={qs.value}
                             className="icon-btn"
-                            disabled={state === 'adding'}
-                            onClick={() => quickAdd(idx, item, qs.value)}
+                            onClick={() => openAddModal(idx, item, qs.value)}
                             title={qs.hint}
                           >
                             {qs.label}
@@ -294,6 +307,16 @@ export default function Explore() {
           </>
         )}
       </aside>
+
+      {pendingAdd && (
+        <AddEntryModal
+          initialTab="manual"
+          initialEntry={pendingAdd.entry}
+          hideTabs
+          onClose={() => setPendingAdd(null)}
+          onCreated={handleEntryCreated}
+        />
+      )}
     </div>
   );
 }
