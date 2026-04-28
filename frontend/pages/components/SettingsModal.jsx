@@ -212,56 +212,21 @@ export default function SettingsModal({
 
         <div className="modal-body">
           <p className="settings-section-label">Display</p>
-          <div className="form-row-2" style={{ marginBottom: 14 }}>
-            <div>
-              <label className="form-label">Theme</label>
-              <select
-                className="form-input"
-                value={theme || 'dark'}
-                onChange={e => onThemeChange?.(e.target.value)}
-              >
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-              {confirmLogout ? (
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
-                  <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    style={{ padding: '6px 10px' }}
-                    onClick={handleLogoutClick}
-                    disabled={loggingOut}
-                  >
-                    {loggingOut ? '…' : 'Yes, log out'}
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    style={{ padding: '6px 10px' }}
-                    onClick={() => setConfirmLogout(false)}
-                    disabled={loggingOut}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setConfirmLogout(true)}
-                >
-                  Log out
-                </button>
-              )}
-            </div>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <label className="form-label">Theme</label>
+            <select
+              className="form-input"
+              value={theme || 'dark'}
+              onChange={e => onThemeChange?.(e.target.value)}
+            >
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
           </div>
 
           <div className="settings-divider" />
 
-          <p className="settings-section-label">Change Password</p>
+          <p className="settings-section-label">Authentication</p>
           <form onSubmit={handleChangePassword}>
             <div className="form-row">
               <label className="form-label">Current password</label>
@@ -288,6 +253,47 @@ export default function SettingsModal({
               </button>
             </div>
           </form>
+
+          <div className="settings-mobile-logout">
+            <div className="settings-divider" />
+            <div className="settings-auth-action">
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 13 }}>Log out</div>
+                <div style={{ fontSize: 11, color: 'var(--dim)' }}>End your current session on this device.</div>
+              </div>
+              {confirmLogout ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
+                  <button
+                    type="button"
+                    className="btn btn-danger-outline"
+                    style={{ padding: '6px 10px' }}
+                    onClick={handleLogoutClick}
+                    disabled={loggingOut}
+                  >
+                    {loggingOut ? '…' : 'Yes, log out'}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    style={{ padding: '6px 10px' }}
+                    onClick={() => setConfirmLogout(false)}
+                    disabled={loggingOut}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-danger-outline"
+                  onClick={() => setConfirmLogout(true)}
+                >
+                  Log out
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className="settings-divider" />
 

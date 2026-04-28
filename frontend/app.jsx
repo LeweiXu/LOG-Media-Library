@@ -14,6 +14,7 @@ export default function App() {
   const [online,         setOnline]         = useState(null);
   const [libraryFilters, setLibraryFilters] = useState({});
   const [showSettings,   setShowSettings]   = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -43,6 +44,8 @@ export default function App() {
   }
 
   function handleLogout() {
+    setShowLogoutConfirm(false);
+    setShowSettings(false);
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_username');
     setToken('');
@@ -112,15 +115,24 @@ export default function App() {
           {online === false && <span className="offline">● offline</span>}
           <span style={{ color: 'var(--dim)' }}>{BASE.slice(BASE.indexOf('//') + 2)}</span>
           {isAuthenticated ? (
-            <button
-              type="button"
-              className="topbar-user-btn"
-              onClick={() => setShowSettings(true)}
-              title="Settings"
-            >
-              <span className="topbar-user-icon" aria-hidden="true">⚙</span>
-              <span className="topbar-user-name">{username}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                className="topbar-user-btn"
+                onClick={() => setShowSettings(true)}
+                title="Settings"
+              >
+                <span className="topbar-user-icon" aria-hidden="true">⚙</span>
+                <span className="topbar-user-name">{username}</span>
+              </button>
+              <button
+                type="button"
+                className="btn-logout"
+                onClick={() => setShowLogoutConfirm(true)}
+              >
+                logout
+              </button>
+            </>
           ) : (
             <button className="topbar-login-btn" onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}>
               login
@@ -170,8 +182,32 @@ export default function App() {
           onDataDeleted={() => { setShowSettings(false); navigate('/library'); }}
           theme={theme}
           onThemeChange={t => setTheme(t === 'light' ? 'light' : 'dark')}
-          onLogout={() => { setShowSettings(false); handleLogout(); }}
+          onLogout={handleLogout}
         />
+      )}
+
+      {showLogoutConfirm && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowLogoutConfirm(false); }}>
+          <div className="modal confirm-modal">
+            <div className="modal-header">
+              <span className="modal-title">Log out</span>
+              <button className="icon-btn" onClick={() => setShowLogoutConfirm(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: '0 0 16px', color: 'var(--dim)', fontSize: 13 }}>
+                Are you sure you want to log out?
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button className="btn btn-outline" type="button" onClick={() => setShowLogoutConfirm(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-danger" type="button" onClick={handleLogout}>
+                  Log out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Footer ── */}

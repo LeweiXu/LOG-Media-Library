@@ -343,6 +343,16 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 
 .btn-outline:hover { border-color: var(--text); color: var(--text); }
 .btn-danger        { background: var(--red);    color: #fff; border: none; }
+.btn-danger-outline {
+  background: transparent;
+  color: var(--red);
+  border: 1px solid rgba(224, 86, 86, 0.6);
+}
+.btn-danger-outline:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(224, 86, 86, 0.08);
+}
 
 .btn-primary {
   background: var(--accent);
@@ -723,6 +733,7 @@ html.light .skeleton-pie::after {
 .modal-body  { padding: 18px; }
 
 .settings-modal { width: 540px; max-width: 95vw; }
+.confirm-modal { width: 360px; max-width: 95vw; }
 
 .settings-section-label {
   font-size: 10px;
@@ -814,6 +825,16 @@ html.light .skeleton-pie::after {
 
 .settings-choice-with-control {
   cursor: default;
+}
+
+.settings-mobile-logout { display: none; }
+
+.settings-auth-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 640px) {
@@ -1390,6 +1411,9 @@ a.explore-title:hover { color: var(--accent); }
     white-space: nowrap;
   }
   .topbar-user-btn .topbar-user-name { display: none !important; }
+  .topbar-right .btn-logout { display: none; }
+  .settings-mobile-logout { display: block; }
+  .settings-auth-action { align-items: flex-start; }
 
   /* Layouts collapse to single column; sidebars become drawers. */
   .layout-3col,
