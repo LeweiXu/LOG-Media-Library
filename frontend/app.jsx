@@ -114,7 +114,7 @@ export default function App() {
           {online === null && <span style={{ color: 'var(--dim)' }}>connecting…</span>}
           {online === true  && <span className="online">● online</span>}
           {online === false && <span className="offline">● offline</span>}
-          <span style={{ color: 'var(--dim)' }}>lingweispc.ddns.net:6443</span>
+          <span style={{ color: 'var(--dim)' }}>{BASE.slice(BASE.indexOf('//') + 2)}</span>
           <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
             {theme === 'dark' ? '○' : '●'}
           </button>

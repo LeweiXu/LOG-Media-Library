@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { changePassword, deleteAllEntries, getSettings, updateSettings } from '../../api.jsx';
+import {
+  changePassword, deleteAllEntries, getSettings, updateSettings,
+  getBackupStatus, runBackup,
+} from '../../api.jsx';
 import { MEDIUMS } from '../../utils.jsx';
 
 // Must match the options surfaced on the Library page.
@@ -29,9 +32,18 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState(false);
 
-  // Backup frequency UI is intentionally not wired to the backend yet —
-  // automatic backup scheduling is a follow-up change.
-  const [backupFreq, setBackupFreq] = useState('never');
+  // ── Periodic email backup ────────────────────────────────────────────
+  // Backup frequency is persisted via /auth/me/settings; the rest of the
+  // state (configured, last_backup_at, account email) comes from
+  // /backup/status which also reflects the server-side SMTP gate.
+  const [backupFreq,        setBackupFreq]        = useState('never');
+  const [backupConfigured,  setBackupConfigured]  = useState(false);
+  const [backupEmail,       setBackupEmail]       = useState('');
+  const [lastBackupAt,      setLastBackupAt]      = useState(null);
+  const [backupStatusReady, setBackupStatusReady] = useState(false);
+  const [backupRunning,     setBackupRunning]     = useState(false);
+  const [backupError,       setBackupError]       = useState('');
+  const [backupNotice,      setBackupNotice]      = useState('');
 
   // ── Live-bound user settings (Library + Explore) ──────────────────────
   const [exploreMedium,  setExploreMedium]  = useState('');
@@ -51,8 +63,26 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
         setExploreBy(s.explore_by || 'all');
         setLibrarySort(s.default_sort || 'updated_at');
         setLibraryPerPage(s.default_entries_per_page || 40);
+        setBackupFreq(s.backup_freq || 'never');
       } catch { /* ignore */ }
       finally { if (!cancelled) setPrefsLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Backup status comes from a separate endpoint so it reflects the
+  // server-side SMTP gate (which is independent of the user's prefs).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const b = await getBackupStatus();
+        if (cancelled) return;
+        setBackupConfigured(!!b.configured);
+        setBackupEmail(b.email || '');
+        setLastBackupAt(b.last_backup_at || null);
+      } catch { /* ignore — UI degrades gracefully */ }
+      finally { if (!cancelled) setBackupStatusReady(true); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -70,6 +100,7 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
         explore_by:               exploreBy,
         default_sort:             librarySort,
         default_entries_per_page: libraryPerPage,
+        backup_freq:              backupFreq,
       })
         .then(saved => onSettingsChanged?.(saved))
         .catch(() => {});
@@ -77,7 +108,9 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
     return () => clearTimeout(id);
   }, [
     exploreMedium, exploreBy,
-    librarySort, libraryPerPage, prefsLoaded, onSettingsChanged,
+    librarySort, libraryPerPage,
+    backupFreq,
+    prefsLoaded, onSettingsChanged,
   ]);
 
   const [screen, setScreen] = useState('settings'); // 'settings' | 'confirm-delete'
@@ -97,6 +130,21 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRunBackup() {
+    setBackupError('');
+    setBackupNotice('');
+    setBackupRunning(true);
+    try {
+      const b = await runBackup();
+      setLastBackupAt(b.last_backup_at || null);
+      setBackupNotice(`Backup sent to ${b.email}.`);
+    } catch (err) {
+      setBackupError(err.message || String(err));
+    } finally {
+      setBackupRunning(false);
     }
   }
 
@@ -255,19 +303,52 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
           <div className="settings-divider" />
 
           <p className="settings-section-label">Periodic Backup</p>
-          <div className="form-row">
-            <label className="form-label">Backup frequency</label>
-            <select className="form-input" value={backupFreq}
-              onChange={e => setBackupFreq(e.target.value)}>
-              <option value="never">Never</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+          {backupStatusReady && !backupConfigured && (
+            <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>
+              Email backup is not configured on this server. See{' '}
+              <code>backend/BACKUP.md</code> for setup instructions.
+            </div>
+          )}
+          {backupStatusReady && backupConfigured && (
+            <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>
+              A CSV copy of your library will be emailed to{' '}
+              <span style={{ color: 'var(--fg)' }}>{backupEmail}</span> on the
+              frequency below.
+            </div>
+          )}
+          <div className="form-row-2">
+            <div>
+              <label className="form-label">Backup frequency</label>
+              <select
+                className="form-input"
+                value={backupFreq}
+                onChange={e => setBackupFreq(e.target.value)}
+                disabled={!prefsLoaded || !backupStatusReady || !backupConfigured}
+              >
+                <option value="never">Never</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={handleRunBackup}
+                disabled={!backupConfigured || backupRunning}
+              >
+                {backupRunning ? 'Sending…' : 'Back up now'}
+              </button>
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--dim)' }}>
-            Automatic backup scheduling coming soon.
+          <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 6 }}>
+            {lastBackupAt
+              ? `Last backup: ${new Date(lastBackupAt).toLocaleString()}`
+              : 'No backup has been sent yet.'}
           </div>
+          {backupError  && <div className="settings-msg settings-msg-error">{backupError}</div>}
+          {backupNotice && <div className="settings-msg settings-msg-success">{backupNotice}</div>}
 
           <div className="settings-divider" />
 

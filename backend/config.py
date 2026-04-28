@@ -27,9 +27,27 @@ class Settings(BaseSettings):
     RAWG_API_KEY: str = ""
     COMICVINE_API_KEY: str = ""
 
+    # ── Email backup (all optional — feature is disabled if any are missing) ──
+    # See backend/BACKUP.md for setup instructions (Gmail app password etc.).
+    SMTP_HOST:     str = ""
+    SMTP_PORT:     int = 587
+    SMTP_USER:     str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM:     str = ""    # falls back to SMTP_USER if blank
+    # Frequency the scheduler ticks at — independent of per-user backup_freq.
+    BACKUP_TICK_SECONDS: int = 3600
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.SMTP_HOST and self.SMTP_USER and self.SMTP_PASSWORD)
+
+    @property
+    def smtp_from_address(self) -> str:
+        return self.SMTP_FROM or self.SMTP_USER
 
 
 @lru_cache

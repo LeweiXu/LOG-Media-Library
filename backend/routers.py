@@ -6,7 +6,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from db import get_db
 from models import User
+from config import get_settings as get_app_settings
 from schemas import (
+    BackupStatus,
     EntryCreate, EntryListResponse, EntryRead, EntryUpdate,
     ImportConfirmRequest, ImportConfirmResponse, ImportPreviewResponse,
     SearchResult, StatsResponse,
@@ -24,6 +26,8 @@ from services.export_service import export_entries_csv
 from services.import_service import preview_import, confirm_import, auto_import_rows
 from services.import_mal_service import import_mal_rows, confirm_mal_import
 from services.explore_service import explore_media
+from services.backup_service import run_backup_for_user
+from services.email_service import SMTPNotConfigured
 
 router = APIRouter()
 
@@ -287,6 +291,55 @@ async def explore(
         limit=limit,
         seed=seed or None,
         refresh=refresh,
+    )
+
+# ── Backup endpoints ──────────────────────────────────────────────────────────
+
+@router.get("/backup/status", response_model=BackupStatus)
+def backup_status(
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Report whether SMTP is configured and when this user last backed up.
+
+    The frontend uses ``configured`` to decide whether to enable the
+    frequency selector and "Back up now" button.
+    """
+    return BackupStatus(
+        configured     = get_app_settings().smtp_configured,
+        backup_freq    = current_user.backup_freq or "never",
+        last_backup_at = current_user.last_backup_at,
+        email          = current_user.email,
+    )
+
+
+@router.post("/backup/run", response_model=BackupStatus)
+def backup_run(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Manually trigger a backup right now (independent of the schedule)."""
+    if not get_app_settings().smtp_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email backup is not configured on this server.",
+        )
+    try:
+        run_backup_for_user(db, current_user)
+    except SMTPNotConfigured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email backup is not configured on this server.",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to send backup email: {exc}",
+        )
+    return BackupStatus(
+        configured     = True,
+        backup_freq    = current_user.backup_freq or "never",
+        last_backup_at = current_user.last_backup_at,
+        email          = current_user.email,
     )
 
 # ── Stats endpoint ────────────────────────────────────────────────────────────

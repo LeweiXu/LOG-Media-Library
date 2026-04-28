@@ -272,6 +272,11 @@ export const deleteAllEntries = () => req('/entries', { method: 'DELETE' });
 export const getSettings    = ()        => req('/auth/me/settings');
 export const updateSettings = (patch)   => req('/auth/me/settings', { method: 'PUT', body: JSON.stringify(patch) });
 
+// ── Backup ────────────────────────────────────────────────────────────────────
+
+export const getBackupStatus = () => req('/backup/status');
+export const runBackup       = () => req('/backup/run', { method: 'POST' });
+
 // ── Explore ───────────────────────────────────────────────────────────────────
 
 // Bias dimension and "hide owned" are server-side preferences read from the

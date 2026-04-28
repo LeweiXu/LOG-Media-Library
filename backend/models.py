@@ -22,6 +22,10 @@ class User(Base):
     explore_hide_in_library:  Mapped[bool]       = mapped_column(Boolean,    nullable=False, server_default="true")
     # Which dimension the Explore page biases toward — "all" / "genre" / "medium" / "origin".
     explore_by:               Mapped[str]        = mapped_column(String(20), nullable=False, server_default="all")
+    # Timestamp of the last successful email backup (NULL = never run).
+    last_backup_at:           Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
     def __repr__(self) -> str:
         return f"<User username={self.username!r} email={self.email!r}>"
 

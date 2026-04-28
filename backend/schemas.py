@@ -230,6 +230,17 @@ class UserSettingsUpdate(BaseModel):
             raise ValueError(f"explore_by must be one of {sorted(_VALID_EXPLORE_BY)}")
         return v
 
+# --- Backup Schemas ---
+
+class BackupStatus(BaseModel):
+    """Reported by GET /backup/status — drives the Settings UI gating."""
+    # True iff SMTP_HOST/USER/PASSWORD are all set on the server.
+    configured:     bool
+    backup_freq:    str
+    last_backup_at: Optional[datetime] = None
+    # The address backups will be sent to (the user's account email).
+    email:          str
+
 # --- Search Schemas ---
 from pydantic import BaseModel
 class SearchResult(BaseModel):

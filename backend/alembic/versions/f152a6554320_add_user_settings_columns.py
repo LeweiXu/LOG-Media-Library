@@ -2,7 +2,7 @@
 
 Adds settings columns to the ``users`` table:
 
-  * backup_freq               — periodic backup cadence (UI lands later)
+  * backup_freq               — periodic backup frequency (UI lands later)
   * default_sort              — preferred Library sort column (UI lands later)
   * default_entries_per_page  — preferred Library page size (UI lands later)
   * explore_default_medium    — default medium filter on the Explore page
