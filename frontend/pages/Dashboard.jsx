@@ -426,8 +426,8 @@ export default function DashboardAlt({ onFilterChange }) {
                                 <span className="media-name">{e.title}</span>
                             </div>
                             </td>
-                            <td><span style={{ color: 'var(--dim)' }}>{e.medium ?? '—'}</span></td>
-                            <td onClick={ev => ev.stopPropagation()}>
+                            <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium ?? '—'}</span></td>
+                            <td className="col-progress" onClick={ev => ev.stopPropagation()}>
                             {isEditingProg ? (
                                 <input
                                 className="inline-select"
