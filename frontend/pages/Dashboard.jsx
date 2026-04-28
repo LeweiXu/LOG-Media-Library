@@ -28,6 +28,8 @@ export default function DashboardAlt({ onFilterChange }) {
   const [detailEntry,     setDetailEntry]     = useState(null);
   const [editingProgress, setEditingProgress] = useState(null); // { id, value }
   const [editingRating,   setEditingRating]   = useState(null); // { id, value }
+  // Mobile drawer state — '', 'left', or 'right'.
+  const [drawer,          setDrawer]          = useState('');
   const [barsReady,       setBarsReady]       = useState(false);
   const barsRef = useRef(null);
 
@@ -151,7 +153,10 @@ export default function DashboardAlt({ onFilterChange }) {
   const s       = stats || {};
   const maxBar  = monthBarsData.length ? Math.max(...monthBarsData.map(m => m.count), 1) : 1;
   return (
-    <div className="layout-3col">
+    <div className="layout-3col" data-drawer={drawer}>
+      {drawer && (
+        <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
+      )}
       {/* ── Left sidebar ── */}
       <div className="sidebar-left">
         <div className="sidebar-section">
@@ -207,10 +212,26 @@ export default function DashboardAlt({ onFilterChange }) {
       <div className="main-content">
         <div className="page-head">
           <div className="page-head-left">
+            <button
+              type="button"
+              className="drawer-toggle"
+              onClick={() => setDrawer(d => d === 'left' ? '' : 'left')}
+              aria-label="Toggle filters"
+              title="Filters"
+            >☰ Filters</button>
             <span className="page-title">Dashboard</span>
             <span className="page-desc">personal media log</span>
           </div>
-          <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>
+          <div className="page-head-mobile">
+            <button
+              type="button"
+              className="drawer-toggle"
+              onClick={() => setDrawer(d => d === 'right' ? '' : 'right')}
+              aria-label="Toggle summary"
+              title="Summary"
+            >⋯</button>
+            <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>
+          </div>
         </div>
 
         {error && (
@@ -224,6 +245,7 @@ export default function DashboardAlt({ onFilterChange }) {
         {!error && loading && (
           <div className="skeleton-page" aria-label="Loading dashboard">
             <div
+              className="dash-pair-skeleton"
               style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
@@ -266,6 +288,7 @@ export default function DashboardAlt({ onFilterChange }) {
           <>
           {/* Side-by-side layout for the two tables */}
             <div
+              className="dash-pair"
               style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px', alignItems: 'start' }}>
 
             {/* Currently Consuming */}
@@ -275,10 +298,14 @@ export default function DashboardAlt({ onFilterChange }) {
                 ? <div style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 24 }}>No active entries.</div>
                 : (
                     <>
-                    <table className="media-table">
+                    <table className="media-table" data-mobile-show="progress">
                     <thead>
                         <tr>
-                        <th>Title</th><th>Type</th><th>Progress</th><th>Status</th><th>Rating</th>
+                        <th>Title</th>
+                        <th className="col-medium">Type</th>
+                        <th className="col-progress">Progress</th>
+                        <th className="col-status">Status</th>
+                        <th className="col-rating">Rating</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -294,8 +321,8 @@ export default function DashboardAlt({ onFilterChange }) {
                                 <span className="media-name">{e.title}</span>
                                 </div>
                             </td>
-                            <td><span style={{ color: 'var(--dim)' }}>{e.medium ?? '—'}</span></td>
-                            <td onClick={ev => ev.stopPropagation()}>
+                            <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium ?? '—'}</span></td>
+                            <td className="col-progress" onClick={ev => ev.stopPropagation()}>
                                 {isEditingProg ? (
                                 <input
                                     className="inline-select"
@@ -324,13 +351,13 @@ export default function DashboardAlt({ onFilterChange }) {
                                 </div>
                                 )}
                             </td>
-                            <td onClick={ev => ev.stopPropagation()}>
+                            <td className="col-status" onClick={ev => ev.stopPropagation()}>
                                 <select className="inline-select" value={e.status}
                                 onChange={ev => handleStatusChange(e.id, ev.target.value)}>
                                 {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                                 </select>
                             </td>
-                            <td onClick={ev => ev.stopPropagation()}>
+                            <td className="col-rating" onClick={ev => ev.stopPropagation()}>
                                 {isEditingRating ? (
                                 <input
                                     className="inline-select"
@@ -376,10 +403,14 @@ export default function DashboardAlt({ onFilterChange }) {
                 ? <div style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 24 }}>No planned entries.</div>
                 : (
                     <>
-                    <table className="media-table">
+                    <table className="media-table" data-mobile-show="progress">
                     <thead>
                         <tr>
-                        <th>Title</th><th>Type</th><th>Progress</th><th>Status</th><th>Rating</th>
+                        <th>Title</th>
+                        <th className="col-medium">Type</th>
+                        <th className="col-progress">Progress</th>
+                        <th className="col-status">Status</th>
+                        <th className="col-rating">Rating</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -425,13 +456,13 @@ export default function DashboardAlt({ onFilterChange }) {
                                 </div>
                             )}
                             </td>
-                            <td onClick={ev => ev.stopPropagation()}>
+                            <td className="col-status" onClick={ev => ev.stopPropagation()}>
                             <select className="inline-select" value={e.status}
                                 onChange={ev => handleStatusChange(e.id, ev.target.value)}>
                                 {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                             </select>
                             </td>
-                            <td onClick={ev => ev.stopPropagation()}>
+                            <td className="col-rating" onClick={ev => ev.stopPropagation()}>
                             {isEditingRating ? (
                                 <input
                                 className="inline-select"
@@ -477,11 +508,15 @@ export default function DashboardAlt({ onFilterChange }) {
       {recent.length === 0
       ? <div style={{ color: 'var(--dim)', fontSize: 12 }}>No completed entries yet.</div>
       : (
-        <table className="media-table">
+        <table className="media-table" data-mobile-show="completed">
                 <thead>
                     <tr>
-                    <th>Title</th><th>Type</th><th>Progress</th><th>Completed</th>
-                    <th>Status</th><th>Rating</th>
+                    <th>Title</th>
+                    <th className="col-medium">Type</th>
+                    <th className="col-progress">Progress</th>
+                    <th className="col-completed">Completed</th>
+                    <th className="col-status">Status</th>
+                    <th className="col-rating">Rating</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -497,8 +532,8 @@ export default function DashboardAlt({ onFilterChange }) {
                             <span className="media-name">{e.title}</span>
                         </div>
                         </td>
-                        <td><span style={{ color: 'var(--dim)' }}>{[e.medium, e.origin].filter(Boolean).join(' / ')}</span></td>
-                        <td onClick={ev => ev.stopPropagation()}>
+                        <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{[e.medium, e.origin].filter(Boolean).join(' / ')}</span></td>
+                        <td className="col-progress" onClick={ev => ev.stopPropagation()}>
                         {isEditingProg ? (
                             <input
                             className="inline-select"
@@ -527,9 +562,9 @@ export default function DashboardAlt({ onFilterChange }) {
                             </div>
                         )}
                         </td>
-                        <td><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at || e.updated_at)}</span></td>
-                        <td><span className={badgeClass(e.status)}>{statusLabel(e.status)}</span></td>
-                        <td onClick={ev => ev.stopPropagation()}>
+                        <td className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at || e.updated_at)}</span></td>
+                        <td className="col-status"><span className={badgeClass(e.status)}>{statusLabel(e.status)}</span></td>
+                        <td className="col-rating" onClick={ev => ev.stopPropagation()}>
                         {isEditingRating ? (
                             <input
                             className="inline-select"

@@ -24,7 +24,18 @@ const EXPLORE_BY_OPTIONS = [
   { key: 'origin', label: 'Origin' },
 ];
 
-export default function SettingsModal({ onClose, onDataDeleted, onSettingsChanged }) {
+export default function SettingsModal({
+  onClose, onDataDeleted, onSettingsChanged,
+  theme, onThemeChange, onLogout,
+}) {
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [loggingOut,    setLoggingOut]    = useState(false);
+
+  function handleLogoutClick() {
+    setLoggingOut(true);
+    try { onLogout?.(); } finally { setLoggingOut(false); }
+  }
+
   const [currentPw,  setCurrentPw]  = useState('');
   const [newPw,      setNewPw]      = useState('');
   const [confirmPw,  setConfirmPw]  = useState('');
@@ -36,14 +47,12 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
   // Backup frequency is persisted via /auth/me/settings; the rest of the
   // state (configured, last_backup_at, account email) comes from
   // /backup/status which also reflects the server-side SMTP gate.
-  const [backupFreq,        setBackupFreq]        = useState('never');
-  const [backupConfigured,  setBackupConfigured]  = useState(false);
-  const [backupEmail,       setBackupEmail]       = useState('');
-  const [lastBackupAt,      setLastBackupAt]      = useState(null);
-  const [backupStatusReady, setBackupStatusReady] = useState(false);
-  const [backupRunning,     setBackupRunning]     = useState(false);
-  const [backupError,       setBackupError]       = useState('');
-  const [backupNotice,      setBackupNotice]      = useState('');
+  const [backupFreq,    setBackupFreq]    = useState('never');
+  const [backupEmail,   setBackupEmail]   = useState('');
+  const [lastBackupAt,  setLastBackupAt]  = useState(null);
+  const [backupRunning, setBackupRunning] = useState(false);
+  const [backupError,   setBackupError]   = useState('');
+  const [backupNotice,  setBackupNotice]  = useState('');
 
   // ── Live-bound user settings (Library + Explore) ──────────────────────
   const [exploreMedium,  setExploreMedium]  = useState('');
@@ -70,19 +79,16 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
     return () => { cancelled = true; };
   }, []);
 
-  // Backup status comes from a separate endpoint so it reflects the
-  // server-side SMTP gate (which is independent of the user's prefs).
+  // Pull last_backup_at + the destination email so the UI can show them.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const b = await getBackupStatus();
         if (cancelled) return;
-        setBackupConfigured(!!b.configured);
         setBackupEmail(b.email || '');
         setLastBackupAt(b.last_backup_at || null);
       } catch { /* ignore — UI degrades gracefully */ }
-      finally { if (!cancelled) setBackupStatusReady(true); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -205,6 +211,56 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
         </div>
 
         <div className="modal-body">
+          <p className="settings-section-label">Display</p>
+          <div className="form-row-2" style={{ marginBottom: 14 }}>
+            <div>
+              <label className="form-label">Theme</label>
+              <select
+                className="form-input"
+                value={theme || 'dark'}
+                onChange={e => onThemeChange?.(e.target.value)}
+              >
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              {confirmLogout ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    style={{ padding: '6px 10px' }}
+                    onClick={handleLogoutClick}
+                    disabled={loggingOut}
+                  >
+                    {loggingOut ? '…' : 'Yes, log out'}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    style={{ padding: '6px 10px' }}
+                    onClick={() => setConfirmLogout(false)}
+                    disabled={loggingOut}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setConfirmLogout(true)}
+                >
+                  Log out
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="settings-divider" />
+
           <p className="settings-section-label">Change Password</p>
           <form onSubmit={handleChangePassword}>
             <div className="form-row">
@@ -303,19 +359,11 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
           <div className="settings-divider" />
 
           <p className="settings-section-label">Periodic Backup</p>
-          {backupStatusReady && !backupConfigured && (
-            <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>
-              Email backup is not configured on this server. See{' '}
-              <code>backend/BACKUP.md</code> for setup instructions.
-            </div>
-          )}
-          {backupStatusReady && backupConfigured && (
-            <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>
-              A CSV copy of your library will be emailed to{' '}
-              <span style={{ color: 'var(--fg)' }}>{backupEmail}</span> on the
-              frequency below.
-            </div>
-          )}
+          <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>
+            A CSV copy of your library will be emailed to{' '}
+            <span style={{ color: 'var(--fg)' }}>{backupEmail || 'leweixu@gmail.com'}</span>
+            {' '}on the frequency below.
+          </div>
           <div className="form-row-2">
             <div>
               <label className="form-label">Backup frequency</label>
@@ -323,7 +371,7 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
                 className="form-input"
                 value={backupFreq}
                 onChange={e => setBackupFreq(e.target.value)}
-                disabled={!prefsLoaded || !backupStatusReady || !backupConfigured}
+                disabled={!prefsLoaded}
               >
                 <option value="never">Never</option>
                 <option value="daily">Daily</option>
@@ -336,7 +384,7 @@ export default function SettingsModal({ onClose, onDataDeleted, onSettingsChange
                 type="button"
                 className="btn"
                 onClick={handleRunBackup}
-                disabled={!backupConfigured || backupRunning}
+                disabled={backupRunning}
               >
                 {backupRunning ? 'Sending…' : 'Back up now'}
               </button>

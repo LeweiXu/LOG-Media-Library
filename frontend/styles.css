@@ -961,6 +961,13 @@ html.light .skeleton-pie::after {
 .chart-box       { background: var(--surface); border: 1px solid var(--border); padding: 16px; }
 .chart-box-title { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
 
+/* Recharts containers need an explicit pixel height — these classes keep
+ * the desktop sizing identical to the old hardcoded `height={…}` props
+ * and let the mobile media query at the bottom of this file grow them to
+ * roughly match the (taller) bar-list and pie chart boxes when stacked. */
+.chart-canvas-month { height: 180px; }
+.chart-canvas-year  { height: 160px; }
+
 /* recharts overrides */
 .recharts-cartesian-axis-tick text    { fill: var(--dim) !important; font-size: 10px !important; }
 .recharts-cartesian-grid-horizontal line,
@@ -1321,4 +1328,182 @@ a.explore-title:hover { color: var(--accent); }
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+/* ── Mobile drawer toggle button ─────────────────────────────────────────── */
+/* Placed in the page header on small screens. Hidden on desktop. */
+.drawer-toggle {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: color 0.15s, border-color 0.15s;
+  display: none; /* shown only on mobile via the media query below */
+}
+.drawer-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+.page-head-mobile {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Backdrop behind an open drawer — clicks dismiss the drawer. */
+.drawer-backdrop {
+  display: none;
+  position: fixed;
+  inset: 40px 0 0 0; /* below the topbar */
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 90;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Responsive ≤720px
+ * ────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  /* App shell padding shrinks. */
+  .topbar  { padding: 0 8px; gap: 0; }
+  .topbar-logo { margin-right: 6px; font-size: 13px; flex-shrink: 0; }
+  .topbar-sep { display: none; }
+  /* The "we're online · backend hostname" label is decorative — drop it
+   * to make room for nav. The dot-status pill on its own is enough. */
+  .topbar-right > span:nth-of-type(2),
+  .topbar-right > span:first-of-type { display: none; }
+  .topbar-right { gap: 6px; flex-shrink: 0; margin-left: 8px; }
+  /* Nav scrolls horizontally so all four tabs are reachable on phones. */
+  .topbar-nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topbar-nav::-webkit-scrollbar { display: none; }
+  .topbar-nav a {
+    padding: 0 10px;
+    font-size: 11px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .topbar-user-btn .topbar-user-name { display: none !important; }
+
+  /* Layouts collapse to single column; sidebars become drawers. */
+  .layout-3col,
+  .layout-2col {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .sidebar-left,
+  .sidebar-right {
+    position: fixed;
+    top: 40px;            /* below topbar */
+    bottom: 0;
+    width: 84vw;
+    max-width: 320px;
+    z-index: 95;
+    transition: transform 0.22s ease;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
+  }
+  .sidebar-left  { left: 0;  transform: translateX(-100%); border-right: 1px solid var(--border); }
+  .sidebar-right { right: 0; transform: translateX( 100%); border-left:  1px solid var(--border); }
+
+  /* Open states: any layout with `data-drawer="left"` or `"right"` slides
+   * the matching sidebar in and shows the backdrop. */
+  [data-drawer="left"]  .sidebar-left  { transform: translateX(0); }
+  [data-drawer="right"] .sidebar-right { transform: translateX(0); }
+  [data-drawer="left"]  .drawer-backdrop,
+  [data-drawer="right"] .drawer-backdrop { display: block; }
+
+  .drawer-toggle { display: inline-flex; align-items: center; }
+
+  .main-content { padding: 14px 12px; }
+
+  /* Page header tightens and the +Add button shrinks. */
+  .page-head { margin-bottom: 14px; padding-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  .page-title { font-size: 14px; }
+  .page-desc  { display: none; }
+  .page-head .btn { padding: 5px 10px; font-size: 11px; }
+
+  /* Filter bar: search input shrinks, sort row wraps cleanly. */
+  .filter-bar input { width: 100% !important; }
+  .filter-bar select { font-size: 11px; }
+
+  /* ── Mobile column hiding on the Library/Dashboard tables ──
+   * Every <th>/<td> opts in via a class like `.col-medium`. By default on
+   * mobile they are all hidden; a parent <table data-mobile-show="rating">
+   * reveals exactly that one column. The cover/title cell is always
+   * visible; rating is also always visible on mobile because the Library
+   * page treats it as the "most useful at a glance" column. The actions
+   * cell is hidden — delete/edit live inside the entry detail modal. */
+  .media-table th.col-medium,    .media-table td.col-medium,
+  .media-table th.col-year,      .media-table td.col-year,
+  .media-table th.col-progress,  .media-table td.col-progress,
+  .media-table th.col-status,    .media-table td.col-status,
+  .media-table th.col-updated,   .media-table td.col-updated,
+  .media-table th.col-completed, .media-table td.col-completed {
+    display: none;
+  }
+  .media-table th.action-cell,
+  .media-table td.action-cell { display: none; }
+  .media-table[data-mobile-show="medium"]    th.col-medium,
+  .media-table[data-mobile-show="medium"]    td.col-medium,
+  .media-table[data-mobile-show="year"]      th.col-year,
+  .media-table[data-mobile-show="year"]      td.col-year,
+  .media-table[data-mobile-show="progress"]  th.col-progress,
+  .media-table[data-mobile-show="progress"]  td.col-progress,
+  .media-table[data-mobile-show="rating"]    th.col-rating,
+  .media-table[data-mobile-show="rating"]    td.col-rating,
+  .media-table[data-mobile-show="status"]    th.col-status,
+  .media-table[data-mobile-show="status"]    td.col-status,
+  .media-table[data-mobile-show="updated"]   th.col-updated,
+  .media-table[data-mobile-show="updated"]   td.col-updated,
+  .media-table[data-mobile-show="completed"] th.col-completed,
+  .media-table[data-mobile-show="completed"] td.col-completed {
+    display: table-cell;
+  }
+  .media-table th, .media-table td { padding: 6px 4px; }
+  .media-table .action-cell { min-width: 0; }
+  .media-table .action-cell-inner { gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .cover-thumb { width: 24px; height: 34px; }
+  .media-name { font-size: 12px; }
+
+  /* Dashboard: the side-by-side Current/Planned grid stacks. */
+  .dash-pair { grid-template-columns: minmax(0, 1fr) !important; gap: 14px !important; }
+  /* Skeleton dashboard grid stacks too (it's an inline style, so we override
+   * via this scoped helper class added on the wrapper). */
+  .dash-pair-skeleton { grid-template-columns: minmax(0, 1fr) !important; gap: 14px !important; }
+
+  /* Stat boxes shrink on the right panel (when it's open as a drawer). */
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+
+  /* Modals: maximise width but keep a tiny gutter. */
+  .modal { width: 96vw !important; max-width: 96vw !important; }
+  .settings-modal { width: 96vw !important; }
+
+  /* Footer: collapse to a single line, smaller. */
+  .app-footer { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 12px; font-size: 10px; }
+  .app-footer a { font-size: 10px !important; }
+
+  /* Statistics page: 2x2 stat grid, charts stack vertically. */
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .charts-2col { grid-template-columns: minmax(0, 1fr); }
+  .chart-section { padding: 0; }
+  .chart-box { padding: 12px; }
+  .stats-card { padding: 10px; }
+  .stats-card-val { font-size: 22px; }
+
+  /* The full-width recharts panels (Consumed per Month, Entries by Release
+   * Year) ship a small fixed height tuned for desktop — too short once
+   * they're full-width on a phone and the bar-list / pie boxes grow to
+   * fit their contents. Bump them so the column of stacked panels reads
+   * with consistent visual weight. */
+  .chart-canvas-month { height: 280px; }
+  .chart-canvas-year  { height: 280px; }
+  /* Top Rated is a table — stretch the row height so its overall box
+   * height lines up with the others. */
+  .chart-section .chart-box .media-table td,
+  .chart-section .chart-box .media-table th { padding: 12px 6px; }
 }

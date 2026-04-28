@@ -323,15 +323,17 @@ export default function Statistics() {
                   </span>
                 </div>
                 <div className="chart-box">
-                  <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={filteredMonths} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                      <CartesianGrid vertical={false} stroke="var(--border)" />
-                      <XAxis dataKey="label" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                      <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                      <Bar dataKey="count" fill="var(--accent)" opacity={0.7} radius={[2, 2, 0, 0]} name="Consumed" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <div className="chart-canvas chart-canvas-month">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={filteredMonths} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                        <CartesianGrid vertical={false} stroke="var(--border)" />
+                        <XAxis dataKey="label" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                        <Bar dataKey="count" fill="var(--accent)" opacity={0.7} radius={[2, 2, 0, 0]} name="Consumed" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
             )}
@@ -451,15 +453,17 @@ export default function Statistics() {
               <div className="chart-section">
                 <div className="chart-section-title">Entries by Release Year</div>
                 <div className="chart-box">
-                  <ResponsiveContainer width="100%" height={160}>
-                    <BarChart data={s.by_year} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                      <CartesianGrid vertical={false} stroke="var(--border)" />
-                      <XAxis dataKey="year" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                      <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                      <Bar dataKey="count" fill="var(--green)" opacity={0.6} radius={[2, 2, 0, 0]} name="Entries" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <div className="chart-canvas chart-canvas-year">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={s.by_year} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                        <CartesianGrid vertical={false} stroke="var(--border)" />
+                        <XAxis dataKey="year" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                        <Bar dataKey="count" fill="var(--green)" opacity={0.6} radius={[2, 2, 0, 0]} name="Entries" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
             )}

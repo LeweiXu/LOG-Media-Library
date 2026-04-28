@@ -27,10 +27,6 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  function toggleTheme() {
-    setTheme(t => t === 'dark' ? 'light' : 'dark');
-  }
-
   // ── Auth state ─────────────────────────────────────────────────────────────
   const [token,         setToken]         = useState(() => localStorage.getItem('auth_token')    || '');
   const [username,      setUsername]      = useState(() => localStorage.getItem('auth_username') || '');
@@ -115,22 +111,16 @@ export default function App() {
           {online === true  && <span className="online">● online</span>}
           {online === false && <span className="offline">● offline</span>}
           <span style={{ color: 'var(--dim)' }}>{BASE.slice(BASE.indexOf('//') + 2)}</span>
-          <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
-            {theme === 'dark' ? '○' : '●'}
-          </button>
           {isAuthenticated ? (
-            <>
-              <button
-                type="button"
-                className="topbar-user-btn"
-                onClick={() => setShowSettings(true)}
-                title="Settings"
-              >
-                <span className="topbar-user-icon" aria-hidden="true">⚙</span>
-                <span className="topbar-user-name">{username}</span>
-              </button>
-              <button className="btn-logout" onClick={handleLogout}>logout</button>
-            </>
+            <button
+              type="button"
+              className="topbar-user-btn"
+              onClick={() => setShowSettings(true)}
+              title="Settings"
+            >
+              <span className="topbar-user-icon" aria-hidden="true">⚙</span>
+              <span className="topbar-user-name">{username}</span>
+            </button>
           ) : (
             <button className="topbar-login-btn" onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}>
               login
@@ -178,6 +168,9 @@ export default function App() {
         <SettingsModal
           onClose={() => setShowSettings(false)}
           onDataDeleted={() => { setShowSettings(false); navigate('/library'); }}
+          theme={theme}
+          onThemeChange={t => setTheme(t === 'light' ? 'light' : 'dark')}
+          onLogout={() => { setShowSettings(false); handleLogout(); }}
         />
       )}
 

@@ -58,6 +58,10 @@ export default function Library({ initialFilters = {} }) {
   const [editingProgress,setEditingProgress] = useState(null); // { id, value }
   const [editingRating,  setEditingRating]   = useState(null); // { id, value }
 
+  // Mobile drawer state — '', 'left', or 'right'. CSS reveals the matching
+  // sidebar based on the layout's `data-drawer` attribute.
+  const [drawer, setDrawer] = useState('');
+
   const [search,       setSearch]       = useState(() => searchParams.get('q') || (!hasUrlParams ? initialFilters.title : '') || '');
   const [statusFilter, setStatusFilter] = useState(() => validParam(searchParams.get('status'), STATUSES, !hasUrlParams ? initialFilters.status || '' : ''));
   const [mediumFilter, setMediumFilter] = useState(() => validParam(searchParams.get('medium'), MEDIUMS, !hasUrlParams ? initialFilters.medium || '' : ''));
@@ -215,8 +219,8 @@ export default function Library({ initialFilters = {} }) {
   const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); setOriginFilter(''); };
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;
   const totalPages   = Math.ceil(total / limit);
-  const SortTh = ({ field, children }) => (
-    <th className="sortable"
+  const SortTh = ({ field, className, children }) => (
+    <th className={`sortable${className ? ' ' + className : ''}`}
       onClick={() => handleSort(field)}
       style={{ color: sort === field ? 'var(--accent)' : undefined }}>
       {children}
@@ -241,8 +245,27 @@ export default function Library({ initialFilters = {} }) {
     }
   }
 
+  // On mobile we always show cover/title + rating + the sort-derived
+  // column, and the actions column is hidden. When the user is sorting
+  // by rating (which is therefore already visible) we use the slot for
+  // completed-date so the row still says something extra.
+  const mobileShow = ({
+    title:        'status',
+    medium:       'medium',
+    rating:       'completed',
+    status:       'status',
+    year:         'year',
+    updated_at:   'updated',
+    completed_at: 'completed',
+  })[sort] || 'status';
+
   return (
-    <div className="layout-3col">
+    <div className="layout-3col" data-drawer={drawer}>
+      {/* ── Mobile drawer backdrop ── */}
+      {drawer && (
+        <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
+      )}
+
       {/* ── Left sidebar ── */}
       <div className="sidebar-left">
         <div className="sidebar-section">
@@ -293,12 +316,28 @@ export default function Library({ initialFilters = {} }) {
       <div className="main-content">
         <div className="page-head">
           <div className="page-head-left">
+            <button
+              type="button"
+              className="drawer-toggle"
+              onClick={() => setDrawer(d => d === 'left' ? '' : 'left')}
+              aria-label="Toggle filters"
+              title="Filters"
+            >☰ Filters</button>
             <span className="page-title">Library</span>
             <span className="page-desc">
               {loading ? <SkeletonLine width={74} height={11} /> : `${total} entries`}
             </span>
           </div>
-          <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>
+          <div className="page-head-mobile">
+            <button
+              type="button"
+              className="drawer-toggle"
+              onClick={() => setDrawer(d => d === 'right' ? '' : 'right')}
+              aria-label="Toggle sort and tools"
+              title="Sort & tools"
+            >⋯</button>
+            <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>
+          </div>
         </div>
 
         <div className="filter-bar">
@@ -349,18 +388,18 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && (
           <div>
-              <table className="media-table">
+              <table className="media-table" data-mobile-show={mobileShow}>
               <thead>
                 <tr>
                   <SortTh field="title">Title</SortTh>
-                  <SortTh field="medium">Medium</SortTh>
-                  <SortTh field="year">Year</SortTh>
-                  <th>Progress</th>
-                  <SortTh field="status">Status</SortTh>
-                  <SortTh field="rating">Rating</SortTh>
-                  <SortTh field="updated_at">Updated</SortTh>
-                  <SortTh field="completed_at">Completed</SortTh>
-                  <th>Actions</th>
+                  <SortTh field="medium" className="col-medium">Medium</SortTh>
+                  <SortTh field="year"   className="col-year">Year</SortTh>
+                  <th className="col-progress">Progress</th>
+                  <SortTh field="status" className="col-status">Status</SortTh>
+                  <SortTh field="rating" className="col-rating">Rating</SortTh>
+                  <SortTh field="updated_at"   className="col-updated">Updated</SortTh>
+                  <SortTh field="completed_at" className="col-completed">Completed</SortTh>
+                  <th className="action-cell">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -381,9 +420,9 @@ export default function Library({ initialFilters = {} }) {
                           <span className="media-name">{e.title}</span>
                         </div>
                       </td>
-                      <td><span style={{ color: 'var(--dim)' }}>{e.medium}</span></td>
-                      <td><span style={{ color: 'var(--dim)' }}>{e.year || '—'}</span></td>
-                      <td onClick={ev => ev.stopPropagation()}>
+                      <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium}</span></td>
+                      <td className="col-year"><span style={{ color: 'var(--dim)' }}>{e.year || '—'}</span></td>
+                      <td className="col-progress" onClick={ev => ev.stopPropagation()}>
                         {isEditingProg ? (
                           <input
                             className="inline-select"
@@ -412,13 +451,13 @@ export default function Library({ initialFilters = {} }) {
                           </div>
                         )}
                       </td>
-                      <td onClick={ev => ev.stopPropagation()}>
+                      <td className="col-status" onClick={ev => ev.stopPropagation()}>
                         <select className="inline-select" value={e.status}
                           onChange={ev => handleStatusChange(e.id, ev.target.value)}>
                           {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                         </select>
                       </td>
-                      <td onClick={ev => ev.stopPropagation()}>
+                      <td className="col-rating" onClick={ev => ev.stopPropagation()}>
                         {editingRating?.id === e.id ? (
                           <input
                             className="inline-select"
@@ -441,8 +480,8 @@ export default function Library({ initialFilters = {} }) {
                           </span>
                         )}
                       </td>
-                      <td><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>
-                      <td><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at)}</span></td>
+                      <td className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>
+                      <td className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at)}</span></td>
                       <td className="action-cell" onClick={ev => ev.stopPropagation()}>
                         <div className="action-cell-inner">
                         {isConfirmDel ? (

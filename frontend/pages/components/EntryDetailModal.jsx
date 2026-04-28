@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { deleteEntry } from '../../api.jsx';
 import { statusLabel, fmtDate, progressLabel } from '../../utils.jsx';
 import EntryFormModal from './EntryFormModal.jsx';
 
@@ -12,8 +13,25 @@ function cleanUrl(url) {
 }
 
 export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted, initialEditing = false }) {
-  const [editing,  setEditing]  = useState(initialEditing);
-  const [current,  setCurrent]  = useState(entry);
+  const [editing,         setEditing]         = useState(initialEditing);
+  const [current,         setCurrent]         = useState(entry);
+  const [confirmDelete,   setConfirmDelete]   = useState(false);
+  const [deleting,        setDeleting]        = useState(false);
+  const [deleteError,     setDeleteError]     = useState('');
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await deleteEntry(current.id);
+      onDeleted?.(current.id);
+      onClose();
+    } catch (err) {
+      setDeleteError(err.message || String(err));
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
 
   if (editing) {
     return (
@@ -122,9 +140,37 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
             <span>Updated: {fmtDate(current.updated_at)}</span>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
-            <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
+          {deleteError && (
+            <div className="settings-msg settings-msg-error" style={{ marginBottom: 8 }}>
+              {deleteError}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+            {confirmDelete ? (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: 'var(--red)' }}>delete this entry?</span>
+                <button type="button" className="btn btn-danger"
+                  style={{ padding: '4px 10px', fontSize: 11 }}
+                  onClick={handleDelete} disabled={deleting}>
+                  {deleting ? '…' : 'yes'}
+                </button>
+                <button type="button" className="icon-btn"
+                  style={{ padding: '4px 10px', fontSize: 11 }}
+                  onClick={() => setConfirmDelete(false)} disabled={deleting}>
+                  no
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="icon-btn danger"
+                style={{ padding: '4px 10px', fontSize: 11 }}
+                onClick={() => setConfirmDelete(true)}>
+                Delete
+              </button>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
+              <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
+            </div>
           </div>
         </div>
       </div>

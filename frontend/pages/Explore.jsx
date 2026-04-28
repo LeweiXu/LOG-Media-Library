@@ -37,6 +37,8 @@ export default function Explore() {
   // bypasses the server-side per-medium cache.
   const [seed, setSeed] = useState(() => newSeed());
   const [refreshFlag, setRefreshFlag] = useState(false);
+  // Mobile drawer state — '', 'left', or 'right'.
+  const [drawer, setDrawer] = useState('');
 
   // ── Initial load: pull saved settings, seed filters from them ────────────
   useEffect(() => {
@@ -167,7 +169,10 @@ export default function Explore() {
   }
 
   return (
-    <div className="layout-3col">
+    <div className="layout-3col" data-drawer={drawer}>
+      {drawer && (
+        <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
+      )}
       {/* ── Left sidebar: local medium filter ───────────────────────────── */}
       <aside className="sidebar-left">
         <div className="sidebar-section">
@@ -194,16 +199,32 @@ export default function Explore() {
       <main className="main-content">
         <div className="page-head">
           <div className="page-head-left">
+            <button
+              type="button"
+              className="drawer-toggle"
+              onClick={() => setDrawer(d => d === 'left' ? '' : 'left')}
+              aria-label="Toggle medium filter"
+              title="Medium"
+            >☰ Medium</button>
             <span className="page-title">Explore</span>
             <span className="page-desc">
               {loading ? <span className="loading-dots">scanning</span>
                        : `${items.length} suggestions${personalised ? ' · tuned to your taste' : ''}`}
             </span>
           </div>
-          <button className="icon-btn" onClick={handleRefresh} disabled={loading}
-            title="Refresh" style={{ padding: '5px 10px' }}>
-            Refresh
-          </button>
+          <div className="page-head-mobile">
+            <button
+              type="button"
+              className="drawer-toggle"
+              onClick={() => setDrawer(d => d === 'right' ? '' : 'right')}
+              aria-label="Toggle taste profile"
+              title="Taste"
+            >⋯</button>
+            <button className="icon-btn" onClick={handleRefresh} disabled={loading}
+              title="Refresh" style={{ padding: '5px 10px' }}>
+              Refresh
+            </button>
+          </div>
         </div>
 
         {error && (
