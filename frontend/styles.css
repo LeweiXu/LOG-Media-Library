@@ -1154,19 +1154,29 @@ html.light .skeleton-pie::after {
 }
 .explore-card:hover {
   border-color: var(--border2);
-  filter: brightness(0.86);
+  filter: brightness(0.93);
 }
 .explore-card:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
-  filter: brightness(0.86);
+  filter: brightness(0.93);
 }
-.explore-card.is-owned {
+/* In-library cards we can't open (no in-memory entry) stay decorative —
+ * `.not-interactive` is only set on those. */
+.explore-card.is-owned.not-interactive {
   cursor: default;
   filter: none;
 }
-.explore-card.is-owned:hover { filter: none; }
+.explore-card.is-owned.not-interactive:hover { filter: none; }
+/* In-library cards we just added (we have the entry → click opens detail)
+ * keep the same subtle darken-on-hover as the un-owned cards do, so the
+ * affordance reads as clickable. */
+.explore-card.is-owned:not(.not-interactive) { cursor: pointer; }
+.explore-card.is-owned:not(.not-interactive):hover {
+  filter: brightness(0.88);
+  border-color: var(--border2);
+}
 
 .explore-cover {
   width: 92px;

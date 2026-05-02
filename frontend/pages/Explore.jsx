@@ -4,6 +4,7 @@ import { getExplore, getSettings } from '../api.jsx';
 import { MEDIUMS, statusLabel } from '../utils.jsx';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
+import EntryDetailModal from './components/EntryDetailModal.jsx';
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it.
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
@@ -33,6 +34,10 @@ export default function Explore() {
   // until added. Tracks: 'idle' | 'adding' | 'added:<status>' | 'error:<msg>'
   const [cardState, setCardState] = useState({});
   const [pendingAdd, setPendingAdd] = useState(null);
+  // Entries created during this Explore session, keyed by card idx. Lets the
+  // user click an "added" card to inspect/edit/delete it via EntryDetailModal.
+  const [addedEntries, setAddedEntries] = useState({});
+  const [detailEntry,  setDetailEntry]  = useState(null);
   // Bumped on every Refresh — also flips refreshFlag so the next fetch
   // bypasses the server-side per-medium cache.
   const [seed, setSeed] = useState(() => newSeed());
@@ -115,10 +120,17 @@ export default function Explore() {
     fetchExplore();
   }, [fetchExplore, settingsLoaded]);
 
-  // Refresh = bypass server cache + new shuffle seed.
-  const handleRefresh = () => {
+  // Reroll = bypass the server-side per-medium cache AND pick a new shuffle
+  // seed, so the page surfaces a different set of suggestions.
+  const handleReroll = () => {
     setRefreshFlag(true);
     setSeed(newSeed());
+  };
+
+  // Refresh = re-fetch the current cached page without invalidating it.
+  // Useful after adding entries elsewhere so "in library" tags refresh.
+  const handleRefresh = () => {
+    fetchExplore();
   };
 
   function entryFromExploreItem(item, statusValue) {
@@ -150,22 +162,66 @@ export default function Explore() {
   }
 
   function handleCardClick(idx, item, owned) {
-    if (owned) return;
+    if (owned) {
+      const added = addedEntries[idx];
+      if (added) setDetailEntry(added);
+      return;
+    }
     openAddModal(idx, item, 'planned');
   }
 
   function handleCardKeyDown(e, idx, item, owned) {
-    if (owned) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      openAddModal(idx, item, 'planned');
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (owned) {
+      const added = addedEntries[idx];
+      if (added) {
+        e.preventDefault();
+        setDetailEntry(added);
+      }
+      return;
     }
+    e.preventDefault();
+    openAddModal(idx, item, 'planned');
   }
 
   function handleEntryCreated(created) {
     if (!pendingAdd) return;
-    setCardState(s => ({ ...s, [pendingAdd.idx]: `added:${created?.status || pendingAdd.status}` }));
+    const idx = pendingAdd.idx;
+    setCardState(s => ({ ...s, [idx]: `added:${created?.status || pendingAdd.status}` }));
+    if (created) setAddedEntries(prev => ({ ...prev, [idx]: created }));
     setPendingAdd(null);
+  }
+
+  // Detail modal callbacks: keep addedEntries in sync if the user edits or
+  // deletes the entry from inside the modal. Deletion makes the card behave
+  // like a normal explorable card again — but we keep the "in library"
+  // overlay because the title would still match if the user re-fetches.
+  function handleDetailUpdated(updated) {
+    setDetailEntry(updated);
+    setAddedEntries(prev => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) {
+        if (next[k]?.id === updated.id) next[k] = updated;
+      }
+      return next;
+    });
+  }
+  function handleDetailDeleted(id) {
+    // Find which card(s) the deleted entry was attached to, then clear both
+    // the added-entry record and the matching `added:<status>` cardState so
+    // the card returns to a clickable state.
+    const idxsToClear = Object.keys(addedEntries).filter(k => addedEntries[k]?.id === id);
+    setAddedEntries(prev => {
+      const next = { ...prev };
+      for (const k of idxsToClear) delete next[k];
+      return next;
+    });
+    setCardState(prev => {
+      const next = { ...prev };
+      for (const k of idxsToClear) delete next[k];
+      return next;
+    });
+    setDetailEntry(null);
   }
 
   return (
@@ -221,8 +277,14 @@ export default function Explore() {
               title="Taste"
             >⋯</button>
             <button className="icon-btn" onClick={handleRefresh} disabled={loading}
-              title="Refresh" style={{ padding: '5px 10px' }}>
+              title="Re-query the current suggestions (refreshes 'in library' tags)"
+              style={{ padding: '5px 10px' }}>
               Refresh
+            </button>
+            <button className="icon-btn" onClick={handleReroll} disabled={loading}
+              title="Bypass cache and pull a fresh set of suggestions"
+              style={{ padding: '5px 10px' }}>
+              Reroll
             </button>
           </div>
         </div>
@@ -258,14 +320,19 @@ export default function Explore() {
             const isError = state.startsWith('error:');
             const errMsg  = isError ? state.slice('error:'.length) : '';
             const addedAs = isAdded ? state.slice('added:'.length) : '';
-            const owned   = item.in_library || isAdded;
-            const hasMatches = personalised && item.matches && item.matches.length > 0;
+            const owned       = item.in_library || isAdded;
+            // An owned card is interactive only if we know the underlying
+            // entry (i.e. the user added it during this Explore session and
+            // we can open its detail modal). Pre-existing in_library cards
+            // stay decorative.
+            const interactive = !owned || !!addedEntries[idx];
+            const hasMatches  = personalised && item.matches && item.matches.length > 0;
 
             return (
               <article key={`${item.source}:${item.external_id || item.title}:${idx}`}
-                       className={'explore-card' + (owned ? ' is-owned' : '')}
-                       role={owned ? undefined : 'button'}
-                       tabIndex={owned ? undefined : 0}
+                       className={'explore-card' + (owned ? ' is-owned' : '') + (interactive ? '' : ' not-interactive')}
+                       role={interactive ? 'button' : undefined}
+                       tabIndex={interactive ? 0 : undefined}
                        onClick={() => handleCardClick(idx, item, owned)}
                        onKeyDown={e => handleCardKeyDown(e, idx, item, owned)}>
                 <div className="explore-cover">
@@ -379,6 +446,15 @@ export default function Explore() {
           hideTabs
           onClose={() => setPendingAdd(null)}
           onCreated={handleEntryCreated}
+        />
+      )}
+
+      {detailEntry && (
+        <EntryDetailModal
+          entry={detailEntry}
+          onClose={() => setDetailEntry(null)}
+          onUpdated={handleDetailUpdated}
+          onDeleted={handleDetailDeleted}
         />
       )}
     </div>

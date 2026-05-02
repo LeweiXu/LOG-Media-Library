@@ -125,8 +125,33 @@ export default function EntryForm({
       {form.status === 'completed' && (
         <div className="form-row" style={{ marginBottom: 14 }}>
           <label className="form-label">Completed Date</label>
-          <input className="form-input" type="date" value={form.completed_at}
-            onChange={e => setField('completed_at', e.target.value)} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="form-input" type="date" value={form.completed_at}
+              style={{ flex: 1 }}
+              onChange={e => setField('completed_at', e.target.value)} />
+            <button
+              type="button"
+              className="icon-btn"
+              style={{ padding: '5px 10px' }}
+              title="Randomize day and month, keep year"
+              onClick={() => {
+                // Year comes from the existing value if present, otherwise the
+                // entry year, otherwise today.
+                const existing = form.completed_at ? new Date(form.completed_at) : null;
+                const year = (existing && !isNaN(existing))
+                  ? existing.getFullYear()
+                  : (parseInt(form.year, 10) || new Date().getFullYear());
+                const month  = Math.floor(Math.random() * 12) + 1;             // 1–12
+                const lastDay = new Date(year, month, 0).getDate();             // last day of that month
+                const day    = Math.floor(Math.random() * lastDay) + 1;        // 1–lastDay
+                const mm = String(month).padStart(2, '0');
+                const dd = String(day).padStart(2, '0');
+                setField('completed_at', `${year}-${mm}-${dd}`);
+              }}
+            >
+              Randomize
+            </button>
+          </div>
         </div>
       )}
 
@@ -220,20 +245,19 @@ export default function EntryForm({
       <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 4 }}>
         <div>
           {showDelete && isEdit && (!confirmDelete
-            ? <button type="button" className="icon-btn danger"
+            ? <button type="button" className="btn btn-danger-outline"
                 onClick={() => setConfirmDelete(true)}>
                 Delete
               </button>
             : <span style={{ fontSize: 11, color: 'var(--red)', display: 'flex', gap: 8, alignItems: 'center' }}>
                 Confirm?
                 <button type="button" className="btn btn-danger"
-                  style={{ padding: '3px 10px', fontSize: 11 }}
                   onClick={handleDelete} disabled={deleting}>
                   {deleting ? '...' : 'Yes, delete'}
                 </button>
-                <button type="button" className="icon-btn"
+                <button type="button" className="btn btn-outline"
                   onClick={() => setConfirmDelete(false)}>
-                  No
+                  Cancel
                 </button>
               </span>
           )}
