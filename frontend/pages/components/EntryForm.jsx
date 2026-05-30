@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getCustomLists } from '../../api.jsx';
+import { getCustomLists, fetchChapterCount } from '../../api.jsx';
 import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
 
 function toDateInput(iso) {
@@ -85,6 +85,24 @@ export default function EntryForm({
     getCustomLists()
       .then(lists => { if (!cancelled) setCustomLists(Array.isArray(lists) ? lists : []); })
       .catch(() => { if (!cancelled) setCustomLists([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // For a MAL/Jikan manga being added with no chapter total (MAL leaves ongoing
+  // series blank), fetch the latest chapter count from MangaUpdates on demand.
+  useEffect(() => {
+    if (isEdit) return;
+    if (entry?.source !== 'jikan' || entry?.medium !== 'Manga' || entry?.total) return;
+    if (!entry?.title) return;
+    let cancelled = false;
+    fetchChapterCount(entry.title)
+      .then(res => {
+        const total = res?.total;
+        if (!cancelled && total) {
+          setFormState(f => (f.total === '' ? { ...f, total: String(total) } : f));
+        }
+      })
+      .catch(() => { /* non-critical */ });
     return () => { cancelled = true; };
   }, []);
 

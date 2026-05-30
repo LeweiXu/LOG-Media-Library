@@ -276,6 +276,10 @@ export async function searchMedia(title, sources = [], extended = false) {
 export const fetchByUrl = (url) =>
   req(`/search/from-url?${new URLSearchParams({ url })}`);
 
+/** Look up a latest chapter total for a title via MangaUpdates → { total }. */
+export const fetchChapterCount = (title) =>
+  req(`/search/chapter-count?${new URLSearchParams({ title })}`);
+
 export const getStats = () => req('/stats');
 
 export const deleteAllEntries = () => req('/entries', { method: 'DELETE' });

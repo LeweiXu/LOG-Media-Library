@@ -1,12 +1,14 @@
-"""Scrape a single jjwxc (晋江文学城) novel page into a SearchResult.
+"""Resolve a single jjwxc (晋江文学城) novel URL into a SearchResult.
 
-jjwxc has no API and serves GB-encoded markup with no Open Graph tags, so we
-parse defensively: the ``<title>`` carries the book name + author, the synopsis
-lives in ``#novelintro``, and the cover is a ``novelimage``/``novelcover`` image.
-Any field we can't find is simply left blank for the user to fill in.
+jjwxc's Android app API (``app.jjwxc.net/androidapi/novelbasicinfo``) returns
+clean JSON metadata — title, cover, intro, tags, chapter count, and the
+"完结评分" review score — which is far more robust than scraping the GB-encoded
+web page. The only field it doesn't expose is the publication year, so we still
+read the earliest chapter date off the web page for that (best-effort).
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Optional
@@ -16,6 +18,8 @@ from ._common import fetch_bytes
 
 logger = logging.getLogger(__name__)
 
+_BASIC_INFO_URL = "https://app.jjwxc.net/androidapi/novelbasicinfo"
+
 
 def _novel_id(url: str) -> Optional[str]:
     # onebook.php?novelid=1234567  (also tolerate &novelid= mid-query)
@@ -23,22 +27,40 @@ def _novel_id(url: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-async def _review_score(novel_id: str) -> Optional[float]:
-    """The "完结评分" rating shown in #novelreview_div is AJAX-loaded; the app
-    API exposes the same value as ``novelReviewScore`` (e.g. "8分" → 8.0)."""
+def _to_int(value) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _review_score(text: Optional[str]) -> Optional[float]:
+    """"8分" / "8.5分" → 8.0 / 8.5; "暂无" or missing → None."""
+    if not text:
+        return None
+    m = re.search(r"(\d+(?:\.\d+)?)", text)
+    return float(m.group(1)) if m else None
+
+
+async def _start_year(novel_id: str) -> Optional[int]:
+    """Earliest chapter year from the web page's chapter table (#oneboolt).
+
+    The app API has no publish date, so this stays on the web page — but only
+    for the year, so a layout change degrades one field rather than everything.
+    """
     raw = await fetch_bytes(
-        "https://app.jjwxc.net/androidapi/novelbasicinfo", params={"novelId": novel_id}
+        "https://www.jjwxc.net/onebook.php", params={"novelid": novel_id}
     )
     if not raw:
         return None
-    import json
+    from bs4 import BeautifulSoup
 
-    try:
-        score_text = json.loads(raw.decode("utf-8", "ignore")).get("novelReviewScore") or ""
-    except (ValueError, TypeError):
+    table = BeautifulSoup(raw, "lxml", from_encoding="gb18030").select_one("#oneboolt")
+    if not table:
         return None
-    m = re.search(r"(\d+(?:\.\d+)?)", score_text)
-    return float(m.group(1)) if m else None
+    years = [int(y) for y in re.findall(r"(\d{4})-\d{2}-\d{2}", table.get_text(" ", strip=True))]
+    years = [y for y in years if 1990 <= y <= 2100]
+    return min(years) if years else None
 
 
 async def fetch(client, url: str) -> Optional[SearchResult]:
@@ -46,62 +68,25 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
     if not novel_id:
         return None
 
-    raw = await fetch_bytes(
-        "https://www.jjwxc.net/onebook.php", params={"novelid": novel_id}
-    )
+    raw = await fetch_bytes(_BASIC_INFO_URL, params={"novelId": novel_id})
     if not raw:
         return None
+    try:
+        info = json.loads(raw.decode("utf-8", "ignore"))
+    except (ValueError, TypeError):
+        return None
 
-    from bs4 import BeautifulSoup
-
-    # jjwxc serves GB18030 (GBK superset) without a usable charset hint.
-    soup = BeautifulSoup(raw, "lxml", from_encoding="gb18030")
-
-    # Title + author come from the <title>: "《书名》作者：penname_晋江文学城"
-    title: Optional[str] = None
-    title_tag = soup.find("title")
-    if title_tag:
-        text = title_tag.get_text(strip=True)
-        m = re.search(r"《(.+?)》", text)
-        if m:
-            title = m.group(1).strip()
-    # Fallback to the itemprop name span jjwxc puts in the page header.
-    if not title:
-        name_span = soup.find(attrs={"itemprop": "name"})
-        if name_span:
-            title = name_span.get_text(strip=True) or None
+    title = (info.get("novelName") or "").strip()
     if not title:
         return None
 
-    # Synopsis: jjwxc uses id="novelintro" (itemprop="description").
-    description: Optional[str] = None
-    intro = soup.find(id="novelintro")
-    if intro:
-        description = intro.get_text(" ", strip=True) or None
-
-    # Cover: the novel image lives on jjwxc's image CDN.
-    cover_url: Optional[str] = None
-    for img in soup.find_all("img"):
-        src = img.get("src") or img.get("dynamicsrc") or ""
-        if "novelimage" in src or "novelcover" in src:
-            cover_url = "https:" + src if src.startswith("//") else src
-            break
-
-    # The chapter table (#oneboolt) has one row per chapter and a publish date
-    # per row; count the rows for the total and take the earliest year as start.
-    total: Optional[int] = None
-    year: Optional[int] = None
-    table = soup.select_one("#oneboolt")
-    if table:
-        rows = table.select('tr[itemprop="chapter"]')
-        if rows:
-            total = len(rows)
-        years = [int(y) for y in re.findall(r"(\d{4})-\d{2}-\d{2}", table.get_text(" ", strip=True))]
-        years = [y for y in years if 1990 <= y <= 2100]
-        if years:
-            year = min(years)
-
-    external_rating = await _review_score(novel_id)
+    cover_url = (info.get("novelCover") or info.get("originalCover") or "").strip() or None
+    description = (info.get("novelIntro") or "").strip() or None
+    # novelTags is a comma-separated tag list, e.g. "科幻,情有独钟,穿越时空".
+    genres = (info.get("novelTags") or "").strip() or None
+    total = _to_int(info.get("novelChapterCount"))
+    external_rating = _review_score(info.get("novelReviewScore"))
+    year = await _start_year(novel_id)
 
     return SearchResult(
         title=title,
@@ -114,6 +99,6 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
         source="jjwxc",
         description=description,
         external_url=f"https://www.jjwxc.net/onebook.php?novelid={novel_id}",
-        genres=None,
+        genres=genres,
         external_rating=external_rating,
     )

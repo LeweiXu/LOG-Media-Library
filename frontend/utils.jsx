@@ -74,11 +74,13 @@ const _SOURCE_DOMAINS = {
   'anilist.co':             'anilist',
   'myanimelist.net':        'jikan',
   'kitsu.io':               'kitsu',
+  'kitsu.app':              'kitsu',
   'novelupdates.com':       'novelupdates',
   'mangadex.org':           'mangadex',
   'igdb.com':               'igdb',
   'rawg.io':                'rawg',
   'books.google.com':       'google_books',
+  'play.google.com':        'google_books',
   'openlibrary.org':        'open_library',
   'comicvine.gamespot.com': 'comicvine',
   'mangaupdates.com':       'mangaupdates',
@@ -89,8 +91,12 @@ const _SOURCE_DOMAINS = {
   'imdb.com':               'imdb',
 };
 
-/** Sources whose pages can be imported by pasting a URL (scraped backend-side). */
-export const URL_SCRAPE_SOURCES = new Set(['novelupdates', 'jjwxc', 'qidian', 'imdb']);
+/** Sources whose pages can be imported by pasting a URL (resolved backend-side). */
+export const URL_SCRAPE_SOURCES = new Set([
+  'novelupdates', 'jjwxc', 'qidian', 'imdb',
+  'tmdb', 'anilist', 'jikan', 'kitsu', 'mangadex', 'mangaupdates',
+  'igdb', 'rawg', 'google_books', 'open_library', 'comicvine', 'vndb',
+]);
 
 /** True if the string looks like a pasteable http(s) URL rather than a title. */
 export function isUrl(s) {

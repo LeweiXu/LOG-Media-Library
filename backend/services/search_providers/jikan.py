@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 
 import httpx
 
 from schemas import ExploreItem, SearchResult
 from .utils import safe_year
-from .mangaupdates import mangaupdates_chapter_count
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +18,6 @@ async def search_jikan(
     https://jikan.moe/
     """
     results: list[SearchResult] = []
-    # Manga results with no chapter total (typically ongoing series) collected
-    # here for a MangaUpdates fallback after the main pass.
-    manga_needing_total: list[tuple[int, str]] = []
     endpoints: list[tuple[str, str]] = [
         ("https://api.jikan.moe/v4/anime", "Anime"),
         ("https://api.jikan.moe/v4/manga", "Manga"),
@@ -90,20 +85,8 @@ async def search_jikan(
                         external_rating=ext_rating,
                     )
                 )
-                if item_medium == "Manga" and not total:
-                    manga_needing_total.append((len(results) - 1, display_title))
         except Exception as exc:
             logger.warning("Jikan search error: %s", exc)
-
-    # Fill missing manga chapter counts from MangaUpdates (ongoing series that
-    # MAL leaves blank). Light novels are intentionally left as-is.
-    if manga_needing_total:
-        counts = await asyncio.gather(
-            *(mangaupdates_chapter_count(client, t) for _, t in manga_needing_total)
-        )
-        for (idx, _), count in zip(manga_needing_total, counts):
-            if count:
-                results[idx].total = count
 
     return results
 

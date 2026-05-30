@@ -21,7 +21,7 @@ from schemas import (
 from services import entry_service
 from services.entry_service import delete_all_entries
 from services import auth_service
-from services.search_service import search_media
+from services.search_service import search_media, lookup_chapter_count
 from services.url_import_service import fetch_from_url
 from services.stats_service import get_stats
 from services.export_service import export_entries_csv
@@ -325,6 +325,18 @@ async def search_from_url(
     client degrades gracefully to manual entry.
     """
     return await fetch_from_url(url)
+
+
+@router.get("/search/chapter-count")
+async def chapter_count(
+    title: str = Query(..., min_length=1, description="Title to look up a chapter total for"),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """On-demand MangaUpdates chapter-count lookup for a single title.
+
+    Called when adding an ongoing MAL/Jikan manga whose chapter total is blank.
+    """
+    return {"total": await lookup_chapter_count(title)}
 
 # ── Explore endpoint ──────────────────────────────────────────────────────────
 

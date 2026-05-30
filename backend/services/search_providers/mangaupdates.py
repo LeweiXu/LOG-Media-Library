@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
@@ -87,10 +88,51 @@ async def search_mangaupdates(
                     external_rating=ext_rating,
                 )
             )
+
+        # MangaUpdates has no "chapter total" field, so fill each result's total
+        # with the latest translated chapter (from releases) concurrently.
+        ids = [(i, r.external_id) for i, r in enumerate(results) if r.external_id]
+        if ids:
+            counts = await asyncio.gather(
+                *(_latest_chapter(client, sid) for _, sid in ids)
+            )
+            for (i, _), count in zip(ids, counts):
+                if count:
+                    results[i].total = count
+
         return results
     except Exception as exc:
         logger.warning("MangaUpdates search error: %s", exc)
         return []
+
+
+async def _latest_chapter(client: httpx.AsyncClient, series_id: str) -> int | None:
+    """Latest translated chapter number for a MangaUpdates series.
+
+    Prefers the series' ``latest_chapter`` field; if absent, derives it from the
+    releases RSS feed (titles look like ``"One Piece c.1183"``). MangaUpdates
+    doesn't expose a true chapter total, so this latest-release number is the
+    closest available proxy.
+    """
+    try:
+        d = await client.get(f"https://api.mangaupdates.com/v1/series/{series_id}")
+        d.raise_for_status()
+        latest = d.json().get("latest_chapter")
+        if latest:
+            return int(latest)
+    except Exception as exc:
+        logger.warning("MangaUpdates series detail error for %s: %s", series_id, exc)
+
+    try:
+        r = await client.get(f"https://api.mangaupdates.com/v1/series/{series_id}/rss")
+        r.raise_for_status()
+        chapters = [int(c) for c in re.findall(r"c\.(\d+)", r.text)]
+        if chapters:
+            return max(chapters)
+    except Exception as exc:
+        logger.warning("MangaUpdates releases RSS error for %s: %s", series_id, exc)
+
+    return None
 
 
 async def mangaupdates_chapter_count(
@@ -99,8 +141,7 @@ async def mangaupdates_chapter_count(
     """Best-match latest chapter number for ``title`` on MangaUpdates.
 
     Used as a fallback when MAL/Jikan reports no chapter total for an ongoing
-    series. Takes the top search hit, then reads ``latest_chapter`` from the
-    series detail (the search record itself doesn't carry it).
+    series. Takes the top search hit, then reads the latest translated chapter.
     """
     try:
         r = await client.post(
@@ -114,11 +155,8 @@ async def mangaupdates_chapter_count(
         series_id = hits[0].get("record", {}).get("series_id")
         if not series_id:
             return None
-
-        d = await client.get(f"https://api.mangaupdates.com/v1/series/{series_id}")
-        d.raise_for_status()
-        latest = d.json().get("latest_chapter")
-        return int(latest) if latest else None
     except Exception as exc:
         logger.warning("MangaUpdates chapter-count lookup error for %r: %s", title, exc)
         return None
+
+    return await _latest_chapter(client, series_id)

@@ -209,3 +209,16 @@ async def search_media(title: str, source: str = "", medium: str = "") -> list[S
         combined.extend(group)
 
     return _deduplicate_and_rank(combined, title)[:10]
+
+
+async def lookup_chapter_count(title: str) -> int | None:
+    """Latest translated chapter count for a title via MangaUpdates.
+
+    Used on demand (when a user adds an ongoing MAL/Jikan manga that has no
+    chapter total) rather than during every search, to avoid the extra API
+    round-trips on results the user never adds.
+    """
+    from services.search_providers.mangaupdates import mangaupdates_chapter_count
+
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        return await mangaupdates_chapter_count(client, title)
