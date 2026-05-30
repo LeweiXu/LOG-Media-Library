@@ -272,6 +272,10 @@ export async function searchMedia(title, sources = [], extended = false) {
   return extended ? deduped : deduped.slice(0, 10);
 }
 
+/** Scrape a single supported media-page URL into a one-item result list. */
+export const fetchByUrl = (url) =>
+  req(`/search/from-url?${new URLSearchParams({ url })}`);
+
 export const getStats = () => req('/stats');
 
 export const deleteAllEntries = () => req('/entries', { method: 'DELETE' });

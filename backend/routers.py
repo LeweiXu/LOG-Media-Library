@@ -22,6 +22,7 @@ from services import entry_service
 from services.entry_service import delete_all_entries
 from services import auth_service
 from services.search_service import search_media
+from services.url_import_service import fetch_from_url
 from services.stats_service import get_stats
 from services.export_service import export_entries_csv
 from services.import_service import preview_import, confirm_import, auto_import_rows
@@ -311,6 +312,19 @@ async def search(
     current_user: User = Depends(auth_service.get_current_user),
 ):
     return await search_media(title=title, source=source)
+
+
+@router.get("/search/from-url", response_model=list[SearchResult])
+async def search_from_url(
+    url: str = Query(..., min_length=1, description="Media-page URL to scrape (NovelUpdates, jjwxc, qidian, imdb)"),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Scrape a single supported media page into a one-item result list.
+
+    Returns an empty list for unsupported domains or any scrape failure, so the
+    client degrades gracefully to manual entry.
+    """
+    return await fetch_from_url(url)
 
 # ── Explore endpoint ──────────────────────────────────────────────────────────
 

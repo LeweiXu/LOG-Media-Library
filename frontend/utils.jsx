@@ -84,7 +84,18 @@ const _SOURCE_DOMAINS = {
   'mangaupdates.com':       'mangaupdates',
   'baka-updates.com':       'mangaupdates',
   'vndb.org':               'vndb',
+  'jjwxc.net':              'jjwxc',
+  'qidian.com':             'qidian',
+  'imdb.com':               'imdb',
 };
+
+/** Sources whose pages can be imported by pasting a URL (scraped backend-side). */
+export const URL_SCRAPE_SOURCES = new Set(['novelupdates', 'jjwxc', 'qidian', 'imdb']);
+
+/** True if the string looks like a pasteable http(s) URL rather than a title. */
+export function isUrl(s) {
+  return /^https?:\/\//i.test((s || '').trim());
+}
 
 /** Infer the source name from a URL, or return '' if unrecognised. */
 export function inferSourceFromUrl(url) {

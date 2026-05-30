@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { searchMedia, checkDuplicates, createEntry } from '../../api.jsx';
+import { searchMedia, fetchByUrl, checkDuplicates, createEntry } from '../../api.jsx';
+import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES } from '../../utils.jsx';
 import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 
@@ -18,7 +19,13 @@ const SEARCH_SOURCES = [
   { value: 'vndb',         label: 'VNDB' },
 ];
 
-const SOURCE_LABEL = Object.fromEntries(SEARCH_SOURCES.map(s => [s.value, s.label]));
+const SOURCE_LABEL = {
+  ...Object.fromEntries(SEARCH_SOURCES.map(s => [s.value, s.label])),
+  // URL-only sources (not keyword-searchable, so not in SEARCH_SOURCES)
+  jjwxc:  'JJWXC',
+  qidian: 'Qidian',
+  imdb:   'IMDb',
+};
 
 const LS_SOURCES_KEY = 'search_sources';
 
@@ -63,6 +70,23 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
     if (!query.trim()) return;
     setSearching(true); setSearchErr(''); setResults(null); setInLibrary([]); setSelected(new Set());
     try {
+      if (isUrl(query)) {
+        // URL pasted: scrape the page backend-side, ignoring the source toggles,
+        // and go straight to the confirm form for the single result.
+        const src = inferSourceFromUrl(query.trim());
+        if (!URL_SCRAPE_SOURCES.has(src)) {
+          setSearchErr("URL import isn't supported for this site yet — try a title search or manual entry.");
+          return;
+        }
+        const data = await fetchByUrl(query.trim());
+        const found = Array.isArray(data) ? data : [];
+        if (found.length === 0) {
+          setSearchErr("Couldn't read that page — it may be unavailable or its layout changed. Try manual entry.");
+          return;
+        }
+        setConfirmQueue(found.map(resultToEntry));
+        return;
+      }
       const data = await searchMedia(query.trim(), [...selectedSources], extended);
       const list = Array.isArray(data) ? data : data?.results ?? [];
       setResults(list);
@@ -143,6 +167,9 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
     cursor: 'pointer',
   });
 
+  const urlMode = isUrl(query);
+  const detectedSource = urlMode ? inferSourceFromUrl(query.trim()) : '';
+
   if (confirmQueue.length > 0) {
     return (
       <ConfirmEntryModal
@@ -177,28 +204,37 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                   <input
                     className="form-input"
                     style={{ flex: 1 }}
-                    placeholder="Title…"
+                    placeholder="Title or paste a URL…"
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     autoFocus
                   />
                   <button className="btn" type="submit" disabled={searching || !query.trim()}>
-                    {searching ? '…' : 'Search'}
+                    {searching ? '…' : urlMode ? 'Import' : 'Search'}
                   </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    onClick={() => setExtended(x => !x)}
-                    style={{
-                      borderColor: extended ? 'var(--accent)' : undefined,
-                      color: extended ? 'var(--accent)' : undefined,
-                      padding: '5px 10px',
-                    }}
-                    title="Return all results instead of top 10"
-                  >
-                    Extended
-                  </button>
+                  {!urlMode && (
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => setExtended(x => !x)}
+                      style={{
+                        borderColor: extended ? 'var(--accent)' : undefined,
+                        color: extended ? 'var(--accent)' : undefined,
+                        padding: '5px 10px',
+                      }}
+                      title="Return all results instead of top 10"
+                    >
+                      Extended
+                    </button>
+                  )}
                 </div>
+                {urlMode ? (
+                  <div style={{ fontSize: 10, color: 'var(--dim)', letterSpacing: '0.03em', padding: '2px 0' }}>
+                    {URL_SCRAPE_SOURCES.has(detectedSource)
+                      ? `Detected ${SOURCE_LABEL[detectedSource] ?? detectedSource} link — source toggles ignored`
+                      : 'Paste a NovelUpdates, JJWXC, Qidian, or IMDb URL'}
+                  </div>
+                ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                   <span style={{ fontSize: 10, color: 'var(--dim)', marginRight: 2, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     Sources:
@@ -236,6 +272,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                     </button>
                   )}
                 </div>
+                )}
               </form>
 
               {searchErr && (
