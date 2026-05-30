@@ -43,6 +43,7 @@ class Entry(Base):
     external_url:    Mapped[str | None]   = mapped_column(String(1000), nullable=True)
     genres:          Mapped[str | None]   = mapped_column(String(500),  nullable=True)
     external_rating: Mapped[float | None] = mapped_column(Float,        nullable=True)
+    custom_list:     Mapped[str | None]   = mapped_column(String(100),  nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="planned", index=True)
     rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     progress: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -94,6 +94,11 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
             </div>
           </div>
 
+          <div style={{ marginBottom: 10 }}>
+            <div className="form-label">Custom List</div>
+            <div>{current.custom_list || '—'}</div>
+          </div>
+
           {(current.genres || current.external_rating != null) && (
             <div className="form-row-2" style={{ marginBottom: 10 }}>
               <div>

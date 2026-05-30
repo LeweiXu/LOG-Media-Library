@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getCustomLists } from '../../api.jsx';
 import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
+import CreateCustomListModal from './CreateCustomListModal.jsx';
 
 function toDateInput(iso) {
   if (!iso) return '';
@@ -26,10 +28,12 @@ export function entryToForm(entry = null) {
     source:          entry?.source          || '',
     external_id:     entry?.external_id     || '',
     external_rating: entry?.external_rating ?? '',
+    custom_list:     entry?.custom_list     || '',
   };
 }
 
 export function formToPayload(form, { isEdit = false } = {}) {
+  const customList = (form.custom_list || '').trim();
   return {
     ...form,
     year:            form.year            !== '' ? parseInt(form.year)            : (isEdit ? null : undefined),
@@ -38,6 +42,7 @@ export function formToPayload(form, { isEdit = false } = {}) {
     total:           form.total           !== '' ? parseInt(form.total)           : (isEdit ? null : undefined),
     external_rating: form.external_rating !== '' ? parseFloat(form.external_rating) : (isEdit ? null : undefined),
     completed_at:    form.completed_at    ? form.completed_at + 'T00:00:00Z'     : (isEdit ? null : undefined),
+    custom_list:     customList !== '' ? customList                         : (isEdit ? null : undefined),
   };
 }
 
@@ -54,27 +59,70 @@ export default function EntryForm({
 }) {
   const isEdit = Boolean(entry?.id);
   const [form, setFormState] = useState(() => entryToForm(entry));
+  const [listMode, setListMode] = useState(() => entry?.custom_list ? 'existing' : 'none');
+  const [customLists, setCustomLists] = useState([]);
+  const [showCreateList, setShowCreateList] = useState(false);
+  const [lastListWarning, setLastListWarning] = useState(false);
   const [saving,        setSaving]        = useState(false);
   const [deleting,      setDeleting]      = useState(false);
   const [err,           setErr]           = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const setField = (k, v) => setFormState(f => {
-    const next = { ...f, [k]: v };
-    if (k === 'status' && v === 'completed') {
-      if (!next.completed_at) next.completed_at = today();
-      if (next.total !== '') next.progress = next.total;
-    }
-    if (k === 'status' && v !== 'completed') next.completed_at = '';
-    if (k === 'total' && f.status === 'completed' && v !== '') next.progress = v;
-    if (k === 'external_url') next.source = inferSourceFromUrl(v);
-    return next;
-  });
+  const setField = (k, v) => {
+    if (k === 'custom_list') setLastListWarning(false);
+    setFormState(f => {
+      const next = { ...f, [k]: v };
+      if (k === 'status' && v === 'completed') {
+        if (!next.completed_at) next.completed_at = today();
+        if (next.total !== '') next.progress = next.total;
+      }
+      if (k === 'status' && v !== 'completed') next.completed_at = '';
+      if (k === 'total' && f.status === 'completed' && v !== '') next.progress = v;
+      if (k === 'external_url') next.source = inferSourceFromUrl(v);
+      return next;
+    });
+  };
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  const loadCustomLists = () => {
+    getCustomLists()
+      .then(lists => setCustomLists(Array.isArray(lists) ? lists : []))
+      .catch(() => setCustomLists([]));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    getCustomLists()
+      .then(lists => { if (!cancelled) setCustomLists(Array.isArray(lists) ? lists : []); })
+      .catch(() => { if (!cancelled) setCustomLists([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  function handleListModeChange(mode) {
+    setListMode(mode);
+    if (mode === 'none') {
+      setField('custom_list', '');
+    } else if (mode === 'existing') {
+      setField('custom_list', customLists[0]?.name || '');
+    }
+  }
+
+  function isRemovingLastEntryFromList(nextList) {
+    const currentList = entry?.custom_list || '';
+    if (!isEdit || !currentList || currentList === nextList) return false;
+    const currentMeta = customLists.find(list => list.name === currentList);
+    return currentMeta?.count === 1;
+  }
+
+  async function submitForm(skipWarning = false) {
     if (!form.title.trim()) { setErr('Title is required'); return; }
+    const nextList = (form.custom_list || '').trim();
+    if (isRemovingLastEntryFromList(nextList) && !skipWarning) {
+      setLastListWarning(true);
+      setErr('');
+      return;
+    }
     setSaving(true); setErr('');
+    setLastListWarning(false);
     try {
       await onSubmit(form);
     } catch (ex) {
@@ -82,6 +130,11 @@ export default function EntryForm({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    await submitForm(false);
   }
 
   async function handleDelete() {
@@ -96,6 +149,7 @@ export default function EntryForm({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit}>
       <div className="form-row">
         <label className="form-label">Title *</label>
@@ -120,6 +174,32 @@ export default function EntryForm({
             {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
           </select>
         </div>
+      </div>
+
+      <div className="form-row" style={{ marginBottom: 14 }}>
+        <label className="form-label">Custom List</label>
+        <select className="form-input" value={listMode}
+          onChange={e => handleListModeChange(e.target.value)}>
+          <option value="none">No list</option>
+          <option value="existing" disabled={customLists.length === 0}>Use existing list</option>
+        </select>
+        {listMode === 'existing' && (
+          <select className="form-input" value={form.custom_list}
+            style={{ marginTop: 8 }}
+            onChange={e => setField('custom_list', e.target.value)}>
+            {customLists.map(list => (
+              <option key={list.name} value={list.name}>{list.name}</option>
+            ))}
+          </select>
+        )}
+        <button
+          type="button"
+          className="icon-btn"
+          style={{ marginTop: 8, width: 'fit-content', padding: '5px 10px' }}
+          onClick={() => setShowCreateList(true)}
+        >
+          + New List
+        </button>
       </div>
 
       {form.status === 'completed' && (
@@ -270,6 +350,48 @@ export default function EntryForm({
           </button>
         </div>
       </div>
+
     </form>
+
+    {showCreateList && (
+      <CreateCustomListModal
+        onClose={() => setShowCreateList(false)}
+        existingLists={customLists}
+        onCreated={(name) => {
+          setCustomLists(prev => prev.some(list => list.name === name)
+            ? prev
+            : [{ name, count: 0, updated_at: new Date().toISOString() }, ...prev]);
+          loadCustomLists();
+          setListMode('existing');
+          setField('custom_list', name);
+          setShowCreateList(false);
+        }}
+      />
+    )}
+
+    {lastListWarning && (
+      <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setLastListWarning(false)}>
+        <div className="modal confirm-modal">
+          <div className="modal-header">
+            <span className="modal-title">Custom List Will Be Removed</span>
+            <button className="icon-btn" onClick={() => setLastListWarning(false)}>✕</button>
+          </div>
+          <div className="modal-body">
+            <p style={{ margin: '0 0 16px', color: 'var(--dim)', fontSize: 13 }}>
+              "{entry.custom_list}" only contains this entry. Saving will remove the entry from that list, so the custom list will disappear.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-outline" type="button" onClick={() => setLastListWarning(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-danger" type="button" onClick={() => submitForm(true)}>
+                Save Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

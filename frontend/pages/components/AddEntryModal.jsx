@@ -98,6 +98,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
       external_url:    item.external_url    || '',
       genres:          item.genres          || '',
       external_rating: item.external_rating ?? '',
+      custom_list:     '',
     };
   }
 

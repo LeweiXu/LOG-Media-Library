@@ -9,6 +9,7 @@ from models import User
 from config import get_settings as get_app_settings
 from schemas import (
     BackupStatus,
+    CustomListRead, CustomListRename,
     EntryCreate, EntryListResponse, EntryRead, EntryUpdate,
     ImportConfirmRequest, ImportConfirmResponse, ImportPreviewResponse,
     SearchResult, StatsResponse,
@@ -184,6 +185,8 @@ def list_entries(
     medium: str = Query(None, description="Filter by medium"),
     origin: str = Query(None, description="Filter by origin"),
     title:  str = Query(None, description="Search by title (case-insensitive)"),
+    custom_list: str = Query(None, description="Filter by custom list"),
+    custom_list_empty: bool = Query(False, description="Only entries with no custom list"),
     sort:   str = Query("updated_at", description="Column to sort by"),
     order:  str = Query("desc",       description="asc or desc"),
     limit:  int = Query(40,  ge=1, le=2000, description="Max results to return"),
@@ -198,6 +201,8 @@ def list_entries(
         medium=medium,
         origin=origin,
         title=title,
+        custom_list=custom_list,
+        custom_list_empty=custom_list_empty,
         sort=sort,
         order=order,
         limit=limit,
@@ -261,6 +266,41 @@ def delete_entry(
     if not entry or entry.username != current_user.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
     entry_service.delete_entry(db, entry)
+
+# ── Custom list endpoints ────────────────────────────────────────────────────
+
+@router.get("/custom-lists", response_model=list[CustomListRead])
+def list_custom_lists(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return entry_service.get_custom_lists(db, current_user.username)
+
+
+@router.put("/custom-lists/{name:path}", response_model=list[CustomListRead])
+def rename_custom_list(
+    name: str,
+    payload: CustomListRename,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    entry_service.rename_custom_list(
+        db,
+        username=current_user.username,
+        old_name=name,
+        new_name=payload.new_name,
+    )
+    return entry_service.get_custom_lists(db, current_user.username)
+
+
+@router.delete("/custom-lists/{name:path}", response_model=list[CustomListRead])
+def clear_custom_list(
+    name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    entry_service.clear_custom_list(db, current_user.username, name)
+    return entry_service.get_custom_lists(db, current_user.username)
 
 # ── Search endpoint ───────────────────────────────────────────────────────────
 

@@ -7,7 +7,7 @@ EXPORT_COLUMNS = [
     "title", "medium", "origin", "year", "cover_url", "notes",
     "external_id", "source", "status", "rating", "progress", "total",
     "created_at", "updated_at", "completed_at",
-    "external_url", "genres", "external_rating",
+    "external_url", "genres", "external_rating", "custom_list",
 ]
 
 

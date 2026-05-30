@@ -26,6 +26,7 @@ class EntryBase(BaseModel):
     external_url:    Optional[str]   = Field(None, max_length=1000)
     genres:          Optional[str]   = Field(None, max_length=500)
     external_rating: Optional[float] = Field(None, ge=0, le=100)
+    custom_list:     Optional[str]   = Field(None, max_length=100)
 
     @field_validator("status")
     @classmethod
@@ -54,6 +55,16 @@ class EntryBase(BaseModel):
             raise ValueError(f"origin must be one of {sorted(VALID_ORIGINS)}")
         return normalised
 
+    @field_validator("custom_list", mode="before")
+    @classmethod
+    def normalise_custom_list(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            return v
+        stripped = v.strip()
+        return stripped or None
+
 
 class EntryCreate(EntryBase):
     completed_at: Optional[datetime] = None
@@ -74,6 +85,7 @@ class EntryUpdate(BaseModel):
     external_url:    Optional[str]      = Field(None, max_length=1000)
     genres:          Optional[str]      = Field(None, max_length=500)
     external_rating: Optional[float]    = Field(None, ge=0, le=100)
+    custom_list:     Optional[str]      = Field(None, max_length=100)
     completed_at:    Optional[datetime] = None
 
     @field_validator("status")
@@ -103,6 +115,16 @@ class EntryUpdate(BaseModel):
             raise ValueError(f"origin must be one of {sorted(VALID_ORIGINS)}")
         return normalised
 
+    @field_validator("custom_list", mode="before")
+    @classmethod
+    def normalise_custom_list(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            return v
+        stripped = v.strip()
+        return stripped or None
+
 class EntryRead(EntryBase):
     id:           int
     username:     str
@@ -116,6 +138,24 @@ class EntryListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+# --- Custom List Schemas ---
+
+class CustomListRead(BaseModel):
+    name: str
+    count: int
+    updated_at: datetime
+
+class CustomListRename(BaseModel):
+    new_name: str = Field(..., min_length=1, max_length=100)
+
+    @field_validator("new_name")
+    @classmethod
+    def normalise_new_name(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("new_name cannot be empty")
+        return stripped
 
 # --- User Schemas ---
 

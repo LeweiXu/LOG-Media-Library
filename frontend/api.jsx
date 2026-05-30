@@ -70,6 +70,15 @@ export const createEntry = (data)      => req('/entries', { method: 'POST', body
 export const updateEntry = (id, data)  => req(`/entries/${id}`, { method: 'PUT',  body: JSON.stringify(data) });
 export const deleteEntry = (id)        => req(`/entries/${id}`, { method: 'DELETE' });
 
+export const getCustomLists = () => req('/custom-lists');
+export const renameCustomList = (name, newName) =>
+  req(`/custom-lists/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ new_name: newName }),
+  });
+export const clearCustomList = (name) =>
+  req(`/custom-lists/${encodeURIComponent(name)}`, { method: 'DELETE' });
+
 export async function exportEntries() {
   const res = await fetch(`${BASE}/entries/export`, {
     headers: { Authorization: `Bearer ${getToken()}` },

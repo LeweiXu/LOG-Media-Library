@@ -4,6 +4,7 @@ import Dashboard   from './pages/Dashboard.jsx';
 import Library     from './pages/Library.jsx';
 import Statistics  from './pages/Statistics.jsx';
 import Explore     from './pages/Explore.jsx';
+import Manage      from './pages/Manage.jsx';
 import LandingPage from './pages/LandingPage.jsx';
 import AuthModal      from './pages/components/AuthModal.jsx';
 import SettingsModal  from './pages/components/SettingsModal.jsx';
@@ -106,6 +107,9 @@ export default function App() {
             <NavLink to="/explore" className={({ isActive }) => isActive ? 'active' : undefined}>
               Explore
             </NavLink>
+            <NavLink to="/manage" className={({ isActive }) => isActive ? 'active' : undefined}>
+              Manage
+            </NavLink>
           </nav>
         )}
 
@@ -166,6 +170,11 @@ export default function App() {
         <Route path="/explore"
           element={isAuthenticated
             ? <Explore key={username} />
+            : <Navigate to="/" replace />}
+        />
+        <Route path="/manage"
+          element={isAuthenticated
+            ? <Manage key={username} />
             : <Navigate to="/" replace />}
         />
         <Route path="/statistics"

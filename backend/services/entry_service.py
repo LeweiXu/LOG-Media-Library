@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import func, select, asc, desc, and_, nullslast
+from sqlalchemy import func, select, asc, desc, and_, or_, nullslast
 from sqlalchemy.orm import Session
 
 from models import Entry
@@ -23,7 +23,14 @@ SORTABLE_COLUMNS: dict[str, object] = {
 }
 
 
-def _apply_filters(q, *, status, medium, origin, title):
+def _normalise_custom_list(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _apply_filters(q, *, status, medium, origin, title, custom_list, custom_list_empty=False):
     """Apply optional WHERE clauses to a query."""
     if status:
         q = q.where(Entry.status == status)
@@ -33,6 +40,12 @@ def _apply_filters(q, *, status, medium, origin, title):
         q = q.where(Entry.origin == origin)
     if title:
         q = q.where(Entry.title.ilike(f"%{title}%"))
+    if custom_list_empty:
+        q = q.where(or_(Entry.custom_list.is_(None), Entry.custom_list == ""))
+    elif custom_list:
+        normalised = _normalise_custom_list(custom_list)
+        if normalised:
+            q = q.where(Entry.custom_list == normalised)
     return q
 
 
@@ -46,6 +59,8 @@ def get_entries(
     medium: Optional[str] = None,
     origin: Optional[str] = None,
     title:  Optional[str] = None,
+    custom_list: Optional[str] = None,
+    custom_list_empty: bool = False,
     sort:   str = "updated_at",
     order:  str = "desc",
     limit:  int = 40,
@@ -55,7 +70,15 @@ def get_entries(
     direction = asc if order == "asc" else desc
 
     base_q = select(Entry).where(Entry.username == username)
-    base_q = _apply_filters(base_q, status=status, medium=medium, origin=origin, title=title)
+    base_q = _apply_filters(
+        base_q,
+        status=status,
+        medium=medium,
+        origin=origin,
+        title=title,
+        custom_list=custom_list,
+        custom_list_empty=custom_list_empty,
+    )
 
     # Total count (before pagination)
     count_q = select(func.count()).select_from(base_q.subquery())
@@ -81,6 +104,50 @@ def get_entries(
 
 def get_entry_by_id(db: Session, entry_id: int) -> Optional[Entry]:
     return db.get(Entry, entry_id)
+
+
+def get_custom_lists(db: Session, username: str) -> list[dict]:
+    latest_updated = func.max(Entry.updated_at).label("updated_at")
+    rows = db.execute(
+        select(Entry.custom_list, func.count(Entry.id), latest_updated)
+        .where(Entry.username == username, Entry.custom_list.is_not(None), Entry.custom_list != "")
+        .group_by(Entry.custom_list)
+        .order_by(desc(latest_updated), asc(Entry.custom_list))
+    ).all()
+    return [{"name": name, "count": count, "updated_at": updated_at} for name, count, updated_at in rows]
+
+
+def rename_custom_list(db: Session, username: str, old_name: str, new_name: str) -> int:
+    old_name = _normalise_custom_list(old_name)
+    new_name = _normalise_custom_list(new_name)
+    if old_name is None or new_name is None:
+        return 0
+    entries = db.query(Entry).filter(
+        Entry.username == username,
+        Entry.custom_list == old_name,
+    ).all()
+    now = datetime.now(timezone.utc)
+    for entry in entries:
+        entry.custom_list = new_name
+        entry.updated_at = now
+    db.commit()
+    return len(entries)
+
+
+def clear_custom_list(db: Session, username: str, list_name: str) -> int:
+    list_name = _normalise_custom_list(list_name)
+    if list_name is None:
+        return 0
+    entries = db.query(Entry).filter(
+        Entry.username == username,
+        Entry.custom_list == list_name,
+    ).all()
+    now = datetime.now(timezone.utc)
+    for entry in entries:
+        entry.custom_list = None
+        entry.updated_at = now
+    db.commit()
+    return len(entries)
 
 
 # ── Create ────────────────────────────────────────────────────────────────────

@@ -94,13 +94,15 @@ EXPORT_HEADERS = [
     "title", "medium", "origin", "year", "cover_url", "notes",
     "external_id", "source", "status", "rating", "progress", "total",
     "created_at", "updated_at", "completed_at",
-    "external_url", "genres", "external_rating",
+    "external_url", "genres", "external_rating", "custom_list",
 ]
+
+LEGACY_EXPORT_HEADERS = [h for h in EXPORT_HEADERS if h != "custom_list"]
 
 _COMPARE_FIELDS = [
     "title", "medium", "origin", "year", "cover_url", "notes",
     "external_id", "source", "status", "rating", "progress", "total", "completed_at",
-    "external_url", "genres", "external_rating",
+    "external_url", "genres", "external_rating", "custom_list",
 ]
 
 
@@ -151,6 +153,7 @@ def _csv_to_typed(row: dict) -> dict:
         "external_url":    _str(row.get("external_url")),
         "genres":          _str(row.get("genres")),
         "external_rating": _float(row.get("external_rating")),
+        "custom_list":     _str(row.get("custom_list")),
     }
 
 
@@ -202,7 +205,8 @@ def preview_import(db: Session, csv_content: str, username: str) -> dict:
     Returns a dict safe for JSON serialisation.
     """
     reader = csv.DictReader(io.StringIO(csv_content))
-    if list(reader.fieldnames or []) != EXPORT_HEADERS:
+    fieldnames = list(reader.fieldnames or [])
+    if fieldnames not in (EXPORT_HEADERS, LEGACY_EXPORT_HEADERS):
         return {
             "error": "Invalid CSV headers. This file must be exported from this app.",
             "to_import": [],
@@ -294,6 +298,7 @@ def confirm_import(
             external_url=typed.get("external_url"),
             genres=typed.get("genres"),
             external_rating=typed.get("external_rating"),
+            custom_list=typed.get("custom_list"),
             username=username,
         ))
         created += 1
@@ -326,6 +331,7 @@ def confirm_import(
         entry.external_url    = typed.get("external_url")
         entry.genres          = typed.get("genres")
         entry.external_rating = typed.get("external_rating")
+        entry.custom_list     = typed.get("custom_list")
         updated += 1
 
     db.commit()
@@ -398,6 +404,7 @@ def import_csv_for_user(db: Session, csv_content: str, username: str) -> dict:
             progress=_int(row.get("progress")),
             total=_int(row.get("total")),
             completed_at=_dt(row.get("completed_at")),
+            custom_list=_str(row.get("custom_list")),
             username=username,
         )
         db.add(entry)
@@ -482,6 +489,7 @@ async def auto_import_rows(csv_content: str, db: Session, username: str):
         external_url    = typed.get("external_url")
         genres          = typed.get("genres")
         external_rating = typed.get("external_rating")
+        custom_list     = typed.get("custom_list")
 
         try:
             # Narrow providers by medium when available.
@@ -525,6 +533,7 @@ async def auto_import_rows(csv_content: str, db: Session, username: str):
             external_url=external_url,
             genres=genres,
             external_rating=external_rating,
+            custom_list=custom_list,
             completed_at=typed.get("completed_at"),
             username=username,
         )

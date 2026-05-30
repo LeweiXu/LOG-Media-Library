@@ -115,6 +115,7 @@ def _entry_to_dict(entry: Entry) -> dict:
         "external_url": entry.external_url,
         "genres": entry.genres,
         "external_rating": entry.external_rating,
+        "custom_list": entry.custom_list,
         "completed_at": entry.completed_at.isoformat() if entry.completed_at else None,
         "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
     }
