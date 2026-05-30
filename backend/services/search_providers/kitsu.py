@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search_kitsu(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     """
     Kitsu.io public API — no API key required.
@@ -24,12 +24,13 @@ async def search_kitsu(
     ]
 
     headers = {"Accept": "application/vnd.api+json"}
+    per_endpoint = max(1, min(limit, 20))
 
     for url, med in endpoints:
         try:
             r = await client.get(
                 url,
-                params={"filter[text]": title, "page[limit]": 5},
+                params={"filter[text]": title, "page[limit]": per_endpoint},
                 headers=headers,
             )
             r.raise_for_status()

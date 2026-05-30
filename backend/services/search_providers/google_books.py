@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 async def search_google_books(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
-    params: dict = {"q": title, "maxResults": 5, "printType": "books"}
+    params: dict = {"q": title, "maxResults": max(1, min(limit, 40)), "printType": "books"}
     api_key = settings.GOOGLE_BOOKS_API_KEY
     if api_key:
         params["key"] = api_key

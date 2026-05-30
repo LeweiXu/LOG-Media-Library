@@ -34,7 +34,7 @@ async def _get_igdb_token(client: httpx.AsyncClient) -> Optional[str]:
 
 
 async def search_igdb(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     client_id = settings.IGDB_CLIENT_ID
     if not client_id:
@@ -55,7 +55,7 @@ async def search_igdb(
                 f'search "{title}"; '
                 f'fields name,first_release_date,cover.url,cover.image_id,'
                 f'summary,involved_companies.company.name,url,genres.name,rating; '
-                f'limit 5;'
+                f'limit {max(1, min(limit, 50))};'
             ),
         )
         r.raise_for_status()

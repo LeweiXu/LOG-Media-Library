@@ -337,9 +337,10 @@ def clear_custom_list(
 async def search(
     title:  str = Query(..., min_length=1, description="Title to search for"),
     source: str = Query("", description="Optional source to search (e.g. tmdb, anilist, igdb)"),
+    limit:  int = Query(10, ge=1, le=50, description="Max results to return"),
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    return await search_media(title=title, source=source)
+    return await search_media(title=title, source=source, limit=limit)
 
 
 @router.get("/search/from-url", response_model=list[SearchResult])

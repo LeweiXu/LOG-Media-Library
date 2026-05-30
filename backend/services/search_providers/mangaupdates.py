@@ -23,7 +23,7 @@ _MANGAUPDATES_TYPE_TO_MEDIUM: dict[str, str] = {
 
 
 async def search_mangaupdates(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     """
     MangaUpdates public API — no API key required.
@@ -33,7 +33,7 @@ async def search_mangaupdates(
     try:
         r = await client.post(
             "https://api.mangaupdates.com/v1/series/search",
-            json={"search": title, "perpage": 8},
+            json={"search": title, "perpage": max(1, min(limit, 100))},
         )
         r.raise_for_status()
         results: list[SearchResult] = []

@@ -256,16 +256,16 @@ const _sourceRank = s => { const i = _SOURCE_PRIORITY.indexOf(s); return i === -
 
 export async function searchMedia(title, sources = [], extended = false) {
   const list = Array.isArray(sources) ? sources.filter(Boolean) : (sources ? [sources] : []);
+  const limit = extended ? '50' : '10';
   if (list.length === 0) {
-    // Backend already deduplicates, ranks, and caps at 10
-    return req(`/search?${new URLSearchParams({ title })}`);
+    return req(`/search?${new URLSearchParams({ title, limit })}`);
   }
   if (list.length === 1) {
-    return req(`/search?${new URLSearchParams({ title, source: list[0] })}`);
+    return req(`/search?${new URLSearchParams({ title, source: list[0], limit })}`);
   }
   // Multiple sources: fan out in parallel then deduplicate + rank client-side
   const groups = await Promise.all(
-    list.map(source => req(`/search?${new URLSearchParams({ title, source })}`).catch(() => []))
+    list.map(source => req(`/search?${new URLSearchParams({ title, source, limit })}`).catch(() => []))
   );
   const combined = groups.flat();
   const seen = new Set();

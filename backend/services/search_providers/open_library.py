@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search_open_library(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     """
     Open Library (Internet Archive) — no API key required.
@@ -19,7 +19,7 @@ async def search_open_library(
     try:
         r = await client.get(
             "https://openlibrary.org/search.json",
-            params={"title": title, "limit": 5, "fields": "key,title,author_name,first_publish_year,number_of_pages_median,cover_i,isbn"},
+            params={"title": title, "limit": max(1, min(limit, 100)), "fields": "key,title,author_name,first_publish_year,number_of_pages_median,cover_i,isbn"},
         )
         r.raise_for_status()
         results: list[SearchResult] = []

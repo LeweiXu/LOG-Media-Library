@@ -10,8 +10,8 @@ from .utils import country_to_origin
 logger = logging.getLogger(__name__)
 
 _ANILIST_QUERY = """
-query ($search: String, $type: MediaType) {
-  Page(page: 1, perPage: 8) {
+query ($search: String, $type: MediaType, $perPage: Int!) {
+  Page(page: 1, perPage: $perPage) {
     media(search: $search, type: $type, sort: SEARCH_MATCH) {
       id
       title { romaji english native }
@@ -64,10 +64,11 @@ query ($type: MediaType, $perPage: Int!, $page: Int!) {
 
 
 async def search_anilist(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     results: list[SearchResult] = []
     types_to_query = ["ANIME", "MANGA"]
+    per_page = max(1, min(limit, 50))
 
     for media_type in types_to_query:
         try:
@@ -75,7 +76,7 @@ async def search_anilist(
                 "https://graphql.anilist.co",
                 json={
                     "query": _ANILIST_QUERY,
-                    "variables": {"search": title, "type": media_type},
+                    "variables": {"search": title, "type": media_type, "perPage": per_page},
                 },
             )
             r.raise_for_status()

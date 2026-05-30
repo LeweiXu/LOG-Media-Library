@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search_mangadex(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     """
     MangaDex public API — no API key required.
@@ -23,7 +23,7 @@ async def search_mangadex(
             "https://api.mangadex.org/manga",
             params={
                 "title": title,
-                "limit": 8,
+                "limit": max(1, min(limit, 100)),
                 "includes[]": ["cover_art", "author"],
                 "contentRating[]": ["safe", "suggestive"],
                 "order[relevance]": "desc",

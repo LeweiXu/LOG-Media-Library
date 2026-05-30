@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search_comicvine(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     """
     ComicVine — free API key required.
@@ -30,7 +30,7 @@ async def search_comicvine(
                 "format": "json",
                 "query": title,
                 "resources": "volume",
-                "limit": 5,
+                "limit": max(1, min(limit, 100)),
                 "field_list": "id,name,start_year,image,description,site_detail_url,count_of_issues",
             },
             headers={"User-Agent": "LOG-MediaTracker/1.0"},

@@ -28,7 +28,7 @@ _LANG_TO_ORIGIN: dict[str, str] = {
 
 
 async def search_vndb(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     """
     VNDB public API — no API key required.
@@ -40,7 +40,7 @@ async def search_vndb(
             json={
                 "filters": ["search", "=", title],
                 "fields": "id,title,released,rating,image.url,olang,tags.name",
-                "results": 8,
+                "results": max(1, min(limit, 100)),
             },
         )
         r.raise_for_status()

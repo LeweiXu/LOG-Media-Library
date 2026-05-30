@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search_rawg(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     """
     RAWG Video Games Database — free API key required.
@@ -25,7 +25,7 @@ async def search_rawg(
     try:
         r = await client.get(
             "https://api.rawg.io/api/games",
-            params={"key": api_key, "search": title, "page_size": 5},
+            params={"key": api_key, "search": title, "page_size": max(1, min(limit, 40))},
         )
         r.raise_for_status()
         results: list[SearchResult] = []

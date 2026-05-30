@@ -54,6 +54,7 @@ def _external_rating_from_text(text: str) -> Optional[float]:
 async def search_novelupdates(
     client,       # httpx.AsyncClient — not used directly; kept for API consistency
     title: str,
+    limit: int = 10,
 ) -> list[SearchResult]:
     """
     Scrape NovelUpdates Series Finder for the given title query.
@@ -93,7 +94,7 @@ async def search_novelupdates(
         soup = BeautifulSoup(r.text, "lxml")
         results: list[SearchResult] = []
 
-        for box in soup.select("div.search_main_box_nu")[:8]:
+        for box in soup.select("div.search_main_box_nu")[:max(1, min(limit, 50))]:
             addtolist = box.select_one("div.img_addtolist")
             series_id: Optional[str] = None
             if addtolist:

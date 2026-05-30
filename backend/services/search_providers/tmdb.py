@@ -21,13 +21,14 @@ _TMDB_GENRE_NAMES: dict[int, str] = {
 
 
 async def search_tmdb(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     api_key = settings.TMDB_API_KEY
     if not api_key:
         return []
 
     results: list[SearchResult] = []
+    per_endpoint = max(1, min(limit, 20))
     endpoints: list[tuple[str, str]] = [
         ("https://api.themoviedb.org/3/search/movie", "Film"),
         ("https://api.themoviedb.org/3/search/tv", "TV Show"),
@@ -40,7 +41,7 @@ async def search_tmdb(
                 params={"api_key": api_key, "query": title, "include_adult": "false"},
             )
             r.raise_for_status()
-            for item in r.json().get("results", [])[:5]:
+            for item in r.json().get("results", [])[:per_endpoint]:
                 poster = item.get("poster_path")
                 item_id = str(item.get("id", ""))
                 tmdb_type = "movie" if med == "Film" else "tv"

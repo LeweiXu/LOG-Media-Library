@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search_jikan(
-    client: httpx.AsyncClient, title: str
+    client: httpx.AsyncClient, title: str, limit: int = 10
 ) -> list[SearchResult]:
     """
     Jikan v4 is a public MAL proxy — no API key required.
@@ -22,10 +22,11 @@ async def search_jikan(
         ("https://api.jikan.moe/v4/anime", "Anime"),
         ("https://api.jikan.moe/v4/manga", "Manga"),
     ]
+    per_endpoint = max(1, min(limit, 25))
 
     for url, med in endpoints:
         try:
-            r = await client.get(url, params={"q": title, "limit": 5, "sfw": "true"})
+            r = await client.get(url, params={"q": title, "limit": per_endpoint, "sfw": "true"})
             r.raise_for_status()
             for item in r.json().get("data", []):
                 titles = item.get("titles", [])

@@ -183,13 +183,19 @@ _MEDIUM_PROVIDERS: dict[str, list] = {
 }
 
 
-async def search_media(title: str, source: str = "", medium: str = "") -> list[SearchResult]:
+async def search_media(
+    title: str,
+    source: str = "",
+    medium: str = "",
+    limit: int = 10,
+) -> list[SearchResult]:
     """
     Fan-out search across all providers (or a single source/medium) in parallel.
-    Results are de-duplicated, ranked, and capped at 10.
+    Results are de-duplicated, ranked, and capped at ``limit``.
 
     Priority: source > medium > all providers.
     """
+    limit = max(1, min(limit, 50))
     if source:
         providers = [_SOURCE_TO_PROVIDER[source]] if source in _SOURCE_TO_PROVIDER else _ALL_PROVIDERS
     elif medium and medium in _MEDIUM_PROVIDERS:
@@ -198,7 +204,7 @@ async def search_media(title: str, source: str = "", medium: str = "") -> list[S
         providers = _ALL_PROVIDERS
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        tasks = [p(client, title) for p in providers]
+        tasks = [p(client, title, limit=limit) for p in providers]
         groups = await asyncio.gather(*tasks, return_exceptions=True)
 
     combined: list[SearchResult] = []
@@ -208,7 +214,7 @@ async def search_media(title: str, source: str = "", medium: str = "") -> list[S
             continue
         combined.extend(group)
 
-    return _deduplicate_and_rank(combined, title)[:10]
+    return _deduplicate_and_rank(combined, title)[:limit]
 
 
 async def lookup_chapter_count(title: str) -> int | None:
