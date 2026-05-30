@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getCustomLists } from '../../api.jsx';
 import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
-import CreateCustomListModal from './CreateCustomListModal.jsx';
 
 function toDateInput(iso) {
   if (!iso) return '';
@@ -59,9 +58,7 @@ export default function EntryForm({
 }) {
   const isEdit = Boolean(entry?.id);
   const [form, setFormState] = useState(() => entryToForm(entry));
-  const [listMode, setListMode] = useState(() => entry?.custom_list ? 'existing' : 'none');
   const [customLists, setCustomLists] = useState([]);
-  const [showCreateList, setShowCreateList] = useState(false);
   const [lastListWarning, setLastListWarning] = useState(false);
   const [saving,        setSaving]        = useState(false);
   const [deleting,      setDeleting]      = useState(false);
@@ -83,12 +80,6 @@ export default function EntryForm({
     });
   };
 
-  const loadCustomLists = () => {
-    getCustomLists()
-      .then(lists => setCustomLists(Array.isArray(lists) ? lists : []))
-      .catch(() => setCustomLists([]));
-  };
-
   useEffect(() => {
     let cancelled = false;
     getCustomLists()
@@ -96,15 +87,6 @@ export default function EntryForm({
       .catch(() => { if (!cancelled) setCustomLists([]); });
     return () => { cancelled = true; };
   }, []);
-
-  function handleListModeChange(mode) {
-    setListMode(mode);
-    if (mode === 'none') {
-      setField('custom_list', '');
-    } else if (mode === 'existing') {
-      setField('custom_list', customLists[0]?.name || '');
-    }
-  }
 
   function isRemovingLastEntryFromList(nextList) {
     const currentList = entry?.custom_list || '';
@@ -178,28 +160,13 @@ export default function EntryForm({
 
       <div className="form-row" style={{ marginBottom: 14 }}>
         <label className="form-label">Custom List</label>
-        <select className="form-input" value={listMode}
-          onChange={e => handleListModeChange(e.target.value)}>
-          <option value="none">No list</option>
-          <option value="existing" disabled={customLists.length === 0}>Use existing list</option>
+        <select className="form-input" value={form.custom_list}
+          onChange={e => setField('custom_list', e.target.value)}>
+          <option value="">No List</option>
+          {customLists.map(list => (
+            <option key={list.name} value={list.name}>{list.name}</option>
+          ))}
         </select>
-        {listMode === 'existing' && (
-          <select className="form-input" value={form.custom_list}
-            style={{ marginTop: 8 }}
-            onChange={e => setField('custom_list', e.target.value)}>
-            {customLists.map(list => (
-              <option key={list.name} value={list.name}>{list.name}</option>
-            ))}
-          </select>
-        )}
-        <button
-          type="button"
-          className="icon-btn"
-          style={{ marginTop: 8, width: 'fit-content', padding: '5px 10px' }}
-          onClick={() => setShowCreateList(true)}
-        >
-          + New List
-        </button>
       </div>
 
       {form.status === 'completed' && (
@@ -352,22 +319,6 @@ export default function EntryForm({
       </div>
 
     </form>
-
-    {showCreateList && (
-      <CreateCustomListModal
-        onClose={() => setShowCreateList(false)}
-        existingLists={customLists}
-        onCreated={(name) => {
-          setCustomLists(prev => prev.some(list => list.name === name)
-            ? prev
-            : [{ name, count: 0, updated_at: new Date().toISOString() }, ...prev]);
-          loadCustomLists();
-          setListMode('existing');
-          setField('custom_list', name);
-          setShowCreateList(false);
-        }}
-      />
-    )}
 
     {lastListWarning && (
       <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setLastListWarning(false)}>

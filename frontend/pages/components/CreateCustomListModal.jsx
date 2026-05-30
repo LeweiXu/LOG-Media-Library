@@ -5,7 +5,11 @@ import { SkeletonLine } from './Skeletons.jsx';
 
 const PAGE_SIZE = 10;
 
-export default function CreateCustomListModal({ onClose, onCreated, existingLists = [] }) {
+export default function CreateCustomListModal({
+  onClose,
+  onCreated,
+  existingLists = [],
+}) {
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -13,7 +17,7 @@ export default function CreateCustomListModal({ onClose, onCreated, existingList
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState('');
   const [error, setError] = useState('');
 
   const selectedEntries = Object.values(selected);
@@ -62,7 +66,7 @@ export default function CreateCustomListModal({ onClose, onCreated, existingList
 
   async function handleCreate() {
     if (!trimmedName || nameExists || selectedEntries.length === 0) return;
-    setSaving(true);
+    setSaving('create');
     setError('');
     try {
       for (const entry of selectedEntries) {
@@ -71,7 +75,7 @@ export default function CreateCustomListModal({ onClose, onCreated, existingList
       onCreated(trimmedName);
     } catch (err) {
       setError(err.message);
-      setSaving(false);
+      setSaving('');
     }
   }
 
@@ -79,7 +83,7 @@ export default function CreateCustomListModal({ onClose, onCreated, existingList
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-header">
-          <span className="modal-title">Create Custom List</span>
+          <span className="modal-title">+ Add List</span>
           <button className="icon-btn" onClick={onClose}>✕</button>
         </div>
 
@@ -183,7 +187,7 @@ export default function CreateCustomListModal({ onClose, onCreated, existingList
             <button className="btn" type="button"
               disabled={saving || !trimmedName || nameExists || selectedEntries.length === 0}
               onClick={handleCreate}>
-              {saving ? 'Creating...' : 'Create List'}
+              {saving === 'create' ? 'Adding...' : 'Add List'}
             </button>
           </div>
         </div>

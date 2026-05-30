@@ -101,14 +101,14 @@ export default function App() {
               onClick={() => setLibraryFilters({})}>
               Library
             </NavLink>
+            <NavLink to="/manage" className={({ isActive }) => isActive ? 'active' : undefined}>
+              Manage
+            </NavLink>
             <NavLink to="/statistics" className={({ isActive }) => isActive ? 'active' : undefined}>
               Statistics
             </NavLink>
             <NavLink to="/explore" className={({ isActive }) => isActive ? 'active' : undefined}>
               Explore
-            </NavLink>
-            <NavLink to="/manage" className={({ isActive }) => isActive ? 'active' : undefined}>
-              Manage
             </NavLink>
           </nav>
         )}

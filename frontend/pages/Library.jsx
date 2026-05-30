@@ -150,7 +150,7 @@ export default function Library({ initialFilters = {} }) {
 
   function handleSort(field) {
     if (sort === field) setOrder(o => o === 'asc' ? 'desc' : 'asc');
-    else { setSort(field); setOrder('asc'); }
+    else { setSort(field); setOrder('desc'); }
   }
 
   async function handleStatusChange(id, newStatus) {
