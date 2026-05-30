@@ -70,6 +70,13 @@ export const createEntry = (data)      => req('/entries', { method: 'POST', body
 export const updateEntry = (id, data)  => req(`/entries/${id}`, { method: 'PUT',  body: JSON.stringify(data) });
 export const deleteEntry = (id)        => req(`/entries/${id}`, { method: 'DELETE' });
 
+// Bulk operations — one atomic request each, scoped server-side to the user.
+export const batchUpdateEntries = (ids, patch) =>
+  req('/entries/batch', { method: 'POST', body: JSON.stringify({ ids, patch }) });
+export const batchDeleteEntries = (ids) =>
+  req('/entries/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) });
+export const getDuplicateEntries = () => req('/entries/duplicates');
+
 export const getCustomLists = () => req('/custom-lists');
 export const renameCustomList = (name, newName) =>
   req(`/custom-lists/${encodeURIComponent(name)}`, {

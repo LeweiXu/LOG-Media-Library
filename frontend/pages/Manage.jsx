@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { exportEntries, getCustomLists, getEntries, getSettings, updateEntry } from '../api.jsx';
-import { extractItems, fmtDate, progressLabel, statusLabel } from '../utils.jsx';
+import { batchDeleteEntries, batchUpdateEntries, exportEntries, getCustomLists, getEntries, getSettings, updateEntry } from '../api.jsx';
+import { extractItems, fmtDate, progressLabel, statusLabel, STATUSES, MEDIUMS, ORIGINS } from '../utils.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ImportModal from './components/ImportModal.jsx';
 import ImportAutoModal from './components/ImportAutoModal.jsx';
 import ImportMalModal from './components/ImportMalModal.jsx';
 import ListsModal from './components/ListsModal.jsx';
+import DedupModal from './components/DedupModal.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 
+const ALL = '__all__';
 const UNLISTED = '';
+// Fields offered by the "bulk edit field" tool, with their input kind.
+const BULK_FIELDS = [
+  { key: 'rating', label: 'Rating',  kind: 'number', min: 0, max: 10 },
+  { key: 'medium', label: 'Medium',  kind: 'medium' },
+  { key: 'origin', label: 'Origin',  kind: 'origin' },
+  { key: 'year',   label: 'Year',    kind: 'number', min: 1800, max: 2100 },
+  { key: 'total',  label: 'Total',   kind: 'number', min: 0 },
+];
 const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
 const DEFAULT_LIMIT = 40;
 const DEFAULT_ORDER = 'desc';
@@ -27,7 +37,7 @@ function validPageSize(value, fallback = DEFAULT_LIMIT) {
 export default function Manage() {
   const [lists, setLists] = useState([]);
   const [unlistedCount, setUnlistedCount] = useState(0);
-  const [selectedList, setSelectedList] = useState(UNLISTED);
+  const [selectedList, setSelectedList] = useState(ALL);
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [showLists, setShowLists] = useState(false);
@@ -37,6 +47,16 @@ export default function Manage() {
   const [showImport, setShowImport] = useState(false);
   const [showImportAuto, setShowImportAuto] = useState(false);
   const [showImportMal, setShowImportMal] = useState(false);
+  const [showDedup, setShowDedup] = useState(false);
+  // Bulk-selection + action state.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkListValue, setBulkListValue] = useState('');
+  const [bulkStatusValue, setBulkStatusValue] = useState('');
+  const [bulkField, setBulkField] = useState('');
+  const [bulkFieldValue, setBulkFieldValue] = useState('');
   const [settingsApplied, setSettingsApplied] = useState(false);
   const [loadingLists, setLoadingLists] = useState(true);
   const [loadingEntries, setLoadingEntries] = useState(true);
@@ -50,8 +70,9 @@ export default function Manage() {
   const [order, setOrder] = useState(DEFAULT_ORDER);
 
   const listNames = useMemo(() => lists.map(list => list.name), [lists]);
+  const isAll = selectedList === ALL;
   const isUnlisted = selectedList === UNLISTED;
-  const selectedLabel = isUnlisted ? 'Unlisted' : selectedList;
+  const selectedLabel = isAll ? 'All Entries' : isUnlisted ? 'Unlisted' : selectedList;
   const totalPages = Math.ceil(total / limit);
 
   const loadLists = useCallback(async () => {
@@ -75,10 +96,18 @@ export default function Manage() {
     if (!settingsApplied) return;
     setLoadingEntries(true);
     setError('');
+    setSelectedIds(new Set());   // selection is per-view; never act on hidden rows
+    setBulkListValue('');
+    setBulkStatusValue('');
+    setBulkField('');
+    setBulkFieldValue('');
     try {
-      const params = isUnlisted
-        ? { custom_list_empty: true, ...(search && { title: search }), sort, order, limit, offset: (page - 1) * limit }
-        : { custom_list: selectedList, ...(search && { title: search }), sort, order, limit, offset: (page - 1) * limit };
+      const base = { ...(search && { title: search }), sort, order, limit, offset: (page - 1) * limit };
+      const params = isAll
+        ? base
+        : isUnlisted
+          ? { custom_list_empty: true, ...base }
+          : { custom_list: selectedList, ...base };
       const data = await getEntries(params);
       const items = extractItems(data);
       setEntries(items);
@@ -88,7 +117,7 @@ export default function Manage() {
     } finally {
       setLoadingEntries(false);
     }
-  }, [isUnlisted, limit, order, page, search, selectedList, settingsApplied, sort]);
+  }, [isAll, isUnlisted, limit, order, page, search, selectedList, settingsApplied, sort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +194,101 @@ export default function Manage() {
     loadEntries();
   }
 
+  // ── Bulk selection ──────────────────────────────────────────────────────────
+  const pageIds = useMemo(() => entries.map(e => e.id), [entries]);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+
+  function toggleSelect(id) {
+    setConfirmBulkDelete(false);   // changing the selection disarms a pending delete
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setConfirmBulkDelete(false);
+    setSelectedIds(allPageSelected ? new Set() : new Set(pageIds));
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+    setConfirmBulkDelete(false);
+    setBulkListValue('');
+    setBulkStatusValue('');
+    setBulkField('');
+    setBulkFieldValue('');
+    setBulkError('');
+  }
+
+  async function runBulk(patch) {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setBulkError('');
+    try {
+      await batchUpdateEntries(ids, patch);
+      clearSelection();
+      refreshView();
+    } catch (err) {
+      setBulkError(err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function bulkAssignList(value) {
+    setBulkListValue(value);
+    setBulkStatusValue('');
+    setBulkField('');
+    setBulkFieldValue('');
+  }
+
+  function bulkSetStatus(value) {
+    setBulkStatusValue(value);
+    setBulkListValue('');
+    setBulkField('');
+    setBulkFieldValue('');
+  }
+
+  function buildBulkPatch() {
+    if (bulkListValue) {
+      return { custom_list: bulkListValue === '__none__' ? null : bulkListValue };
+    }
+    if (bulkStatusValue) {
+      return { status: bulkStatusValue };
+    }
+    if (!bulkField) return null;
+    const meta = BULK_FIELDS.find(f => f.key === bulkField);
+    if (!meta || bulkFieldValue === '') return null;
+    let value = bulkFieldValue;
+    if (meta?.kind === 'number') value = value === '' ? null : Number(value);
+    else value = value || null;
+    return { [bulkField]: value };
+  }
+
+  function applyBulkChange() {
+    const patch = buildBulkPatch();
+    if (patch) runBulk(patch);
+  }
+
+  async function doBulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setBulkError('');
+    try {
+      await batchDeleteEntries(ids);
+      clearSelection();
+      refreshView();
+    } catch (err) {
+      setBulkError(err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   const SortTh = ({ field, className, children }) => (
     <th className={`sortable${className ? ' ' + className : ''}`}
       onClick={() => handleSort(field)}
@@ -181,6 +305,17 @@ export default function Manage() {
       )}
 
       <div className="sidebar-left">
+        <div className="sidebar-section">
+          <div
+            className={`sidebar-item${isAll ? ' active' : ''}`}
+            onClick={() => { setSelectedList(ALL); setDrawer(''); }}
+          >
+            All Entries
+          </div>
+        </div>
+
+        <div className="sidebar-divider" />
+
         <div className="sidebar-section">
           <span className="sidebar-label">Custom Lists</span>
           {lists.map(list => (
@@ -230,7 +365,7 @@ export default function Manage() {
             </span>
           </div>
           <div className="page-head-mobile">
-            <button className="btn" onClick={() => setShowLists(true)}>Custom Lists</button>
+            <button className="btn" onClick={() => setShowLists(true)}>+ Add List</button>
             <button
               type="button"
               className="drawer-toggle"
@@ -295,6 +430,10 @@ export default function Manage() {
             <table className="media-table" data-mobile-show="status">
               <thead>
                 <tr>
+                  <th className="col-select">
+                    <input type="checkbox" checked={allPageSelected}
+                      onChange={toggleSelectAll} aria-label="Select all on page" />
+                  </th>
                   <SortTh field="title">Title</SortTh>
                   <SortTh field="status" className="col-status">Status</SortTh>
                   <SortTh field="medium" className="col-medium">Medium</SortTh>
@@ -307,7 +446,12 @@ export default function Manage() {
               <tbody>
                 {entries.map(entry => (
                   <tr key={entry.id} style={{ cursor: 'pointer' }}
+                    className={selectedIds.has(entry.id) ? 'row-selected' : undefined}
                     onClick={() => { setDetailEntry(entry); setStartEditing(false); }}>
+                    <td className="col-select" onClick={ev => ev.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.has(entry.id)}
+                        onChange={() => toggleSelect(entry.id)} aria-label={`Select ${entry.title}`} />
+                    </td>
                     <td>
                       <div className="cover-cell">
                         <div className="cover-thumb">
@@ -365,19 +509,84 @@ export default function Manage() {
       </div>
 
       <div className="sidebar-right">
-        <p className="panel-title">Sort</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
-          {SORT_FIELDS.map(f => (
-            <div key={f.key} className="sidebar-item"
-              style={{ padding: '4px 0', fontSize: 11 }}
-              onClick={() => handleSort(f.key)}>
-              {f.label}
-              {sort === f.key && (
-                <span style={{ color: 'var(--accent)' }}>{order === 'asc' ? ' ↑' : ' ↓'}</span>
-              )}
+        <p className="panel-title">Batch Edit</p>
+        <div className="batch-panel">
+          <div className={`batch-hint${selectedIds.size ? ' is-active' : ''}`}>
+            {selectedIds.size ? `${selectedIds.size} selected` : 'Select entries to edit in bulk'}
+          </div>
+
+          <select className="inline-select batch-select" value={bulkListValue} disabled={bulkBusy || selectedIds.size === 0}
+            onChange={e => bulkAssignList(e.target.value)}>
+            <option value="" disabled>Assign to list…</option>
+            {listNames.map(n => <option key={n} value={n}>{n}</option>)}
+            <option value="__none__">— Remove from list —</option>
+          </select>
+
+          <select className="inline-select batch-select" value={bulkStatusValue} disabled={bulkBusy || selectedIds.size === 0}
+            onChange={e => bulkSetStatus(e.target.value)}>
+            <option value="" disabled>Set status…</option>
+            {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+          </select>
+
+          <select className="inline-select batch-select" value={bulkField} disabled={bulkBusy || selectedIds.size === 0}
+            onChange={e => {
+              setBulkField(e.target.value);
+              setBulkFieldValue('');
+              setBulkListValue('');
+              setBulkStatusValue('');
+            }}>
+            <option value="">Edit field…</option>
+            {BULK_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+          </select>
+
+          {bulkField && (
+            <div className="batch-field-row">
+              {(() => {
+                const meta = BULK_FIELDS.find(f => f.key === bulkField);
+                if (meta.kind === 'medium' || meta.kind === 'origin') {
+                  const opts = meta.kind === 'medium' ? MEDIUMS : ORIGINS;
+                  return (
+                    <select className="inline-select batch-select" value={bulkFieldValue} disabled={bulkBusy}
+                      style={{ flex: 1 }}
+                      onChange={e => setBulkFieldValue(e.target.value)}>
+                      <option value="">Choose {meta.label.toLowerCase()}…</option>
+                      {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  );
+                }
+                return (
+                  <input className="inline-select batch-select" type="number" placeholder={meta.label}
+                    min={meta.min} max={meta.max} value={bulkFieldValue} disabled={bulkBusy}
+                    style={{ flex: 1 }}
+                    onChange={e => setBulkFieldValue(e.target.value)} />
+                );
+              })()}
             </div>
-          ))}
+          )}
+
+          <div className="batch-actions">
+            <button className="icon-btn danger" disabled={bulkBusy || selectedIds.size === 0}
+              onClick={() => confirmBulkDelete ? doBulkDelete() : setConfirmBulkDelete(true)}>
+              {bulkBusy ? 'Working…' : confirmBulkDelete ? 'Confirm delete' : 'Delete'}
+            </button>
+            <button className="icon-btn" disabled={bulkBusy} onClick={clearSelection}>Clear</button>
+            <button className="icon-btn accent" disabled={bulkBusy || selectedIds.size === 0 || !buildBulkPatch()} onClick={applyBulkChange}>
+              Apply
+            </button>
+          </div>
+
+          {bulkError && <div style={{ color: 'var(--red)', fontSize: 11 }}>{bulkError}</div>}
         </div>
+
+        <p className="panel-title">Tools</p>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
+          onClick={() => setShowLists(true)}>
+          Custom Lists
+        </button>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: 18 }}
+          onClick={() => setShowDedup(true)}>
+          Find Duplicates
+        </button>
 
         <p className="panel-title">Export / Import</p>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
@@ -500,6 +709,13 @@ export default function Manage() {
         <ImportMalModal
           onClose={() => setShowImportMal(false)}
           onImported={refreshView}
+        />
+      )}
+
+      {showDedup && (
+        <DedupModal
+          onClose={() => setShowDedup(false)}
+          onResolved={refreshView}
         />
       )}
     </div>

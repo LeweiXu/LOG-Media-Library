@@ -9,6 +9,7 @@ from models import User
 from config import get_settings as get_app_settings
 from schemas import (
     BackupStatus,
+    BatchUpdateRequest, BatchDeleteRequest, BatchResult, DuplicateGroup,
     CustomListRead, CustomListRename,
     EntryCreate, EntryListResponse, EntryRead, EntryUpdate,
     ImportConfirmRequest, ImportConfirmResponse, ImportPreviewResponse,
@@ -210,6 +211,13 @@ def list_entries(
         offset=offset,
     )
 
+@router.get("/entries/duplicates", response_model=list[DuplicateGroup])
+def list_duplicate_entries(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return entry_service.find_duplicate_groups(db, current_user.username)
+
 @router.get("/entries/{entry_id}", response_model=EntryRead)
 def get_entry(
     entry_id: int,
@@ -249,6 +257,26 @@ def check_duplicates(
 ):
     exists = entry_service.check_duplicates(db, current_user.username, payload.items)
     return DuplicateCheckResponse(exists=exists)
+
+@router.post("/entries/batch", response_model=BatchResult)
+def batch_update_entries(
+    payload: BatchUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    affected = entry_service.batch_update_entries(
+        db, current_user.username, payload.ids, payload.patch
+    )
+    return BatchResult(affected=affected)
+
+@router.post("/entries/batch-delete", response_model=BatchResult)
+def batch_delete_entries(
+    payload: BatchDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    affected = entry_service.batch_delete_entries(db, current_user.username, payload.ids)
+    return BatchResult(affected=affected)
 
 @router.delete("/entries", status_code=status.HTTP_204_NO_CONTENT)
 def delete_all_user_entries(

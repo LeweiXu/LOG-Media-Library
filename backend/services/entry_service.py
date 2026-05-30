@@ -172,9 +172,13 @@ def create_entry(db: Session, payload: EntryCreate, username: str) -> Entry:
 
 # ── Update ────────────────────────────────────────────────────────────────────
 
-def update_entry(db: Session, entry: Entry, payload: EntryUpdate) -> Entry:
-    data = payload.model_dump(exclude_unset=True)
+def _apply_update(entry: Entry, data: dict) -> None:
+    """Apply an EntryUpdate dict to an entry in place (no commit).
 
+    Preserves completed_at / progress auto-management so single and batch
+    updates behave identically. `data` is expected to be the result of
+    EntryUpdate.model_dump(exclude_unset=True).
+    """
     for field, value in data.items():
         setattr(entry, field, value)
 
@@ -193,9 +197,63 @@ def update_entry(db: Session, entry: Entry, payload: EntryUpdate) -> Entry:
 
     entry.updated_at = datetime.now(timezone.utc)
 
+
+def update_entry(db: Session, entry: Entry, payload: EntryUpdate) -> Entry:
+    _apply_update(entry, payload.model_dump(exclude_unset=True))
     db.commit()
     db.refresh(entry)
     return entry
+
+
+def batch_update_entries(db: Session, username: str, ids: list[int], payload: EntryUpdate) -> int:
+    """Apply the same patch to every owned entry in `ids`. Returns count updated."""
+    data = payload.model_dump(exclude_unset=True)
+    if not ids or not data:
+        return 0
+    entries = db.execute(
+        select(Entry).where(Entry.username == username, Entry.id.in_(ids))
+    ).scalars().all()
+    for entry in entries:
+        _apply_update(entry, data)
+    db.commit()
+    return len(entries)
+
+
+def batch_delete_entries(db: Session, username: str, ids: list[int]) -> int:
+    """Delete every owned entry in `ids`. Returns count deleted."""
+    if not ids:
+        return 0
+    entries = db.execute(
+        select(Entry).where(Entry.username == username, Entry.id.in_(ids))
+    ).scalars().all()
+    for entry in entries:
+        db.delete(entry)
+    db.commit()
+    return len(entries)
+
+
+def find_duplicate_groups(db: Session, username: str) -> list[dict]:
+    """Group a user's entries by (lower(title), medium); return groups of size > 1.
+
+    Medium is part of the key (NULL treated as empty) so a film and a book that
+    share a title aren't flagged. Groups are ordered by title for stable display.
+    """
+    rows = db.execute(
+        select(Entry)
+        .where(Entry.username == username)
+        .order_by(asc(Entry.title), asc(Entry.id))
+    ).scalars().all()
+
+    groups: dict[tuple[str, str], list[Entry]] = {}
+    for entry in rows:
+        key = (entry.title.strip().lower(), (entry.medium or "").lower())
+        groups.setdefault(key, []).append(entry)
+
+    return [
+        {"key": f"{title} · {medium or '—'}", "entries": members}
+        for (title, medium), members in groups.items()
+        if len(members) > 1
+    ]
 
 
 # ── Delete ────────────────────────────────────────────────────────────────────

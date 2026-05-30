@@ -139,6 +139,22 @@ class EntryListResponse(BaseModel):
     limit: int
     offset: int
 
+# --- Batch / Dedup Schemas ---
+
+class BatchUpdateRequest(BaseModel):
+    ids:   list[int] = Field(..., min_length=1)
+    patch: EntryUpdate
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int] = Field(..., min_length=1)
+
+class BatchResult(BaseModel):
+    affected: int
+
+class DuplicateGroup(BaseModel):
+    key:     str
+    entries: list[EntryRead]
+
 # --- Custom List Schemas ---
 
 class CustomListRead(BaseModel):

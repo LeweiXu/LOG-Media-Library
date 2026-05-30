@@ -4,6 +4,7 @@ import { getExplore, getSettings } from '../api.jsx';
 import { MEDIUMS, statusLabel } from '../utils.jsx';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
+import AddEntryPanel from './components/AddEntryPanel.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it.
@@ -44,6 +45,10 @@ export default function Explore() {
   const [refreshFlag, setRefreshFlag] = useState(false);
   // Mobile drawer state — '', 'left', or 'right'.
   const [drawer, setDrawer] = useState('');
+  // Page mode — 'discover' (recommendations) or 'add' (full-page add entry).
+  const [mode, setMode] = useState('discover');
+  // Entries added during this Add session, newest first (right-sidebar list).
+  const [addedThisSession, setAddedThisSession] = useState([]);
 
   // ── Initial load: pull saved settings, seed filters from them ────────────
   useEffect(() => {
@@ -131,6 +136,11 @@ export default function Explore() {
   // Useful after adding entries elsewhere so "in library" tags refresh.
   const handleRefresh = () => {
     fetchExplore();
+  };
+
+  // An entry was created from the Add panel — record it for the session list.
+  const handleAddPanelCreated = (created) => {
+    if (created) setAddedThisSession(prev => [created, ...prev]);
   };
 
   function entryFromExploreItem(item, statusValue) {
@@ -263,33 +273,51 @@ export default function Explore() {
               title="Medium"
             >☰ Medium</button>
             <span className="page-title">Explore</span>
-            <span className="page-desc">
-              {loading ? <span className="loading-dots">scanning</span>
-                       : `${items.length} suggestions${personalised ? ' · tuned to your taste' : ''}`}
-            </span>
+            <div className="mode-toggle">
+              <button
+                type="button"
+                className={`mode-toggle-btn${mode === 'discover' ? ' is-active' : ''}`}
+                onClick={() => setMode('discover')}
+              >Discover</button>
+              <button
+                type="button"
+                className={`mode-toggle-btn${mode === 'add' ? ' is-active' : ''}`}
+                onClick={() => setMode('add')}
+              >Add Entry</button>
+            </div>
+            {mode === 'discover' && (
+              <span className="page-desc">
+                {loading ? <span className="loading-dots">scanning</span>
+                         : `${items.length} suggestions${personalised ? ' · tuned to your taste' : ''}`}
+              </span>
+            )}
           </div>
-          <div className="page-head-mobile">
-            <button
-              type="button"
-              className="drawer-toggle"
-              onClick={() => setDrawer(d => d === 'right' ? '' : 'right')}
-              aria-label="Toggle taste profile"
-              title="Taste"
-            >⋯</button>
-            <button className="icon-btn" onClick={handleRefresh} disabled={loading}
-              title="Re-query the current suggestions (refreshes 'in library' tags)"
-              style={{ padding: '5px 10px' }}>
-              Refresh
-            </button>
-            <button className="icon-btn" onClick={handleReroll} disabled={loading}
-              title="Bypass cache and pull a fresh set of suggestions"
-              style={{ padding: '5px 10px' }}>
-              Reroll
-            </button>
-          </div>
+          {mode === 'discover' && (
+            <div className="page-head-mobile">
+              <button
+                type="button"
+                className="drawer-toggle"
+                onClick={() => setDrawer(d => d === 'right' ? '' : 'right')}
+                aria-label="Toggle taste profile"
+                title="Taste"
+              >⋯</button>
+              <button className="icon-btn" onClick={handleRefresh} disabled={loading}
+                title="Re-query the current suggestions (refreshes 'in library' tags)"
+                style={{ padding: '5px 10px' }}>
+                Refresh
+              </button>
+              <button className="icon-btn" onClick={handleReroll} disabled={loading}
+                title="Bypass cache and pull a fresh set of suggestions"
+                style={{ padding: '5px 10px' }}>
+                Reroll
+              </button>
+            </div>
+          )}
         </div>
 
-        {error && (
+        {mode === 'add' && <AddEntryPanel onCreated={handleAddPanelCreated} medium={medium} />}
+
+        {mode === 'discover' && error && (
           <div className="state-block">
             <div className="state-title">Error</div>
             <div className="state-detail">{error}</div>
@@ -297,13 +325,13 @@ export default function Explore() {
           </div>
         )}
 
-        {!error && loading && (
+        {mode === 'discover' && !error && loading && (
           <div className="skeleton-page" aria-label="Loading explore">
             <SkeletonExploreGrid cards={9} />
           </div>
         )}
 
-        {!error && !loading && items.length === 0 && (
+        {mode === 'discover' && !error && !loading && items.length === 0 && (
           <div className="state-block">
             <div className="state-title">No suggestions to surface.</div>
             <div className="state-detail">
@@ -312,7 +340,7 @@ export default function Explore() {
           </div>
         )}
 
-        {!error && !loading && items.length > 0 && (
+        {mode === 'discover' && !error && !loading && items.length > 0 && (
         <div className="explore-grid">
           {items.map((item, idx) => {
             const state = cardState[idx] || 'idle';
@@ -385,8 +413,28 @@ export default function Explore() {
         )}
       </main>
 
-      {/* ── Right sidebar: affinity snapshot ─────────────────────────────── */}
+      {/* ── Right sidebar: affinity snapshot, or added-this-session in add mode ── */}
       <aside className="sidebar-right">
+        {mode === 'add' ? (
+          <>
+            <div className="panel-title">Added this session</div>
+            {addedThisSession.length === 0 ? (
+              <p className="explore-affinity-empty">
+                Entries you add here will appear in this list.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {addedThisSession.map(e => (
+                  <div key={e.id} className="session-add-item">
+                    <span className="session-add-title">{e.title}</span>
+                    <span className={`badge badge-${e.status}`}>{statusLabel(e.status)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+        <>
         <div className="panel-title">Your library</div>
         {!affinity || affinity.sample_size === 0 ? (
           <p className="explore-affinity-empty">
@@ -436,6 +484,8 @@ export default function Explore() {
               and mediums. Change the bias dimension in Settings → Explore.
             </div>
           </>
+        )}
+        </>
         )}
       </aside>
 
