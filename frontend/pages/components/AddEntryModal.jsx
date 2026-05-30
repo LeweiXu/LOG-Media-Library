@@ -11,6 +11,7 @@ const SEARCH_SOURCES = [
   { value: 'kitsu',        label: 'Kitsu' },
   { value: 'novelupdates', label: 'NovelUpdates' },
   { value: 'mangadex',     label: 'MangaDex' },
+  { value: 'mangaupdates', label: 'MangaUpdates' },
   { value: 'igdb',         label: 'IGDB' },
   { value: 'rawg',         label: 'RAWG' },
   { value: 'google_books', label: 'Google Books' },

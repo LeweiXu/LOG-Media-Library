@@ -23,6 +23,24 @@ def _novel_id(url: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
+async def _review_score(novel_id: str) -> Optional[float]:
+    """The "完结评分" rating shown in #novelreview_div is AJAX-loaded; the app
+    API exposes the same value as ``novelReviewScore`` (e.g. "8分" → 8.0)."""
+    raw = await fetch_bytes(
+        "https://app.jjwxc.net/androidapi/novelbasicinfo", params={"novelId": novel_id}
+    )
+    if not raw:
+        return None
+    import json
+
+    try:
+        score_text = json.loads(raw.decode("utf-8", "ignore")).get("novelReviewScore") or ""
+    except (ValueError, TypeError):
+        return None
+    m = re.search(r"(\d+(?:\.\d+)?)", score_text)
+    return float(m.group(1)) if m else None
+
+
 async def fetch(client, url: str) -> Optional[SearchResult]:
     novel_id = _novel_id(url)
     if not novel_id:
@@ -83,6 +101,8 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
         if years:
             year = min(years)
 
+    external_rating = await _review_score(novel_id)
+
     return SearchResult(
         title=title,
         medium="Web Novel",
@@ -95,5 +115,5 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
         description=description,
         external_url=f"https://www.jjwxc.net/onebook.php?novelid={novel_id}",
         genres=None,
-        external_rating=None,
+        external_rating=external_rating,
     )

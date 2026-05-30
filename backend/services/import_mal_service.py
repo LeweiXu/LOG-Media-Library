@@ -204,7 +204,6 @@ async def _fetch_jikan_metadata(
             or jpg.get("image_url")
         )
 
-        episodes = data.get("episodes") or data.get("chapters")
         aired = data.get("aired") or data.get("published") or {}
         prop = aired.get("prop", {}).get("from", {})
         year = prop.get("year")
@@ -232,13 +231,22 @@ async def _fetch_jikan_metadata(
             else:
                 medium = "Manga"
 
+        # Total unit differs by medium: episodes for anime, volumes for light
+        # novels, chapters for manga.
+        if medium == "Anime":
+            total = data.get("episodes")
+        elif medium == "Light Novel":
+            total = data.get("volumes")
+        else:
+            total = data.get("chapters")
+
         return {
             "title":           display_title or None,
             "medium":          medium,
             "origin":          "Japanese",
             "year":            year,
             "cover_url":       cover,
-            "total":           episodes,
+            "total":           total,
             "external_id":     str(mal_id),
             "source":          "jikan",
             "external_url":    f"https://myanimelist.net/{entry_type}/{mal_id}",

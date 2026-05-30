@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import httpx
 
 from schemas import ExploreItem, SearchResult
 from .utils import safe_year
+from .mangaupdates import mangaupdates_chapter_count
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,9 @@ async def search_jikan(
     https://jikan.moe/
     """
     results: list[SearchResult] = []
+    # Manga results with no chapter total (typically ongoing series) collected
+    # here for a MangaUpdates fallback after the main pass.
+    manga_needing_total: list[tuple[int, str]] = []
     endpoints: list[tuple[str, str]] = [
         ("https://api.jikan.moe/v4/anime", "Anime"),
         ("https://api.jikan.moe/v4/manga", "Manga"),
@@ -44,16 +49,26 @@ async def search_jikan(
                 )
                 mal_id = str(item.get("mal_id", ""))
                 mal_type = "anime" if med == "Anime" else "manga"
-                episodes = item.get("episodes") or item.get("chapters")
+                # Resolve the per-item medium (the /manga endpoint also returns
+                # light novels). Use a local so it doesn't leak across items.
+                mal_type_field = (item.get("type") or "").lower()
+                if med == "Manga" and "novel" in mal_type_field:
+                    item_medium = "Light Novel"
+                else:
+                    item_medium = med
+                # Total unit differs by medium: episodes for anime, volumes for
+                # light novels, chapters for manga/comics.
+                if item_medium == "Anime":
+                    total = item.get("episodes")
+                elif item_medium == "Light Novel":
+                    total = item.get("volumes")
+                else:
+                    total = item.get("chapters")
                 aired = item.get("aired") or item.get("published") or {}
                 prop = aired.get("prop", {}).get("from", {})
                 year = prop.get("year") or safe_year(
                     (aired.get("from") or "")[:10] or None
                 )
-                mal_type_field = (item.get("type") or "").lower()
-                if med == "Manga":
-                    if "light novel" in mal_type_field or "novel" in mal_type_field:
-                        med = "Light Novel"
                 genres_str = ", ".join(
                     g["name"] for g in (item.get("genres") or [])[:5] if g.get("name")
                 ) or None
@@ -62,11 +77,11 @@ async def search_jikan(
                 results.append(
                     SearchResult(
                         title=display_title,
-                        medium=med,
+                        medium=item_medium,
                         origin="Japanese",
                         year=year,
                         cover_url=cover,
-                        total=episodes,
+                        total=total,
                         external_id=mal_id,
                         source="jikan",
                         description=item.get("synopsis") or None,
@@ -75,8 +90,20 @@ async def search_jikan(
                         external_rating=ext_rating,
                     )
                 )
+                if item_medium == "Manga" and not total:
+                    manga_needing_total.append((len(results) - 1, display_title))
         except Exception as exc:
             logger.warning("Jikan search error: %s", exc)
+
+    # Fill missing manga chapter counts from MangaUpdates (ongoing series that
+    # MAL leaves blank). Light novels are intentionally left as-is.
+    if manga_needing_total:
+        counts = await asyncio.gather(
+            *(mangaupdates_chapter_count(client, t) for _, t in manga_needing_total)
+        )
+        for (idx, _), count in zip(manga_needing_total, counts):
+            if count:
+                results[idx].total = count
 
     return results
 

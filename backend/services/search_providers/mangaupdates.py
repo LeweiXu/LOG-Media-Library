@@ -91,3 +91,34 @@ async def search_mangaupdates(
     except Exception as exc:
         logger.warning("MangaUpdates search error: %s", exc)
         return []
+
+
+async def mangaupdates_chapter_count(
+    client: httpx.AsyncClient, title: str
+) -> int | None:
+    """Best-match latest chapter number for ``title`` on MangaUpdates.
+
+    Used as a fallback when MAL/Jikan reports no chapter total for an ongoing
+    series. Takes the top search hit, then reads ``latest_chapter`` from the
+    series detail (the search record itself doesn't carry it).
+    """
+    try:
+        r = await client.post(
+            "https://api.mangaupdates.com/v1/series/search",
+            json={"search": title, "perpage": 1},
+        )
+        r.raise_for_status()
+        hits = r.json().get("results", [])
+        if not hits:
+            return None
+        series_id = hits[0].get("record", {}).get("series_id")
+        if not series_id:
+            return None
+
+        d = await client.get(f"https://api.mangaupdates.com/v1/series/{series_id}")
+        d.raise_for_status()
+        latest = d.json().get("latest_chapter")
+        return int(latest) if latest else None
+    except Exception as exc:
+        logger.warning("MangaUpdates chapter-count lookup error for %r: %s", title, exc)
+        return None
