@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getEntries, getStats, updateEntry } from '../api.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, logDotClass } from '../utils.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
@@ -199,12 +199,14 @@ export default function DashboardAlt({ onFilterChange }) {
           <span className="sidebar-label">Origin</span>
           {loading
             ? <SkeletonSidebarRows rows={5} />
-            : (s.by_origin ?? []).map(({ origin, count }) => (
-                <div key={origin} className="sidebar-item"
-                  onClick={() => onFilterChange({ origin })}>
-                  {origin} <span className="sidebar-count">{count}</span>
-                </div>
-              ))}
+            : (s.by_origin ?? [])
+                .filter(({ origin }) => ORIGINS.includes(origin))
+                .map(({ origin, count }) => (
+                  <div key={origin} className="sidebar-item"
+                    onClick={() => onFilterChange({ origin })}>
+                    {origin} <span className="sidebar-count">{count}</span>
+                  </div>
+                ))}
         </div>
       </div>
 

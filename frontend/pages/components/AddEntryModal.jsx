@@ -236,42 +236,35 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                       : 'Paste a NovelUpdates, JJWXC, Qidian, or IMDb URL'}
                   </div>
                 ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, color: 'var(--dim)', marginRight: 2, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                    Sources:
-                  </span>
-                  {SEARCH_SOURCES.map(s => {
-                    const on = selectedSources.has(s.value);
-                    return (
+                <div className="source-select">
+                  <div className="source-select-head">
+                    <span className="form-label">Sources</span>
+                    {selectedSources.size > 0 && (
                       <button
-                        key={s.value}
                         type="button"
-                        onClick={() => toggleSource(s.value)}
-                        style={{
-                          fontSize: 10,
-                          padding: '2px 7px',
-                          borderRadius: 3,
-                          border: '1px solid',
-                          borderColor: on ? 'var(--accent)' : 'var(--border)',
-                          background: on ? 'var(--accent)' : 'transparent',
-                          color: on ? 'var(--bg)' : 'var(--dim)',
-                          cursor: 'pointer',
-                          letterSpacing: '0.03em',
-                        }}
+                        className="source-select-clear"
+                        onClick={() => { setSelectedSources(new Set()); saveSources(new Set()); }}
                       >
-                        {s.label}
+                        ✕ Clear ({selectedSources.size})
                       </button>
-                    );
-                  })}
-                  {selectedSources.size > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedSources(new Set()); saveSources(new Set()); }}
-                      style={{ fontSize: 10, padding: '2px 6px', background: 'none', border: 'none', color: 'var(--dim)', cursor: 'pointer' }}
-                    >
-                      ✕ all
-                    </button>
-                  )}
+                    )}
+                  </div>
+                  <div className="source-grid">
+                    {SEARCH_SOURCES.map(s => {
+                      const on = selectedSources.has(s.value);
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          className={`source-chip${on ? ' is-on' : ''}`}
+                          onClick={() => toggleSource(s.value)}
+                        >
+                          <span className="source-box">{on ? '[x]' : '[ ]'}</span>
+                          {s.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 )}
               </form>

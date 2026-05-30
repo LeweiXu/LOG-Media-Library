@@ -50,6 +50,7 @@ def get_stats(db: Session, username: str) -> StatsResponse:
         select(Entry.origin, func.count().label("cnt"))
         .where(Entry.username == username)
         .where(Entry.origin.is_not(None))
+        .where(Entry.origin != "")
         .group_by(Entry.origin)
         .order_by(func.count().desc())
     ).all()

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { exportEntries, getCustomLists, getEntries, getSettings, updateEntry } from '../api.jsx';
 import { extractItems, fmtDate, progressLabel, statusLabel } from '../utils.jsx';
-import CreateCustomListModal from './components/CreateCustomListModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ImportModal from './components/ImportModal.jsx';
 import ImportAutoModal from './components/ImportAutoModal.jsx';
 import ImportMalModal from './components/ImportMalModal.jsx';
-import ManageListsModal from './components/ManageListsModal.jsx';
+import ListsModal from './components/ListsModal.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 
 const UNLISTED = '';
@@ -31,8 +30,7 @@ export default function Manage() {
   const [selectedList, setSelectedList] = useState(UNLISTED);
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
-  const [showManageLists, setShowManageLists] = useState(false);
-  const [showAddList, setShowAddList] = useState(false);
+  const [showLists, setShowLists] = useState(false);
   const [lastEntryWarning, setLastEntryWarning] = useState(null);
   const [detailEntry, setDetailEntry] = useState(null);
   const [startEditing, setStartEditing] = useState(false);
@@ -232,8 +230,7 @@ export default function Manage() {
             </span>
           </div>
           <div className="page-head-mobile">
-            <button className="btn" onClick={() => setShowManageLists(true)}>Manage Lists</button>
-            <button className="btn" onClick={() => setShowAddList(true)}>+ New List</button>
+            <button className="btn" onClick={() => setShowLists(true)}>Custom Lists</button>
             <button
               type="button"
               className="drawer-toggle"
@@ -414,10 +411,16 @@ export default function Manage() {
         </div>
       </div>
 
-      {showManageLists && (
-        <ManageListsModal
-          onClose={() => setShowManageLists(false)}
+      {showLists && (
+        <ListsModal
+          onClose={() => setShowLists(false)}
           existingLists={lists}
+          onCreated={(name) => {
+            setShowLists(false);
+            setSelectedList(name);
+            setPage(1);
+            loadLists();
+          }}
           onRenamed={(oldName, newName) => {
             if (selectedList === oldName) {
               setSelectedList(newName);
@@ -430,19 +433,6 @@ export default function Manage() {
               setSelectedList(UNLISTED);
               setPage(1);
             }
-            loadLists();
-          }}
-        />
-      )}
-
-      {showAddList && (
-        <CreateCustomListModal
-          onClose={() => setShowAddList(false)}
-          existingLists={lists}
-          onCreated={(name) => {
-            setShowAddList(false);
-            setSelectedList(name);
-            setPage(1);
             loadLists();
           }}
         />

@@ -19,8 +19,12 @@ import os
 import sys
 import time
 
-# Allow running from anywhere — operate relative to backend/.
-os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Allow running from anywhere — put the backend root on sys.path (so `db`,
+# `models`, `config` import) and chdir into it (so config's relative `.env`
+# loads). chdir alone is not enough: imports resolve via sys.path, not cwd.
+_BACKEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+os.chdir(_BACKEND_DIR)
+sys.path.insert(0, _BACKEND_DIR)
 
 import httpx
 from db import SessionLocal

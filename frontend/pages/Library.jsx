@@ -95,6 +95,8 @@ export default function Library({ initialFilters = {} }) {
         all.forEach(e => {
           c[e.status] = (c[e.status] || 0) + 1;
           if (e.medium) c[e.medium] = (c[e.medium] || 0) + 1;
+          // Only the canonical origins are tallied; null/blank/unknown are ignored.
+          if (ORIGINS.includes(e.origin)) c[e.origin] = (c[e.origin] || 0) + 1;
         });
         setCounts(c);
       }
@@ -307,6 +309,9 @@ export default function Library({ initialFilters = {} }) {
           {ORIGINS.map(o => (
             <div key={o} className={`sidebar-item${originFilter === o ? ' active' : ''}`} onClick={() => setOriginFilter(o)}>
               {o}
+              {loading
+                ? <SkeletonLine width={24} height={14} />
+                : <span className="sidebar-count">{counts[o] || 0}</span>}
             </div>
           ))}
         </div>
