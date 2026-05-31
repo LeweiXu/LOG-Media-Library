@@ -171,6 +171,7 @@ export default function ImportMalModal({ onClose, onImported }) {
             <img
               src={data.cover_url}
               alt=""
+              referrerPolicy="no-referrer"
               style={{ width: 44, height: 62, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }}
               onError={ev => { ev.target.style.display = 'none'; }}
             />

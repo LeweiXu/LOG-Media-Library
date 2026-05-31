@@ -96,6 +96,7 @@ export default function DedupModal({ onClose, onResolved }) {
                         <div className="cover-thumb dedup-cover">
                           {entry.cover_url && (
                             <img src={entry.cover_url} alt=""
+                              referrerPolicy="no-referrer"
                               onError={ev => { ev.target.style.display = 'none'; }} />
                           )}
                         </div>

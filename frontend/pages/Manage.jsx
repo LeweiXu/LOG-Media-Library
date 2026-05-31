@@ -466,6 +466,7 @@ export default function Manage() {
                         <div className="cover-thumb">
                           {entry.cover_url && (
                             <img src={entry.cover_url} alt=""
+                              referrerPolicy="no-referrer"
                               onError={ev => { ev.target.style.display = 'none'; }} />
                           )}
                         </div>

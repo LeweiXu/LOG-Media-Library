@@ -10,6 +10,7 @@ function CoverThumb({ url, title }) {
     <div className="cover-thumb">
       {url && (
         <img src={url} alt={title}
+          referrerPolicy="no-referrer"
           onError={e => { e.target.style.display = 'none'; }} />
       )}
     </div>

@@ -56,6 +56,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
           {current.cover_url && (
             <div style={{ textAlign: 'center', marginBottom: 14 }}>
               <img src={current.cover_url} alt=""
+                referrerPolicy="no-referrer"
                 style={{ maxHeight: 320, borderRadius: 4, objectFit: 'cover' }}
                 onError={e => { e.target.style.display = 'none'; }} />
             </div>

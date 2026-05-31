@@ -198,7 +198,7 @@ export default function AddEntryPanel({
                 <article key={`${item.source}:${item.external_id || item.title}:${idx}`} className="add-preview">
                   <div className="add-preview-cover">
                     {item.cover_url
-                      ? <img src={item.cover_url} alt="" onError={ev => { ev.target.style.display = 'none'; }} />
+                      ? <img src={item.cover_url} alt="" referrerPolicy="no-referrer" onError={ev => { ev.target.style.display = 'none'; }} />
                       : <div className="explore-cover-empty">—</div>}
                   </div>
                   <div className="add-preview-body">
@@ -260,7 +260,7 @@ export default function AddEntryPanel({
                   >
                     <div className="explore-cover">
                       {(r.cover_url || r.cover)
-                        ? <img src={r.cover_url || r.cover} alt="" loading="lazy" />
+                        ? <img src={r.cover_url || r.cover} alt="" loading="lazy" referrerPolicy="no-referrer" />
                         : <div className="explore-cover-empty">—</div>}
                     </div>
                     <div className="explore-body">

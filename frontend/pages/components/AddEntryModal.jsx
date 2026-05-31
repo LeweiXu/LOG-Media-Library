@@ -235,7 +235,9 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                               onClick={() => toggleSelect(i)}
                             >
                               <div className="sr-cover">
-                                {(r.cover_url || r.cover) && <img src={r.cover_url || r.cover} alt="" />}
+                                {(r.cover_url || r.cover) && (
+                                  <img src={r.cover_url || r.cover} alt="" referrerPolicy="no-referrer" />
+                                )}
                               </div>
                               <div style={{ flex: 1 }}>
                                 <div className="sr-title">{r.title}</div>

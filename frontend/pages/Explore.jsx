@@ -394,7 +394,7 @@ export default function Explore() {
                        onKeyDown={e => handleCardKeyDown(e, idx, item, owned)}>
                 <div className="explore-cover">
                   {item.cover_url
-                    ? <img src={item.cover_url} alt="" loading="lazy" />
+                    ? <img src={item.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
                     : <div className="explore-cover-empty">—</div>}
                 </div>
 

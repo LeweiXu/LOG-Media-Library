@@ -431,6 +431,7 @@ export default function Library({ initialFilters = {} }) {
                           <div className="cover-thumb">
                             {e.cover_url && (
                               <img src={e.cover_url} alt=""
+                                referrerPolicy="no-referrer"
                                 onError={ev => { ev.target.style.display = 'none'; }} />
                             )}
                           </div>
