@@ -342,7 +342,7 @@ export default function Explore() {
         {/* Recommendations — hidden while a search/URL query is active. */}
         {!searchActive && (
         <div className="explore-recs">
-          <div className="section-header" style={{ marginTop: 18 }}>Recommended for you</div>
+          <div className="section-header explore-recs-title">Recommended for you</div>
 
         {error && (
           <div className="state-block">
@@ -442,7 +442,7 @@ export default function Explore() {
         )}
 
         {!error && !loading && recTotalPages > 1 && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', padding: '4px 0 16px' }}>
+          <div className="explore-pagination">
             {recPage > 1 && <button className="icon-btn" onClick={() => setRecPage(1)}>« First</button>}
             <button className="icon-btn" disabled={recPage === 1} onClick={() => setRecPage(p => p - 1)}>← Prev</button>
             <span style={{ fontSize: 11, color: 'var(--dim)' }}>Page {recPage} of {recTotalPages}</span>

@@ -49,6 +49,7 @@ export default function AddEntryPanel({
 
   // "Active" = this section is showing output that should replace the recs.
   const active = previews !== null || results !== null || searching || !!searchErr;
+  const canClear = active || Boolean(query.trim()) || selectedSources.size > 0;
   useEffect(() => { onActiveChange?.(active); }, [active, onActiveChange]);
 
   function toggleSource(value) {
@@ -132,7 +133,7 @@ export default function AddEntryPanel({
   return (
     <div className="add-panel">
       <form onSubmit={handleSearch} className="add-panel-search">
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="add-panel-search-row">
           <input
             className="form-input"
             style={{ flex: 1 }}
@@ -142,6 +143,14 @@ export default function AddEntryPanel({
           />
           <button className="btn" type="submit" disabled={searching || !query.trim()}>
             {searching ? '…' : urlMode ? 'Import' : 'Search'}
+          </button>
+          <button
+            className="btn btn-outline add-panel-clear-btn"
+            type="button"
+            disabled={!canClear}
+            onClick={clearSourcesAndSearch}
+          >
+            Clear
           </button>
         </div>
 
@@ -171,13 +180,6 @@ export default function AddEntryPanel({
                   </button>
                 );
               })}
-              <button
-                type="button"
-                className="source-chip source-clear-chip"
-                onClick={clearSourcesAndSearch}
-              >
-                Clear{selectedSources.size ? ` (${selectedSources.size})` : ''}
-              </button>
             </div>
           </div>
         )}

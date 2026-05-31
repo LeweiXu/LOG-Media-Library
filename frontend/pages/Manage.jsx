@@ -41,6 +41,7 @@ export default function Manage() {
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [showLists, setShowLists] = useState(false);
+  const [listModalTab, setListModalTab] = useState('add');
   const [lastEntryWarning, setLastEntryWarning] = useState(null);
   const [detailEntry, setDetailEntry] = useState(null);
   const [startEditing, setStartEditing] = useState(false);
@@ -192,6 +193,11 @@ export default function Manage() {
   function refreshView() {
     loadLists();
     loadEntries();
+  }
+
+  function openListsModal(tab = 'add') {
+    setListModalTab(tab);
+    setShowLists(true);
   }
 
   // ── Bulk selection ──────────────────────────────────────────────────────────
@@ -365,7 +371,7 @@ export default function Manage() {
             </span>
           </div>
           <div className="page-head-mobile">
-            <button className="btn" onClick={() => setShowLists(true)}>+ Add List</button>
+            <button className="btn" onClick={() => openListsModal('add')}>+ Add List</button>
             <button
               type="button"
               className="drawer-toggle"
@@ -590,8 +596,8 @@ export default function Manage() {
 
         <p className="panel-title">Tools</p>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
-          onClick={() => setShowLists(true)}>
-          Custom Lists
+          onClick={() => openListsModal('manage')}>
+          Manage Lists
         </button>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: 18 }}
           onClick={() => setShowDedup(true)}>
@@ -632,6 +638,7 @@ export default function Manage() {
 
       {showLists && (
         <ListsModal
+          initialTab={listModalTab}
           onClose={() => setShowLists(false)}
           existingLists={lists}
           onCreated={(name) => {

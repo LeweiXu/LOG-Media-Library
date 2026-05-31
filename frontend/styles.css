@@ -953,16 +953,6 @@ html.light .skeleton-pie::after {
 
 .source-chip .source-box { color: var(--dim); flex-shrink: 0; transition: color 0.12s; }
 
-.source-clear-chip {
-  justify-content: center;
-  color: var(--red);
-  border-color: var(--border2);
-}
-.source-clear-chip:hover {
-  color: var(--red);
-  border-color: var(--red);
-}
-
 .source-chip.is-on {
   border-color: var(--accent);
   color: var(--accent);
@@ -1720,6 +1710,29 @@ a.explore-title:hover { color: var(--accent); }
 /* ── Add-entry panel (Explore add mode) ────────────────────────────────────── */
 .add-panel { display: flex; flex-direction: column; gap: 8px; }
 .add-panel-search { margin-bottom: 4px; }
+.add-panel-search-row { display: flex; gap: 8px; align-items: stretch; }
+.add-panel-search-row .form-input { min-width: 0; }
+.add-panel-clear-btn {
+  border-color: var(--border2);
+  color: var(--dim);
+}
+
+.explore-recs-title {
+  margin-top: 18px;
+  margin-bottom: 18px;
+}
+
+.explore-recs > .explore-grid {
+  margin-bottom: 24px;
+}
+
+.explore-pagination {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 16px;
+}
 
 .add-preview-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .add-preview {
