@@ -953,6 +953,16 @@ html.light .skeleton-pie::after {
 
 .source-chip .source-box { color: var(--dim); flex-shrink: 0; transition: color 0.12s; }
 
+.source-clear-chip {
+  justify-content: center;
+  color: var(--red);
+  border-color: var(--border2);
+}
+.source-clear-chip:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
 .source-chip.is-on {
   border-color: var(--accent);
   color: var(--accent);

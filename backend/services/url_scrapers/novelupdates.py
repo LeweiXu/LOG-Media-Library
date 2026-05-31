@@ -20,6 +20,34 @@ logger = logging.getLogger(__name__)
 _LANG_ORIGINS = {"Chinese", "Korean", "Japanese"}
 
 
+def _title_from_slug(slug: str) -> str:
+    """Build a readable fallback title when NovelUpdates blocks the page."""
+    small_words = {"a", "an", "and", "as", "at", "for", "from", "in", "of", "on", "or", "the", "to", "with"}
+    words = [w for w in slug.replace("_", "-").split("-") if w]
+    titled = []
+    for i, word in enumerate(words):
+        lower = word.lower()
+        titled.append(lower if i > 0 and lower in small_words else lower.capitalize())
+    return " ".join(titled)
+
+
+def _fallback_result(slug: str) -> SearchResult:
+    return SearchResult(
+        title=_title_from_slug(slug),
+        medium="Web Novel",
+        origin=None,
+        year=None,
+        cover_url=None,
+        total=None,
+        external_id=slug,
+        source="novelupdates",
+        description=None,
+        external_url=f"https://www.novelupdates.com/series/{slug}/",
+        genres=None,
+        external_rating=None,
+    )
+
+
 async def fetch(client, url: str) -> Optional[SearchResult]:
     # Series URLs look like https://www.novelupdates.com/series/<slug>/
     m = re.search(r"/series/([^/?#]+)", url)
@@ -29,7 +57,7 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
 
     raw = await fetch_bytes(f"https://www.novelupdates.com/series/{slug}/")
     if not raw:
-        return None
+        return _fallback_result(slug)
 
     from bs4 import BeautifulSoup
 
@@ -38,7 +66,7 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
     title_tag = soup.select_one("div.seriestitlenu")
     title = title_tag.get_text(strip=True) if title_tag else None
     if not title:
-        return None
+        return _fallback_result(slug)
 
     img = soup.select_one("div.seriesimg img")
     cover_url = _normalise_cover_url(img.get("src") or img.get("data-src") or "") if img else None

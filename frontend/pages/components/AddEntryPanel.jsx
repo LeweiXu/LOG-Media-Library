@@ -64,6 +64,13 @@ export default function AddEntryPanel({
     setPreviews(null); setResults(null); setInLibrary([]); setPreviewStatus({}); setSearchErr('');
   }
 
+  function clearSourcesAndSearch() {
+    setSelectedSources(new Set());
+    saveSources(new Set());
+    setQuery('');
+    resetResults();
+  }
+
   function onQueryChange(value) {
     setQuery(value);
     // Clearing the box returns the page to recommendations.
@@ -148,15 +155,6 @@ export default function AddEntryPanel({
           <div className="source-select source-select-wide" style={{ marginTop: 10 }}>
             <div className="source-select-head">
               <span className="form-label">Sources — filter recommendations &amp; search</span>
-              {selectedSources.size > 0 && (
-                <button
-                  type="button"
-                  className="source-select-clear"
-                  onClick={() => { setSelectedSources(new Set()); saveSources(new Set()); }}
-                >
-                  ✕ Clear ({selectedSources.size})
-                </button>
-              )}
             </div>
             <div className="source-grid">
               {SEARCH_SOURCES.map(s => {
@@ -173,6 +171,13 @@ export default function AddEntryPanel({
                   </button>
                 );
               })}
+              <button
+                type="button"
+                className="source-chip source-clear-chip"
+                onClick={clearSourcesAndSearch}
+              >
+                Clear{selectedSources.size ? ` (${selectedSources.size})` : ''}
+              </button>
             </div>
           </div>
         )}
