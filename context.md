@@ -218,7 +218,7 @@ Primary backend env vars:
 
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/mediatracker
-CORS_ORIGINS=http://localhost:3000,https://log-media-tracker.vercel.app
+CORS_ORIGINS=http://localhost:3000,https://logarium.vercel.app
 HOST=0.0.0.0
 PORT=6443
 

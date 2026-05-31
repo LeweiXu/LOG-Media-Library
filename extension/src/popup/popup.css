@@ -20,36 +20,3 @@ body { background: var(--bg); color: var(--text); min-height: 480px; }
 .ext-state .ext-state-title { font-size: 13px; color: var(--text); margin-bottom: 6px; }
 
 .ext-ok { color: var(--green); }
-
-/* Secondary action footer (sync covers) shown under the contextual views. */
-.ext-footer {
-  margin-top: 16px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-  text-align: center;
-}
-.ext-link {
-  background: none;
-  border: none;
-  color: var(--dim);
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-.ext-link:hover { color: var(--text); }
-
-/* Sync progress bar — square, themed, matches the terminal aesthetic. */
-.ext-sync-bar {
-  height: 6px;
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  margin: 10px 0 8px;
-}
-.ext-sync-fill {
-  height: 100%;
-  background: var(--green);
-  transition: width 0.2s linear;
-}

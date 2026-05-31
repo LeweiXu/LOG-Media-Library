@@ -8,6 +8,7 @@ import ImportMalModal from './components/ImportMalModal.jsx';
 import ListsModal from './components/ListsModal.jsx';
 import DedupModal from './components/DedupModal.jsx';
 import CacheCoversModal from './components/CacheCoversModal.jsx';
+import ResyncModal from './components/ResyncModal.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 
 const ALL = '__all__';
@@ -51,6 +52,7 @@ export default function Manage() {
   const [showImportMal, setShowImportMal] = useState(false);
   const [showDedup, setShowDedup] = useState(false);
   const [showCacheCovers, setShowCacheCovers] = useState(false);
+  const [showResync, setShowResync] = useState(false);
   const [extPresent, setExtPresent] = useState(false);
   // Bulk-selection + action state.
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -621,9 +623,9 @@ export default function Manage() {
         </button>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: extPresent ? 18 : 4 }}
           disabled={!extPresent}
-          title={extPresent ? 'Open the extension and resync NovelUpdates covers' : 'Requires the Logarium browser extension'}
-          onClick={() => window.postMessage({ logarium: 'openSync' }, window.location.origin)}>
-          Resync NU Covers (extension)
+          title={extPresent ? 'Resync covers via the browser extension' : 'Requires the Logarium browser extension'}
+          onClick={() => setShowResync(true)}>
+          Cache Covers (extension)
         </button>
         {!extPresent && (
           <p style={{ fontSize: 10, color: 'var(--dim)', margin: '0 0 18px', lineHeight: 1.5 }}>
@@ -765,6 +767,10 @@ export default function Manage() {
 
       {showCacheCovers && (
         <CacheCoversModal onClose={() => setShowCacheCovers(false)} />
+      )}
+
+      {showResync && (
+        <ResyncModal onClose={() => setShowResync(false)} />
       )}
     </div>
   );

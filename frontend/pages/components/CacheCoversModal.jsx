@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { startCoverCache } from '../../api.jsx';
 
 // ── CacheCoversModal ──────────────────────────────────────────────────────────
@@ -15,6 +15,11 @@ export default function CacheCoversModal({ onClose }) {
   const [errorMsg,    setErrorMsg]    = useState('');
   const [interrupted, setInterrupted] = useState(false);
   const abortRef = useRef(null);
+
+  // Stop the server-side job if the modal is closed (or the tab is closed —
+  // dropping the connection makes the backend's is_disconnected() check break
+  // out of the stream). Without this, closing the modal would leave it running.
+  useEffect(() => () => abortRef.current?.(), []);
 
   const pct = prog.total ? Math.round((prog.processed / prog.total) * 100) : 0;
 
@@ -109,7 +114,7 @@ export default function CacheCoversModal({ onClose }) {
               {stage === 'running' && (
                 <div style={{ textAlign: 'center', marginTop: 20 }}>
                   <button className="icon-btn danger" style={{ padding: '3px 12px', fontSize: 12 }} onClick={handleInterrupt}>
-                    Interrupt
+                    Cancel
                   </button>
                 </div>
               )}

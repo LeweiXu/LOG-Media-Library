@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/mediatracker"
 
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000,https://log-media-tracker.vercel.app"
+    CORS_ORIGINS: str = "http://localhost:3000,https://logarium.vercel.app"
 
     # Server
     HOST: str = "0.0.0.0"

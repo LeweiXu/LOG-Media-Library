@@ -29,7 +29,7 @@
     {
       "matches": [
         "http://localhost:3000/*",
-        "https://log-media-tracker.vercel.app/*"
+        "https://logarium.vercel.app/*"
       ],
       "js": ["bridge.js"],
       "run_at": "document_idle"
