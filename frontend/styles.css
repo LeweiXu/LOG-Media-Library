@@ -1689,9 +1689,15 @@ a.explore-title:hover { color: var(--accent); }
 .icon-btn.danger:hover { border-color: var(--red); background: rgba(224, 86, 86, 0.08); }
 
 .media-table .col-select { width: 34px; text-align: center; }
+/* Selected row gets a blue tint plus a continuous accent outline around the
+   whole entry. Inset box-shadows draw the border without nudging layout. */
 .media-table tr.row-selected td { background: rgba(74, 158, 255, 0.08); }
+.media-table tr.row-selected td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.media-table tr.row-selected td:first-child { box-shadow: inset 1px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.media-table tr.row-selected td:last-child { box-shadow: inset -1px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
 
-/* Bracket-style [x]/[ ] toggle — matches the add-entry source chips. */
+/* Bracket-style [x]/[ ] toggle — matches the add-entry source chips. The box
+   turns accent when selected; the blue outline lives on the whole row. */
 .box-toggle {
   background: none;
   border: none;
@@ -1701,11 +1707,12 @@ a.explore-title:hover { color: var(--accent); }
   letter-spacing: 0;
   cursor: pointer;
   padding: 2px 4px;
+  user-select: none;
   transition: color 0.12s;
 }
 .box-toggle:hover  { color: var(--text); }
-.box-toggle.is-on  { color: var(--dim); }
-.box-toggle.is-on:hover { color: var(--text); }
+.box-toggle.is-on  { color: var(--accent); }
+.box-toggle.is-on:hover { color: var(--accent); }
 
 /* ── Add-entry panel (Explore add mode) ────────────────────────────────────── */
 .add-panel { display: flex; flex-direction: column; gap: 8px; }

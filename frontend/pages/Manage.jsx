@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { batchDeleteEntries, batchUpdateEntries, exportEntries, getCustomLists, getEntries, getSettings, updateEntry } from '../api.jsx';
 import { extractItems, fmtDate, progressLabel, statusLabel, STATUSES, MEDIUMS, ORIGINS, onCoverError } from '../utils.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
@@ -56,6 +56,8 @@ export default function Manage() {
   const [extPresent, setExtPresent] = useState(false);
   // Bulk-selection + action state.
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Entry id of the last toggled row — anchor for shift-click ranges.
+  const lastSelectedId = useRef(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState('');
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -112,6 +114,7 @@ export default function Manage() {
     setLoadingEntries(true);
     setError('');
     setSelectedIds(new Set());   // selection is per-view; never act on hidden rows
+    lastSelectedId.current = null;
     setBulkListValue('');
     setBulkStatusValue('');
     setBulkField('');
@@ -218,22 +221,46 @@ export default function Manage() {
   const pageIds = useMemo(() => entries.map(e => e.id), [entries]);
   const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
 
-  function toggleSelect(id) {
+  function toggleSelect(id, shiftKey = false) {
     setConfirmBulkDelete(false);   // changing the selection disarms a pending delete
     setSelectedIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      const index = entries.findIndex(entry => entry.id === id);
+      const anchorIndex = entries.findIndex(entry => entry.id === lastSelectedId.current);
+      // Shift-click applies the clicked row's intended action to the whole
+      // range between the last toggled row and this one.
+      if (shiftKey && anchorIndex !== -1 && index !== -1) {
+        const shouldSelect = !prev.has(id);
+        const lo = Math.min(anchorIndex, index);
+        const hi = Math.max(anchorIndex, index);
+        for (let i = lo; i <= hi; i++) {
+          const rangeId = entries[i]?.id;
+          if (rangeId == null) continue;
+          if (shouldSelect) next.add(rangeId);
+          else next.delete(rangeId);
+        }
+      } else {
+        next.has(id) ? next.delete(id) : next.add(id);
+      }
       return next;
     });
+    lastSelectedId.current = id;
+  }
+
+  function handleSelectClick(ev, id) {
+    if (ev.shiftKey) ev.preventDefault();
+    toggleSelect(id, ev.shiftKey);
   }
 
   function toggleSelectAll() {
     setConfirmBulkDelete(false);
+    lastSelectedId.current = null;
     setSelectedIds(allPageSelected ? new Set() : new Set(pageIds));
   }
 
   function clearSelection() {
     setSelectedIds(new Set());
+    lastSelectedId.current = null;
     setConfirmBulkDelete(false);
     setBulkListValue('');
     setBulkStatusValue('');
@@ -469,13 +496,15 @@ export default function Manage() {
               </thead>
               <tbody>
                 {entries.map(entry => (
-                  <tr key={entry.id} style={{ cursor: 'pointer' }}
+                  <tr key={entry.id} style={{ cursor: 'pointer', userSelect: 'none' }}
                     className={selectedIds.has(entry.id) ? 'row-selected' : undefined}
-                    onClick={() => { setDetailEntry(entry); setStartEditing(false); }}>
-                    <td className="col-select" onClick={ev => ev.stopPropagation()}>
+                    onMouseDown={ev => { if (ev.shiftKey) ev.preventDefault(); }}
+                    onClick={ev => handleSelectClick(ev, entry.id)}>
+                    <td className="col-select">
                       <button type="button"
                         className={`box-toggle${selectedIds.has(entry.id) ? ' is-on' : ''}`}
-                        onClick={() => toggleSelect(entry.id)}
+                        onMouseDown={ev => { if (ev.shiftKey) ev.preventDefault(); }}
+                        onClick={ev => { ev.stopPropagation(); handleSelectClick(ev, entry.id); }}
                         aria-pressed={selectedIds.has(entry.id)}
                         aria-label={`Select ${entry.title}`}>
                         {selectedIds.has(entry.id) ? '[x]' : '[ ]'}

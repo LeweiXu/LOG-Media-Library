@@ -251,7 +251,7 @@ export default function DashboardAlt({ onFilterChange }) {
               className="dash-pair-skeleton"
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
+                gridTemplateColumns: '2fr 1fr',
                 gap: '0 24px',
                 alignItems: 'start',
               }}>
@@ -267,10 +267,10 @@ export default function DashboardAlt({ onFilterChange }) {
               <div>
                 <div className="section-header">Planned</div>
                 <SkeletonTable
-                  headers={['Title', 'Type', 'Progress', 'Status', 'Rating']}
+                  headers={['Title', 'Type', 'Status']}
                   rows={8}
                   cover
-                  widths={['74%', '54%', '64%', '66%', '46%']}
+                  widths={['74%', '54%', '66%']}
                 />
               </div>
             </div>
@@ -292,7 +292,7 @@ export default function DashboardAlt({ onFilterChange }) {
           {/* Side-by-side layout for the two tables */}
             <div
               className="dash-pair"
-              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px', alignItems: 'start' }}>
+              style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0 24px', alignItems: 'start' }}>
 
             {/* Currently Consuming */}
             <div>
@@ -406,22 +406,16 @@ export default function DashboardAlt({ onFilterChange }) {
                 ? <div style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 24 }}>No planned entries.</div>
                 : (
                     <>
-                    <table className="media-table" data-mobile-show="progress">
+                    <table className="media-table">
                     <thead>
                         <tr>
                         <th>Title</th>
                         <th className="col-medium">Type</th>
-                        <th className="col-progress">Progress</th>
                         <th className="col-status">Status</th>
-                        <th className="col-rating">Rating</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {planned.slice(0, 10).map(e => {
-                        const pct = progressPercent(e);
-                        const isEditingProg   = editingProgress?.id === e.id;
-                        const isEditingRating = editingRating?.id === e.id;
-                        return (
+                        {planned.slice(0, 10).map(e => (
                         <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setDetailEntry(e)}>
                             <td>
                             <div className="cover-cell">
@@ -430,67 +424,14 @@ export default function DashboardAlt({ onFilterChange }) {
                             </div>
                             </td>
                             <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium ?? '—'}</span></td>
-                            <td className="col-progress" onClick={ev => ev.stopPropagation()}>
-                            {isEditingProg ? (
-                                <input
-                                className="inline-select"
-                                type="number" min="0"
-                                style={{ width: 64 }}
-                                value={editingProgress.value}
-                                autoFocus
-                                onChange={ev => setEditingProgress({ id: e.id, value: ev.target.value })}
-                                onKeyDown={ev => {
-                                    if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value);
-                                    if (ev.key === 'Escape') setEditingProgress(null);
-                                }}
-                                onBlur={() => handleProgressSave(e.id, editingProgress.value)}
-                                />
-                            ) : (
-                                <div className="progress-cell"
-                                title="Click to edit progress"
-                                style={{ cursor: 'text' }}
-                                onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
-                                {progressLabel(e)}
-                                {pct > 0 && (
-                                    <div className="progress-mini">
-                                    <div className="progress-mini-fill" style={{ width: `${pct}%` }} />
-                                    </div>
-                                )}
-                                </div>
-                            )}
-                            </td>
                             <td className="col-status" onClick={ev => ev.stopPropagation()}>
                             <select className="inline-select" value={e.status}
                                 onChange={ev => handleStatusChange(e.id, ev.target.value)}>
                                 {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                             </select>
                             </td>
-                            <td className="col-rating" onClick={ev => ev.stopPropagation()}>
-                            {isEditingRating ? (
-                                <input
-                                className="inline-select"
-                                type="number" min="0" max="10" step="0.5"
-                                style={{ width: 64 }}
-                                value={editingRating.value}
-                                autoFocus
-                                onChange={ev => setEditingRating({ id: e.id, value: ev.target.value })}
-                                onKeyDown={ev => {
-                                    if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value);
-                                    if (ev.key === 'Escape') setEditingRating(null);
-                                }}
-                                onBlur={() => handleRatingSave(e.id, editingRating.value)}
-                                />
-                            ) : (
-                                <span className="rating-cell" title="Click to edit rating"
-                                style={{ cursor: 'text' }}
-                                onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
-                                {e.rating != null ? e.rating : '—'}<span>/10</span>
-                                </span>
-                            )}
-                            </td>
                         </tr>
-                        );
-                        })}
+                        ))}
                     </tbody>
                     </table>
                     {/* {planned.length > 10 && (
