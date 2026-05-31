@@ -1,0 +1,19 @@
+{
+  "name": "log-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Logarium browser extension — add media to your library from the page you're on.",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.2"
+  }
+}

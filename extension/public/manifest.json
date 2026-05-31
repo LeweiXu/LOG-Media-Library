@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Logarium — Add to Library",
+  "version": "1.0.0",
+  "description": "Add the media page you're viewing to your Logarium library in two clicks, and cache covers from Cloudflare-protected sites.",
+  "action": {
+    "default_title": "Add to LOG",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "*://*.novelupdates.com/*",
+    "http://localhost/*",
+    "https://lingweispc.ddns.net/*"
+  ]
+}

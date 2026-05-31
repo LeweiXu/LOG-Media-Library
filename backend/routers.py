@@ -1,6 +1,6 @@
 import io
 import json
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -31,8 +31,34 @@ from services.import_mal_service import import_mal_rows, confirm_mal_import
 from services.explore_service import explore_media
 from services.backup_service import run_backup_for_user
 from services.email_service import SMTPNotConfigured
+from services.cover_cache_service import CoverCacheError, MAX_SOURCE_BYTES, store_cover_bytes
 
 router = APIRouter()
+
+# ── Cover cache ───────────────────────────────────────────────────────────────
+
+@router.post("/covers/upload", status_code=status.HTTP_204_NO_CONTENT)
+async def upload_cover(
+    cover_url: str = Form(..., min_length=1, max_length=1000),
+    image: UploadFile = File(...),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Store cover bytes uploaded by the browser extension.
+
+    The extension fetches the image first-party (so Cloudflare-protected covers
+    succeed) and POSTs the bytes here keyed by the original cover URL. We only
+    store; serving the cached file back is a separate concern.
+    """
+    raw = await image.read()
+    if len(raw) > MAX_SOURCE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Cover image is too large",
+        )
+    try:
+        store_cover_bytes(cover_url, raw)
+    except CoverCacheError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
 

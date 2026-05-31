@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 6443
 
+    # Cover image cache (filesystem). Covers are uploaded by the browser
+    # extension and stored hashed by source URL; see cover_cache_service.py.
+    COVER_CACHE_DIR: str = "~/LOG_cache"
+    COVER_THUMBNAIL_WIDTH: int = 96
+    COVER_THUMBNAIL_HEIGHT: int = 144
+
     # Auth
     SECRET_KEY: str = "changeme-replace-with-a-strong-random-secret"
     JWT_ALGORITHM: str = "HS256"

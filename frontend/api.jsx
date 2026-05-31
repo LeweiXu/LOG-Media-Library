@@ -287,6 +287,28 @@ export const fetchByUrl = (url) =>
 export const fetchChapterCount = (title) =>
   req(`/search/chapter-count?${new URLSearchParams({ title })}`);
 
+/**
+ * Upload cover image bytes to the server cache, keyed by the original cover URL.
+ * Used by the browser extension to cache covers it fetched first-party (e.g.
+ * Cloudflare-protected NovelUpdates covers that can't be fetched server-side).
+ * Multipart, so it bypasses the JSON `req()` helper.
+ */
+export async function uploadCover(coverUrl, blob) {
+  const body = new FormData();
+  body.append('cover_url', coverUrl);
+  body.append('image', blob, 'cover.jpg');
+  const res = await fetch(`${BASE}/covers/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+  return null;
+}
+
 export const getStats = () => req('/stats');
 
 export const deleteAllEntries = () => req('/entries', { method: 'DELETE' });
