@@ -251,7 +251,7 @@ export default function DashboardAlt({ onFilterChange }) {
               className="dash-pair-skeleton"
               style={{
                 display: 'grid',
-                gridTemplateColumns: '2fr 1fr',
+                gridTemplateColumns: '3fr 2fr',
                 gap: '0 24px',
                 alignItems: 'start',
               }}>
@@ -292,7 +292,7 @@ export default function DashboardAlt({ onFilterChange }) {
           {/* Side-by-side layout for the two tables */}
             <div
               className="dash-pair"
-              style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0 24px', alignItems: 'start' }}>
+              style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '0 24px', alignItems: 'start' }}>
 
             {/* Currently Consuming */}
             <div>
