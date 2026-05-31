@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getEntries, updateEntry, deleteEntry, exportEntries, getSettings } from '../api.jsx';
-import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS } from '../utils.jsx';
+import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ImportModal from './components/ImportModal.jsx';
@@ -432,7 +432,7 @@ export default function Library({ initialFilters = {} }) {
                             {e.cover_url && (
                               <img src={e.cover_url} alt=""
                                 referrerPolicy="no-referrer"
-                                onError={ev => { ev.target.style.display = 'none'; }} />
+                                onError={onCoverError} />
                             )}
                           </div>
                           <span className="media-name">{e.title}</span>

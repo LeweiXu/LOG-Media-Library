@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getDuplicateEntries, batchDeleteEntries } from '../../api.jsx';
-import { statusLabel } from '../../utils.jsx';
+import { statusLabel, onCoverError } from '../../utils.jsx';
 import { SkeletonLine } from './Skeletons.jsx';
 
 /**
@@ -97,7 +97,7 @@ export default function DedupModal({ onClose, onResolved }) {
                           {entry.cover_url && (
                             <img src={entry.cover_url} alt=""
                               referrerPolicy="no-referrer"
-                              onError={ev => { ev.target.style.display = 'none'; }} />
+                              onError={onCoverError} />
                           )}
                         </div>
                         <div className="dedup-entry-info">

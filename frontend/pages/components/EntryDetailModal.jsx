@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { deleteEntry } from '../../api.jsx';
-import { statusLabel, fmtDate, progressLabel } from '../../utils.jsx';
+import { statusLabel, fmtDate, progressLabel, onCoverError } from '../../utils.jsx';
 import EntryFormModal from './EntryFormModal.jsx';
 
 function cleanUrl(url) {
@@ -58,7 +58,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
               <img src={current.cover_url} alt=""
                 referrerPolicy="no-referrer"
                 style={{ maxHeight: 320, borderRadius: 4, objectFit: 'cover' }}
-                onError={e => { e.target.style.display = 'none'; }} />
+                onError={onCoverError} />
             </div>
           )}
 

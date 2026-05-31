@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates } from '../../api.jsx';
-import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel } from '../../utils.jsx';
+import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, onCoverError } from '../../utils.jsx';
 import { SEARCH_SOURCES, SOURCE_LABEL, saveSources, resultToEntry } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
 
@@ -200,7 +200,7 @@ export default function AddEntryPanel({
                 <article key={`${item.source}:${item.external_id || item.title}:${idx}`} className="add-preview">
                   <div className="add-preview-cover">
                     {item.cover_url
-                      ? <img src={item.cover_url} alt="" referrerPolicy="no-referrer" onError={ev => { ev.target.style.display = 'none'; }} />
+                      ? <img src={item.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />
                       : <div className="explore-cover-empty">—</div>}
                   </div>
                   <div className="add-preview-body">
@@ -262,7 +262,7 @@ export default function AddEntryPanel({
                   >
                     <div className="explore-cover">
                       {(r.cover_url || r.cover)
-                        ? <img src={r.cover_url || r.cover} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                        ? <img src={r.cover_url || r.cover} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />
                         : <div className="explore-cover-empty">—</div>}
                     </div>
                     <div className="explore-body">

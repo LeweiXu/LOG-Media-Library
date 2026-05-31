@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates, createEntry } from '../../api.jsx';
-import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES } from '../../utils.jsx';
+import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, onCoverError } from '../../utils.jsx';
 import { SEARCH_SOURCES, SOURCE_LABEL, loadSavedSources, saveSources, resultToEntry } from './searchSources.js';
 import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
@@ -236,7 +236,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                             >
                               <div className="sr-cover">
                                 {(r.cover_url || r.cover) && (
-                                  <img src={r.cover_url || r.cover} alt="" referrerPolicy="no-referrer" />
+                                  <img src={r.cover_url || r.cover} alt="" referrerPolicy="no-referrer" onError={onCoverError} />
                                 )}
                               </div>
                               <div style={{ flex: 1 }}>

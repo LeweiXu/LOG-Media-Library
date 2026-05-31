@@ -20,6 +20,38 @@ export const STATUS_LABELS = {
 export const statusLabel   = (s) => STATUS_LABELS[s] ?? s;
 export const badgeClass    = (s) => `badge badge-${s}`;
 
+/**
+ * Generic fallback cover, used when a cover image fails to load (e.g. the many
+ * NovelUpdates covers that 404/403 behind Cloudflare and can't be hotlinked).
+ * It's an inline SVG data URI — no network request, no image hosted by us, and
+ * nothing to rot. Transparent background so the cover container's themed
+ * colour shows through and it reads correctly in both dark and light themes.
+ */
+const _COVER_PLACEHOLDER_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 132" preserveAspectRatio="xMidYMid meet">' +
+  '<g fill="none" stroke="#7a7d82" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">' +
+  '<rect x="24" y="42" width="44" height="40"/>' +
+  '<circle cx="37" cy="55" r="4.5"/>' +
+  '<path d="M26 78 L44 62 L54 70 L66 56 L66 80 Z" fill="#7a7d82" fill-opacity="0.18"/>' +
+  '</g>' +
+  '<text x="46" y="100" font-family="monospace" font-size="9" letter-spacing="1.5" ' +
+  'text-anchor="middle" fill="#7a7d82">NO COVER</text></svg>';
+
+export const COVER_PLACEHOLDER =
+  'data:image/svg+xml,' + encodeURIComponent(_COVER_PLACEHOLDER_SVG);
+
+/**
+ * Shared <img onError> handler: swap a broken cover for COVER_PLACEHOLDER once.
+ * The `data-fallback` guard prevents an infinite error loop if the placeholder
+ * itself ever fails (it can't, but belt-and-braces).
+ */
+export function onCoverError(e) {
+  const img = e.currentTarget;
+  if (img.dataset.fallback) return;
+  img.dataset.fallback = '1';
+  img.src = COVER_PLACEHOLDER;
+}
+
 export const logDotClass = (status) => ({
   current:   'log-dot blue',
   planned:   'log-dot purple',

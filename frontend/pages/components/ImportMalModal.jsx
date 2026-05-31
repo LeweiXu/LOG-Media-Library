@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { startMalImport, confirmMalImport } from '../../api.jsx';
-import { fmtDate } from '../../utils.jsx';
+import { fmtDate, onCoverError } from '../../utils.jsx';
 
 // ── ImportMalModal ────────────────────────────────────────────────────────────
 // Stages:
@@ -173,7 +173,7 @@ export default function ImportMalModal({ onClose, onImported }) {
               alt=""
               referrerPolicy="no-referrer"
               style={{ width: 44, height: 62, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }}
-              onError={ev => { ev.target.style.display = 'none'; }}
+              onError={onCoverError}
             />
           )}
           <div style={{ flex: 1, minWidth: 0 }}>

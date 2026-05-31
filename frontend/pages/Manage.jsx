@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { batchDeleteEntries, batchUpdateEntries, exportEntries, getCustomLists, getEntries, getSettings, updateEntry } from '../api.jsx';
-import { extractItems, fmtDate, progressLabel, statusLabel, STATUSES, MEDIUMS, ORIGINS } from '../utils.jsx';
+import { extractItems, fmtDate, progressLabel, statusLabel, STATUSES, MEDIUMS, ORIGINS, onCoverError } from '../utils.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ImportModal from './components/ImportModal.jsx';
 import ImportAutoModal from './components/ImportAutoModal.jsx';
@@ -473,7 +473,7 @@ export default function Manage() {
                           {entry.cover_url && (
                             <img src={entry.cover_url} alt=""
                               referrerPolicy="no-referrer"
-                              onError={ev => { ev.target.style.display = 'none'; }} />
+                              onError={onCoverError} />
                           )}
                         </div>
                         <span className="media-name">{entry.title}</span>

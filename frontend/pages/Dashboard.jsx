@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getEntries, getStats, updateEntry } from '../api.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass } from '../utils.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass, onCoverError } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
@@ -11,7 +11,7 @@ function CoverThumb({ url, title }) {
       {url && (
         <img src={url} alt={title}
           referrerPolicy="no-referrer"
-          onError={e => { e.target.style.display = 'none'; }} />
+          onError={onCoverError} />
       )}
     </div>
   );

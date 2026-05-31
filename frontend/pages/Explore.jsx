@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getExplore, getSettings } from '../api.jsx';
-import { MEDIUMS, statusLabel } from '../utils.jsx';
+import { MEDIUMS, statusLabel, onCoverError } from '../utils.jsx';
 import { loadSavedSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
@@ -394,7 +394,7 @@ export default function Explore() {
                        onKeyDown={e => handleCardKeyDown(e, idx, item, owned)}>
                 <div className="explore-cover">
                   {item.cover_url
-                    ? <img src={item.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                    ? <img src={item.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />
                     : <div className="explore-cover-empty">—</div>}
                 </div>
 
