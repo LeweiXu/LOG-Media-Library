@@ -7,10 +7,16 @@
     "default_title": "Add to LOG",
     "default_popup": "popup.html"
   },
-  "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": [
-    "*://*.novelupdates.com/*",
-    "http://localhost/*",
-    "https://lingweispc.ddns.net/*"
-  ]
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "cookies",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": ["<all_urls>"]
 }

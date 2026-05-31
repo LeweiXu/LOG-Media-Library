@@ -1,3 +1,5 @@
+import { BASE } from './api.jsx';
+
 export const STATUSES = ['current', 'planned', 'completed', 'on_hold', 'dropped'];
 
 export const MEDIUMS = [
@@ -40,16 +42,41 @@ const _COVER_PLACEHOLDER_SVG =
 export const COVER_PLACEHOLDER =
   'data:image/svg+xml,' + encodeURIComponent(_COVER_PLACEHOLDER_SVG);
 
+/** URL of the server-side cached copy of a cover (uploaded by the extension). */
+export const cachedCoverUrl = (coverUrl) =>
+  coverUrl ? `${BASE}/covers/full?${new URLSearchParams({ url: coverUrl })}` : '';
+
 /**
- * Shared <img onError> handler: swap a broken cover for COVER_PLACEHOLDER once.
- * The `data-fallback` guard prevents an infinite error loop if the placeholder
- * itself ever fails (it can't, but belt-and-braces).
+ * Shared <img onError> handler with a 3-stage fallback:
+ *   original cover_url → server-side cached copy → generic placeholder.
+ * The original (e.g. a Cloudflare-gated NovelUpdates cover) often 403s in the
+ * browser; if the extension has cached it we serve that, otherwise the inline
+ * "NO COVER" placeholder. Cached is fallback-only — never prioritised — so
+ * working covers still load straight from source at full speed.
  */
 export function onCoverError(e) {
   const img = e.currentTarget;
-  if (img.dataset.fallback) return;
-  img.dataset.fallback = '1';
-  img.src = COVER_PLACEHOLDER;
+  const stage = img.dataset.coverStage;
+  if (!stage) {
+    // Original failed. At this point img.src is the resolved original URL.
+    const cached = cachedCoverUrl(img.src);
+    console.warn('[LOG cover] original failed →', img.src, '| trying cached →', cached);
+    if (cached) {
+      img.dataset.coverStage = 'cached';
+      img.src = cached;
+      return;
+    }
+    img.dataset.coverStage = 'placeholder';
+    img.src = COVER_PLACEHOLDER;
+    return;
+  }
+  if (stage === 'cached') {
+    // No cached copy either → generic placeholder.
+    console.warn('[LOG cover] cached copy failed too →', img.src, '| using placeholder');
+    img.dataset.coverStage = 'placeholder';
+    img.src = COVER_PLACEHOLDER;
+  }
+  // stage === 'placeholder': data URI can't fail; nothing more to do.
 }
 
 export const logDotClass = (status) => ({

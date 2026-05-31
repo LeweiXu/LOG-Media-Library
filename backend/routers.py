@@ -1,7 +1,7 @@
 import io
 import json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from db import get_db
@@ -31,7 +31,9 @@ from services.import_mal_service import import_mal_rows, confirm_mal_import
 from services.explore_service import explore_media
 from services.backup_service import run_backup_for_user
 from services.email_service import SMTPNotConfigured
-from services.cover_cache_service import CoverCacheError, MAX_SOURCE_BYTES, store_cover_bytes
+from services.cover_cache_service import (
+    CoverCacheError, MAX_SOURCE_BYTES, full_cover_cache_path, store_cover_bytes,
+)
 
 router = APIRouter()
 
@@ -59,6 +61,25 @@ async def upload_cover(
         store_cover_bytes(cover_url, raw)
     except CoverCacheError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/covers/full")
+async def get_cached_cover(url: str = Query(..., min_length=1, max_length=2000)):
+    """Serve a previously-cached cover, or 404 if we don't have it.
+
+    Used as a frontend fallback when the original cover URL fails to load
+    (e.g. Cloudflare-gated NovelUpdates covers). We never fetch server-side —
+    covers only get here via the extension's /covers/upload. Public (no auth):
+    covers aren't sensitive and <img> tags can't send an Authorization header.
+    """
+    path = full_cover_cache_path(url)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover not cached")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
 

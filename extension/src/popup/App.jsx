@@ -9,8 +9,8 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
   const [phase, setPhase] = useState(token ? 'loading' : 'auth');
   const [entry, setEntry] = useState(null);
-  const [siteKind, setSiteKind] = useState('');     // 'dom' | 'api'
   const [error, setError] = useState('');
+  const [coverStatus, setCoverStatus] = useState(null);   // { ok, reason } | null
 
   // Resolve the active tab into a prefilled entry: DOM-scrape NU-style sites,
   // otherwise relay the URL to the backend's /search/from-url.
@@ -22,7 +22,6 @@ export default function App() {
 
       const site = detectSite(tab.url);
       if (site.kind === 'unsupported') { setPhase('unsupported'); return; }
-      setSiteKind(site.kind);
 
       let data = null;
       if (site.kind === 'dom') {
@@ -58,25 +57,37 @@ export default function App() {
     setToken(newToken);
   }
 
-  // Best-effort: fetch the cover first-party (extension host permission → cookies
-  // sent, CORS-exempt) and upload the bytes to the server cache. Never blocks the
-  // add — a failed cover cache just means the cover falls back to a placeholder.
+  // Best-effort cover caching for ALL sources. The background service worker
+  // does the privileged fetch (CORS-exempt for any host; injects cf_clearance
+  // for Cloudflare-gated covers) and returns the bytes base64-encoded; here we
+  // rebuild the blob and upload it. Never blocks the add — returns a status so
+  // the popup can show why a cover did/didn't cache.
   async function cacheCover(coverUrl) {
     try {
-      const res = await fetch(coverUrl, { credentials: 'include' });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      if (!blob.type.startsWith('image/')) return;
+      const resp = await chrome.runtime.sendMessage({ type: 'fetchCover', coverUrl });
+      if (!resp || !resp.ok) return { ok: false, reason: (resp && resp.reason) || 'fetch failed' };
+      const binary = atob(resp.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: resp.contentType || 'image/jpeg' });
       await uploadCover(coverUrl, blob);
-    } catch { /* best-effort */ }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: e.message || 'fetch failed' };
+    }
   }
 
   async function handleSubmit(form) {
     const payload = formToPayload(form, { isEdit: false });
     await createEntry(payload);
-    if (siteKind === 'dom' && form.cover_url) await cacheCover(form.cover_url);
+
+    let cover = null;
+    if (form.cover_url) {
+      cover = await cacheCover(form.cover_url);
+      if (!cover.ok) console.warn('[LOG] cover not cached:', cover.reason, form.cover_url);
+    }
+    setCoverStatus(cover);
     setPhase('done');
-    setTimeout(() => window.close(), 1100);
   }
 
   if (phase === 'auth') {
@@ -107,7 +118,16 @@ export default function App() {
   }
 
   if (phase === 'done') {
-    return <div className="ext-state"><div className="ext-state-title ext-ok">✓ Added to your library</div></div>;
+    return (
+      <div className="ext-state">
+        <div className="ext-state-title ext-ok">✓ Added to your library</div>
+        {coverStatus && (coverStatus.ok
+          ? <div className="ext-ok" style={{ fontSize: 11 }}>Cover cached ✓</div>
+          : <div style={{ fontSize: 11, color: 'var(--dim)' }}>Cover not cached — {coverStatus.reason}</div>)}
+        {!coverStatus && <div style={{ fontSize: 11, color: 'var(--dim)' }}>No cover to cache</div>}
+        <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={() => window.close()}>Close</button>
+      </div>
+    );
   }
 
   return (
