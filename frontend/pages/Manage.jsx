@@ -431,8 +431,12 @@ export default function Manage() {
               <thead>
                 <tr>
                   <th className="col-select">
-                    <input type="checkbox" checked={allPageSelected}
-                      onChange={toggleSelectAll} aria-label="Select all on page" />
+                    <button type="button"
+                      className={`box-toggle${allPageSelected ? ' is-on' : ''}`}
+                      onClick={toggleSelectAll} aria-pressed={allPageSelected}
+                      aria-label="Select all on page">
+                      {allPageSelected ? '[x]' : '[ ]'}
+                    </button>
                   </th>
                   <SortTh field="title">Title</SortTh>
                   <SortTh field="status" className="col-status">Status</SortTh>
@@ -449,8 +453,13 @@ export default function Manage() {
                     className={selectedIds.has(entry.id) ? 'row-selected' : undefined}
                     onClick={() => { setDetailEntry(entry); setStartEditing(false); }}>
                     <td className="col-select" onClick={ev => ev.stopPropagation()}>
-                      <input type="checkbox" checked={selectedIds.has(entry.id)}
-                        onChange={() => toggleSelect(entry.id)} aria-label={`Select ${entry.title}`} />
+                      <button type="button"
+                        className={`box-toggle${selectedIds.has(entry.id) ? ' is-on' : ''}`}
+                        onClick={() => toggleSelect(entry.id)}
+                        aria-pressed={selectedIds.has(entry.id)}
+                        aria-label={`Select ${entry.title}`}>
+                        {selectedIds.has(entry.id) ? '[x]' : '[ ]'}
+                      </button>
                     </td>
                     <td>
                       <div className="cover-cell">

@@ -964,6 +964,19 @@ html.light .skeleton-pie::after {
   .source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* Wide variant — the Explore page's main column is far wider than the
+   add-entry modal, so the source chips get more columns there. */
+.source-select-wide .source-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1100px) {
+  .source-select-wide .source-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .source-select-wide .source-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .source-select-wide .source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* ── Filter bar (Library) ────────────────────────────────────────────────── */
 .filter-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
 
@@ -1675,8 +1688,24 @@ a.explore-title:hover { color: var(--accent); }
 .icon-btn.danger { color: var(--red); border-color: rgba(224, 86, 86, 0.5); }
 .icon-btn.danger:hover { border-color: var(--red); background: rgba(224, 86, 86, 0.08); }
 
-.media-table .col-select { width: 28px; text-align: center; }
+.media-table .col-select { width: 34px; text-align: center; }
 .media-table tr.row-selected td { background: rgba(74, 158, 255, 0.08); }
+
+/* Bracket-style [x]/[ ] toggle — matches the add-entry source chips. */
+.box-toggle {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.12s;
+}
+.box-toggle:hover  { color: var(--text); }
+.box-toggle.is-on  { color: var(--dim); }
+.box-toggle.is-on:hover { color: var(--text); }
 
 /* ── Add-entry panel (Explore add mode) ────────────────────────────────────── */
 .add-panel { display: flex; flex-direction: column; gap: 8px; }

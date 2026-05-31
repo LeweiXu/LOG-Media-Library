@@ -153,7 +153,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
           <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
             {confirmDelete ? (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--red)' }}>delete this entry?</span>
+                <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
                 <button type="button" className="btn btn-danger"
                   onClick={handleDelete} disabled={deleting}>
                   {deleting ? '…' : 'Yes, delete'}

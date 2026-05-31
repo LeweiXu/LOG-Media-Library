@@ -86,12 +86,22 @@ async def search_novelupdates(
             r = cffi_requests.get(
                 search_url, params=params, timeout=12, impersonate="chrome"
             )
+            if r.status_code == 403 or r.headers.get("cf-mitigated") == "challenge":
+                # NovelUpdates sits behind Cloudflare; if our TLS-impersonated
+                # request still gets the "Just a moment…" managed challenge we
+                # can't solve it server-side. Surface a clear, distinct warning
+                # instead of a generic HTTP error and degrade to no results.
+                logger.warning(
+                    "NovelUpdates blocked by Cloudflare challenge (HTTP %s) — "
+                    "skipping; results unavailable.", r.status_code,
+                )
+                return []
             r.raise_for_status()
+            soup = BeautifulSoup(r.text, "lxml")
         except Exception as exc:
-            logger.warning("NovelUpdates fetch error: %s", exc)
+            logger.warning("NovelUpdates fetch/parse error: %s", exc)
             return []
 
-        soup = BeautifulSoup(r.text, "lxml")
         results: list[SearchResult] = []
 
         for box in soup.select("div.search_main_box_nu")[:max(1, min(limit, 50))]:
@@ -211,12 +221,18 @@ async def _discover_novelupdates(client, medium: str, page: int = 1):
     def _do_scrape() -> list[ExploreItem]:
         try:
             r = cffi_requests.get(url, params=params, timeout=15, impersonate="chrome")
+            if r.status_code == 403 or r.headers.get("cf-mitigated") == "challenge":
+                logger.warning(
+                    "NovelUpdates discover blocked by Cloudflare challenge "
+                    "(HTTP %s) — skipping.", r.status_code,
+                )
+                return []
             r.raise_for_status()
+            soup = BeautifulSoup(r.text, "lxml")
         except Exception as exc:
-            logger.warning("NovelUpdates discover fetch error: %s", exc)
+            logger.warning("NovelUpdates discover fetch/parse error: %s", exc)
             return []
 
-        soup = BeautifulSoup(r.text, "lxml")
         out: list[ExploreItem] = []
 
         for box in soup.select("div.search_main_box_nu")[:20]:

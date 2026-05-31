@@ -1,21 +1,27 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates } from '../../api.jsx';
 import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel } from '../../utils.jsx';
-import { SEARCH_SOURCES, SOURCE_LABEL, loadSavedSources, saveSources, resultToEntry } from './searchSources.js';
+import { SEARCH_SOURCES, SOURCE_LABEL, saveSources, resultToEntry } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
 
 /**
- * Full-page (non-modal) add-entry experience for the Explore "Add" mode.
- * Paste a URL to get a rich preview (cover + details) before committing, or
- * search by title to pick from a card grid that behaves like the Discover
- * grid — clicking a card opens the same add form. The left-sidebar Medium
- * filter (passed in as `medium`) narrows displayed results.
+ * Always-on search / add section that sits at the top of the unified Explore
+ * page. Paste a URL for a rich preview, or search by title to pick from a card
+ * grid (clicking a card opens the prefilled add form). `selectedSources` is
+ * controlled by Explore (it also filters the recommendations below). While this
+ * section has produced output it reports `active=true` via `onActiveChange`, so
+ * Explore can hide the recommendations until the query is cleared.
  */
-export default function AddEntryPanel({ onCreated, medium = '' }) {
-  const [query,           setQuery]           = useState('');
-  const [selectedSources, setSelectedSources] = useState(() => loadSavedSources());
-  const [searching,       setSearching]       = useState(false);
-  const [searchErr,       setSearchErr]       = useState('');
+export default function AddEntryPanel({
+  onCreated,
+  medium = '',
+  selectedSources,
+  setSelectedSources,
+  onActiveChange,
+}) {
+  const [query,     setQuery]     = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchErr, setSearchErr] = useState('');
 
   // URL path
   const [previews, setPreviews] = useState(null);   // SearchResult[] | null
@@ -23,7 +29,6 @@ export default function AddEntryPanel({ onCreated, medium = '' }) {
   const [results,  setResults]  = useState(null);   // SearchResult[] | null
   const [inLibrary, setInLibrary] = useState([]);
 
-  // Per-preview status choice + busy flag, keyed by index.
   const [previewStatus, setPreviewStatus] = useState({});
   // Entry currently being added via the shared add form (manual tab).
   const [pendingAdd, setPendingAdd] = useState(null);
@@ -42,6 +47,10 @@ export default function AddEntryPanel({ onCreated, medium = '' }) {
     [previews, medium],
   );
 
+  // "Active" = this section is showing output that should replace the recs.
+  const active = previews !== null || results !== null || searching || !!searchErr;
+  useEffect(() => { onActiveChange?.(active); }, [active, onActiveChange]);
+
   function toggleSource(value) {
     setSelectedSources(prev => {
       const next = new Set(prev);
@@ -52,13 +61,19 @@ export default function AddEntryPanel({ onCreated, medium = '' }) {
   }
 
   function resetResults() {
-    setPreviews(null); setResults(null); setInLibrary([]); setPreviewStatus({});
+    setPreviews(null); setResults(null); setInLibrary([]); setPreviewStatus({}); setSearchErr('');
+  }
+
+  function onQueryChange(value) {
+    setQuery(value);
+    // Clearing the box returns the page to recommendations.
+    if (!value.trim()) resetResults();
   }
 
   async function handleSearch(e) {
     e.preventDefault();
     if (!query.trim()) return;
-    setSearching(true); setSearchErr(''); resetResults();
+    setSearching(true); setSearchErr(''); setPreviews(null); setResults(null); setInLibrary([]); setPreviewStatus({});
     try {
       if (isUrl(query)) {
         const src = inferSourceFromUrl(query.trim());
@@ -114,10 +129,9 @@ export default function AddEntryPanel({ onCreated, medium = '' }) {
           <input
             className="form-input"
             style={{ flex: 1 }}
-            placeholder="Title or paste a URL…"
+            placeholder="Search a title, or paste a URL to add…"
             value={query}
-            onChange={e => setQuery(e.target.value)}
-            autoFocus
+            onChange={e => onQueryChange(e.target.value)}
           />
           <button className="btn" type="submit" disabled={searching || !query.trim()}>
             {searching ? '…' : urlMode ? 'Import' : 'Search'}
@@ -131,9 +145,9 @@ export default function AddEntryPanel({ onCreated, medium = '' }) {
               : 'Paste a supported media URL (TMDB, AniList, MAL, NovelUpdates, IMDb, …)'}
           </div>
         ) : (
-          <div className="source-select" style={{ marginTop: 10 }}>
+          <div className="source-select source-select-wide" style={{ marginTop: 10 }}>
             <div className="source-select-head">
-              <span className="form-label">Sources</span>
+              <span className="form-label">Sources — filter recommendations &amp; search</span>
               {selectedSources.size > 0 && (
                 <button
                   type="button"
@@ -216,7 +230,7 @@ export default function AddEntryPanel({ onCreated, medium = '' }) {
             </div>
       )}
 
-      {/* ── Keyword results grid (mirrors the Discover grid) ── */}
+      {/* ── Keyword results grid ── */}
       {results !== null && (
         shownResults.length === 0
           ? <div className="state-block"><div className="state-detail">
@@ -270,16 +284,6 @@ export default function AddEntryPanel({ onCreated, medium = '' }) {
                 );
               })}
             </div>
-      )}
-
-      {!previews && results === null && !searchErr && !searching && (
-        <div className="state-block" style={{ marginTop: 8 }}>
-          <div className="state-title">Add to your library</div>
-          <div className="state-detail">
-            Search by title, or paste a URL from a supported site to preview its
-            cover and details before adding.
-          </div>
-        </div>
       )}
 
       {pendingAdd && (

@@ -372,7 +372,7 @@ async def chapter_count(
 @router.get("/explore", response_model=ExploreResponse)
 async def explore(
     medium:  str  = Query("", description="Optional medium filter"),
-    limit:   int  = Query(40, ge=1, le=80),
+    limit:   int  = Query(40, ge=1, le=200),
     seed:    int  = Query(0,  ge=0, description="Shuffle seed; only consulted on a fresh fetch"),
     refresh: bool = Query(False, description="Bypass and overwrite the per-medium cache"),
     db: Session = Depends(get_db),

@@ -25,6 +25,8 @@ const DEFAULT_ORDER = 'desc';
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 40;
 
+const LS_QUICK_ACTIONS = 'library_quick_actions';
+
 function validParam(value, allowed, fallback = '') {
   return allowed.includes(value) ? value : fallback;
 }
@@ -61,6 +63,16 @@ export default function Library({ initialFilters = {} }) {
   // Mobile drawer state — '', 'left', or 'right'. CSS reveals the matching
   // sidebar based on the layout's `data-drawer` attribute.
   const [drawer, setDrawer] = useState('');
+  // Quick Actions toolbar (per-row status select + delete) — off by default,
+  // toggled from the right sidebar and remembered in localStorage.
+  const [showActions, setShowActions] = useState(() => {
+    try { return localStorage.getItem(LS_QUICK_ACTIONS) === '1'; } catch { return false; }
+  });
+  const toggleQuickActions = () => setShowActions(prev => {
+    const next = !prev;
+    try { localStorage.setItem(LS_QUICK_ACTIONS, next ? '1' : '0'); } catch { /* ignore */ }
+    return next;
+  });
 
   const [search,       setSearch]       = useState(() => searchParams.get('q') || (!hasUrlParams ? initialFilters.title : '') || '');
   const [statusFilter, setStatusFilter] = useState(() => validParam(searchParams.get('status'), STATUSES, !hasUrlParams ? initialFilters.status || '' : ''));
@@ -376,10 +388,10 @@ export default function Library({ initialFilters = {} }) {
         {!error && loading && (
           <div className="skeleton-page" aria-label="Loading library">
             <SkeletonTable
-              headers={['Title', 'Medium', 'Year', 'Progress', 'Status', 'Rating', 'Updated', 'Completed', 'Actions']}
+              headers={['Title', 'Medium', 'Year', 'Progress', 'Status', 'Rating', 'Updated', 'Completed', ...(showActions ? ['Actions'] : [])]}
               rows={12}
               cover
-              widths={['78%', '64%', '42%', '70%', '68%', '44%', '58%', '58%', '76%']}
+              widths={['78%', '64%', '42%', '70%', '68%', '44%', '58%', '58%', ...(showActions ? ['76%'] : [])]}
             />
           </div>
         )}
@@ -404,7 +416,7 @@ export default function Library({ initialFilters = {} }) {
                   <SortTh field="rating" className="col-rating">Rating</SortTh>
                   <SortTh field="updated_at"   className="col-updated">Updated</SortTh>
                   <SortTh field="completed_at" className="col-completed">Completed</SortTh>
-                  <th className="action-cell">Actions</th>
+                  {showActions && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -487,6 +499,7 @@ export default function Library({ initialFilters = {} }) {
                       </td>
                       <td className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>
                       <td className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at)}</span></td>
+                      {showActions && (
                       <td className="action-cell" onClick={ev => ev.stopPropagation()}>
                         <div className="action-cell-inner">
                         {isConfirmDel ? (
@@ -519,6 +532,7 @@ export default function Library({ initialFilters = {} }) {
                         )}
                         </div>
                       </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -570,6 +584,18 @@ export default function Library({ initialFilters = {} }) {
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
           onClick={() => setShowImportMal(true)}>
           Import (MAL XML)
+        </button>
+
+        <p className="panel-title" style={{ marginTop: 20 }}>View</p>
+        <button
+          type="button"
+          className={`source-chip${showActions ? ' is-on' : ''}`}
+          onClick={toggleQuickActions}
+          style={{ width: '100%' }}
+          title="Show a per-row status dropdown and delete button in the table"
+        >
+          <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
+          Quick Actions
         </button>
 
         <div style={{ marginTop: 20 }}>
