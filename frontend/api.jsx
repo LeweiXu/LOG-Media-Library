@@ -309,6 +309,49 @@ export async function uploadCover(coverUrl, blob) {
   return null;
 }
 
+/**
+ * Server-side cache all not-yet-cached covers. Returns { pump, abort } like the
+ * import streams: `onEvent` receives { type: 'start'|'progress'|'done', … }.
+ */
+export async function startCoverCache(onEvent) {
+  const controller = new AbortController();
+  const res = await fetch(`${BASE}/covers/cache-all`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    signal: controller.signal,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+
+  async function pump() {
+    let buffer = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop();
+        for (const chunk of chunks) {
+          const dataLine = chunk.split('\n').find(l => l.startsWith('data: '));
+          if (dataLine) {
+            try { onEvent(JSON.parse(dataLine.slice(6))); } catch (_) { /* ignore malformed */ }
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') throw err;
+    }
+  }
+
+  return { pump, abort: () => controller.abort() };
+}
+
 export const getStats = () => req('/stats');
 
 export const deleteAllEntries = () => req('/entries', { method: 'DELETE' });

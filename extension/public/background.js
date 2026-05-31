@@ -23,6 +23,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'fetch failed' }));
     return true; // keep the message channel open for the async response
   }
+  // Relayed by bridge.js when the web app's "Resync NU covers" button is clicked.
+  // Open the popup as a full tab in sync mode — a tab survives focus changes (the
+  // real popup would close), so the multi-tab cover sync runs reliably.
+  if (msg && msg.type === 'openSync') {
+    chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?sync=1') });
+    return false;
+  }
   return false;
 });
 

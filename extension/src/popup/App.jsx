@@ -5,10 +5,14 @@ import { fetchByUrl, createEntry, uploadCover } from '../../../frontend/api.jsx'
 import { detectSite } from '../lib/site.js';
 import { syncNuCovers } from '../lib/sync.js';
 
+// Opened as a full tab with ?sync=1 (from the web app's "Resync" button via the
+// background worker) → skip the add flow and run the cover sync straight away.
+const SYNC_MODE = new URLSearchParams(window.location.search).get('sync') === '1';
+
 // Phases: 'auth' (logged out) | 'loading' | 'ready' | 'unsupported' | 'error' | 'done' | 'sync'
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
-  const [phase, setPhase] = useState(token ? 'loading' : 'auth');
+  const [phase, setPhase] = useState(token ? (SYNC_MODE ? 'sync' : 'loading') : 'auth');
   const [entry, setEntry] = useState(null);
   const [error, setError] = useState('');
   const [coverStatus, setCoverStatus] = useState(null);   // { ok, reason } | null
@@ -50,7 +54,12 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { if (token) loadEntry(); }, [token, loadEntry]);
+  useEffect(() => {
+    if (!token) return;
+    if (SYNC_MODE) runSync();
+    else loadEntry();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, loadEntry]);
 
   function handleAuth(newToken) {
     // AuthModal already wrote auth_token/auth_username to localStorage; mirror the
@@ -108,6 +117,7 @@ export default function App() {
 
   function exitSync() {
     setSyncProgress(null);
+    if (SYNC_MODE) { window.close(); return; }  // opened as its own tab — just close it
     if (token) { setPhase('loading'); loadEntry(); } else { setPhase('auth'); }
   }
 

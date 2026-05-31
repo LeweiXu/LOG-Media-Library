@@ -32,7 +32,8 @@ from services.explore_service import explore_media
 from services.backup_service import run_backup_for_user
 from services.email_service import SMTPNotConfigured
 from services.cover_cache_service import (
-    CoverCacheError, MAX_SOURCE_BYTES, full_cover_cache_path, store_cover_bytes,
+    CoverCacheError, MAX_SOURCE_BYTES, cache_uncached_covers,
+    full_cover_cache_path, store_cover_bytes,
 )
 
 router = APIRouter()
@@ -79,6 +80,31 @@ async def get_cached_cover(url: str = Query(..., min_length=1, max_length=2000))
         path,
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@router.post("/covers/cache-all")
+async def cache_all_covers(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Server-side cache every not-yet-cached cover for the current user.
+
+    SSE stream of progress events. Ordinary CDNs are downloaded directly;
+    Cloudflare-gated covers (NovelUpdates) fail here and are reported so the
+    user knows to fall back to the browser extension for those.
+    """
+    async def event_stream():
+        async for event in cache_uncached_covers(db, current_user.username):
+            if await request.is_disconnected():
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 # ── Auth routes ───────────────────────────────────────────────────────────────

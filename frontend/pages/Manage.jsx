@@ -7,6 +7,7 @@ import ImportAutoModal from './components/ImportAutoModal.jsx';
 import ImportMalModal from './components/ImportMalModal.jsx';
 import ListsModal from './components/ListsModal.jsx';
 import DedupModal from './components/DedupModal.jsx';
+import CacheCoversModal from './components/CacheCoversModal.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 
 const ALL = '__all__';
@@ -49,6 +50,8 @@ export default function Manage() {
   const [showImportAuto, setShowImportAuto] = useState(false);
   const [showImportMal, setShowImportMal] = useState(false);
   const [showDedup, setShowDedup] = useState(false);
+  const [showCacheCovers, setShowCacheCovers] = useState(false);
+  const [extPresent, setExtPresent] = useState(false);
   // Bulk-selection + action state.
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -69,6 +72,15 @@ export default function Manage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('title');
   const [order, setOrder] = useState(DEFAULT_ORDER);
+
+  // The browser extension's content script tags the page when present, so the
+  // "Resync NU covers" trigger only enables when the extension can receive it.
+  useEffect(() => {
+    const check = () => setExtPresent(document.documentElement.getAttribute('data-logarium-ext') === '1');
+    check();
+    window.addEventListener('logarium-ext-ready', check);
+    return () => window.removeEventListener('logarium-ext-ready', check);
+  }, []);
 
   const listNames = useMemo(() => lists.map(list => list.name), [lists]);
   const isAll = selectedList === ALL;
@@ -599,10 +611,25 @@ export default function Manage() {
           onClick={() => openListsModal('manage')}>
           Manage Lists
         </button>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: 18 }}
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
           onClick={() => setShowDedup(true)}>
           Find Duplicates
         </button>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
+          onClick={() => setShowCacheCovers(true)}>
+          Cache Covers (server)
+        </button>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: extPresent ? 18 : 4 }}
+          disabled={!extPresent}
+          title={extPresent ? 'Open the extension and resync NovelUpdates covers' : 'Requires the Logarium browser extension'}
+          onClick={() => window.postMessage({ logarium: 'openSync' }, window.location.origin)}>
+          Resync NU Covers (extension)
+        </button>
+        {!extPresent && (
+          <p style={{ fontSize: 10, color: 'var(--dim)', margin: '0 0 18px', lineHeight: 1.5 }}>
+            Browser extension not detected.
+          </p>
+        )}
 
         <p className="panel-title">Export / Import</p>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
@@ -734,6 +761,10 @@ export default function Manage() {
           onClose={() => setShowDedup(false)}
           onResolved={refreshView}
         />
+      )}
+
+      {showCacheCovers && (
+        <CacheCoversModal onClose={() => setShowCacheCovers(false)} />
       )}
     </div>
   );
