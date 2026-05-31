@@ -24,12 +24,11 @@ def _normalise_cover_url(src: str) -> Optional[str]:
         src = "https:" + src
     if src.startswith("/"):
         src = "https://cdn.novelupdates.com" + src
-    if "cdn.novelupdates.com/imgmid/" in src:
-        return src
-    filename = src.rstrip("/").split("/")[-1]
-    if filename:
-        return f"https://cdn.novelupdates.com/imgmid/{filename}"
-    return None
+    # Keep the page's real cover URL (e.g. /images/2025/07/Title.jpeg). The old
+    # /imgmid/<file> rewrite 404s for newer covers and never matches the
+    # extension's cover cache key, so it broke both direct display and the
+    # cached fallback. Only protocol/root-relative srcs are fixed up above.
+    return src
 
 
 def _genre_from_href(href: str) -> Optional[str]:

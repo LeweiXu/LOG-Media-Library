@@ -60,7 +60,6 @@ export function onCoverError(e) {
   if (!stage) {
     // Original failed. At this point img.src is the resolved original URL.
     const cached = cachedCoverUrl(img.src);
-    console.warn('[LOG cover] original failed →', img.src, '| trying cached →', cached);
     if (cached) {
       img.dataset.coverStage = 'cached';
       img.src = cached;
@@ -72,7 +71,6 @@ export function onCoverError(e) {
   }
   if (stage === 'cached') {
     // No cached copy either → generic placeholder.
-    console.warn('[LOG cover] cached copy failed too →', img.src, '| using placeholder');
     img.dataset.coverStage = 'placeholder';
     img.src = COVER_PLACEHOLDER;
   }

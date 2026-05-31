@@ -6,7 +6,10 @@
   "description": "Logarium browser extension — add media to your library from the page you're on.",
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch"
+    "dev": "vite build --watch",
+    "lint": "web-ext lint --source-dir dist",
+    "package": "vite build && web-ext build --source-dir dist --artifacts-dir dist-artifacts --overwrite-dest --filename logarium-{version}-chrome.zip",
+    "sign:firefox": "vite build && web-ext sign --source-dir dist --artifacts-dir dist-artifacts --channel unlisted"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -14,6 +17,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "web-ext": "^8.3.0"
   }
 }

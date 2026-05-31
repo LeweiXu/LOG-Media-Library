@@ -11,6 +11,12 @@
     "service_worker": "background.js",
     "scripts": ["background.js"]
   },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "logarium@leweixu.dev",
+      "strict_min_version": "115.0"
+    }
+  },
   "permissions": [
     "activeTab",
     "scripting",

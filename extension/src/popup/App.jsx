@@ -3,14 +3,16 @@ import AuthModal from '../../../frontend/pages/components/AuthModal.jsx';
 import EntryForm, { formToPayload } from '../../../frontend/pages/components/EntryForm.jsx';
 import { fetchByUrl, createEntry, uploadCover } from '../../../frontend/api.jsx';
 import { detectSite } from '../lib/site.js';
+import { syncNuCovers } from '../lib/sync.js';
 
-// Phases: 'auth' (logged out) | 'loading' | 'ready' | 'unsupported' | 'error' | 'done'
+// Phases: 'auth' (logged out) | 'loading' | 'ready' | 'unsupported' | 'error' | 'done' | 'sync'
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
   const [phase, setPhase] = useState(token ? 'loading' : 'auth');
   const [entry, setEntry] = useState(null);
   const [error, setError] = useState('');
   const [coverStatus, setCoverStatus] = useState(null);   // { ok, reason } | null
+  const [syncProgress, setSyncProgress] = useState(null);  // { done, total, cached, updated, failed, ... }
 
   // Resolve the active tab into a prefilled entry: DOM-scrape NU-style sites,
   // otherwise relay the URL to the backend's /search/from-url.
@@ -90,8 +92,59 @@ export default function App() {
     setPhase('done');
   }
 
+  // Backfill cached covers for every existing NovelUpdates entry. Opens each
+  // series page briefly in a background tab to rediscover the real cover URL
+  // (existing entries hold the dead /imgmid/ form), caches it, and patches the
+  // entry. Reuses the same privileged cacheCover the add flow uses.
+  async function runSync() {
+    setSyncProgress({ done: 0, total: 0 });
+    setPhase('sync');
+    try {
+      await syncNuCovers({ cacheCover, onProgress: setSyncProgress });
+    } catch (e) {
+      setSyncProgress((prev) => ({ ...(prev || {}), error: e.message || 'Sync failed', finished: true }));
+    }
+  }
+
+  function exitSync() {
+    setSyncProgress(null);
+    if (token) { setPhase('loading'); loadEntry(); } else { setPhase('auth'); }
+  }
+
+  const syncFooter = (
+    <div className="ext-footer">
+      <button className="ext-link" onClick={runSync}>⟳ Sync NovelUpdates covers</button>
+    </div>
+  );
+
   if (phase === 'auth') {
     return <AuthModal onAuth={handleAuth} />;
+  }
+
+  if (phase === 'sync') {
+    const p = syncProgress || {};
+    const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
+    return (
+      <div className="ext-state">
+        <div className="ext-state-title">Syncing NovelUpdates covers</div>
+        {p.error ? (
+          <div style={{ color: 'var(--red)' }}>{p.error}</div>
+        ) : p.finished && !p.total ? (
+          <div>No NovelUpdates entries to sync.</div>
+        ) : (
+          <>
+            <div className="ext-sync-bar"><div className="ext-sync-fill" style={{ width: `${pct}%` }} /></div>
+            <div style={{ fontSize: 11 }}>{p.done} / {p.total}{p.current ? ` — ${p.current}` : ''}</div>
+            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 6 }}>
+              cached {p.cached || 0} · updated {p.updated || 0} · failed {p.failed || 0}
+            </div>
+          </>
+        )}
+        {p.finished
+          ? <button className="btn btn-outline" style={{ marginTop: 14 }} onClick={exitSync}>Done</button>
+          : <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 12 }}>Keep this popup open — it opens each series page briefly.</div>}
+      </div>
+    );
   }
 
   if (phase === 'loading') {
@@ -103,6 +156,7 @@ export default function App() {
       <div className="ext-state">
         <div className="ext-state-title">Not a supported media page</div>
         <div>Open a NovelUpdates series or a supported source page, then try again.</div>
+        {syncFooter}
       </div>
     );
   }
@@ -113,6 +167,7 @@ export default function App() {
         <div className="ext-state-title">Couldn’t add from this page</div>
         <div>{error}</div>
         <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={loadEntry}>Retry</button>
+        {syncFooter}
       </div>
     );
   }
@@ -126,6 +181,7 @@ export default function App() {
           : <div style={{ fontSize: 11, color: 'var(--dim)' }}>Cover not cached — {coverStatus.reason}</div>)}
         {!coverStatus && <div style={{ fontSize: 11, color: 'var(--dim)' }}>No cover to cache</div>}
         <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={() => window.close()}>Close</button>
+        {syncFooter}
       </div>
     );
   }
@@ -143,6 +199,7 @@ export default function App() {
         submitLabel="Add to Library"
         savingLabel="Adding…"
       />
+      {syncFooter}
     </div>
   );
 }
