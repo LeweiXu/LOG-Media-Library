@@ -10,7 +10,7 @@ export default function ExtensionInstallHint({ context = 'search', style }) {
 
   const lead = context === 'search'
     ? 'NovelUpdates results need the Logarium browser extension.'
-    : 'Install the Logarium browser extension to enable this.';
+    : 'Logarium browser extension not detected.';
 
   return (
     <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.6, ...style }}>

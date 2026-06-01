@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates } from '../../api.jsx';
 import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, onCoverError } from '../../utils.jsx';
 import { SEARCH_SOURCES, SOURCE_LABEL, saveSources, resultToEntry } from './searchSources.js';
@@ -20,8 +20,10 @@ export default function AddEntryPanel({
   selectedSources,
   setSelectedSources,
   onActiveChange,
+  initialQuery = '',
+  onSearch,
 }) {
-  const [query,     setQuery]     = useState('');
+  const [query,     setQuery]     = useState(initialQuery || '');
   const [searching, setSearching] = useState(false);
   const [searchErr, setSearchErr] = useState('');
 
@@ -86,26 +88,33 @@ export default function AddEntryPanel({
     saveSources(new Set());
     setQuery('');
     resetResults();
+    onSearch?.('');
   }
 
   function onQueryChange(value) {
     setQuery(value);
     // Clearing the box returns the page to recommendations.
-    if (!value.trim()) resetResults();
+    if (!value.trim()) { resetResults(); onSearch?.(''); }
   }
 
-  async function handleSearch(e) {
+  function handleSearch(e) {
     e.preventDefault();
-    if (!query.trim()) return;
+    performSearch(query);
+  }
+
+  async function performSearch(rawQuery) {
+    const q = (rawQuery || '').trim();
+    if (!q) return;
+    onSearch?.(q);  // record the executed search in the URL
     setSearching(true); setSearchErr(''); setPreviews(null); setResults(null); setInLibrary([]); setPreviewStatus({});
     try {
-      if (isUrl(query)) {
-        const src = inferSourceFromUrl(query.trim());
+      if (isUrl(q)) {
+        const src = inferSourceFromUrl(q);
         if (!URL_SCRAPE_SOURCES.has(src)) {
           setSearchErr("URL import isn't supported for this site yet — try a title search or manual entry.");
           return;
         }
-        const data = await fetchByUrl(query.trim());
+        const data = await fetchByUrl(q);
         const found = Array.isArray(data) ? data : [];
         if (found.length === 0) {
           setSearchErr("Couldn't read that page — it may be unavailable or its layout changed. Try a title search.");
@@ -117,7 +126,7 @@ export default function AddEntryPanel({
       const sources = selectedSources.size
         ? [...selectedSources]
         : SEARCH_SOURCES.map(s => s.value);
-      const data = await searchMedia(query.trim(), sources, true);
+      const data = await searchMedia(q, sources, true);
       let list = Array.isArray(data) ? data : data?.results ?? [];
       setResults(list);
       await runDupCheck(list);
@@ -127,7 +136,7 @@ export default function AddEntryPanel({
       if (nuRequested && extPresent) {
         setNuSearching(true);
         try {
-          const nu = await extensionNuSearch(query.trim());
+          const nu = await extensionNuSearch(q);
           if (nu.length) {
             list = mergeResults(list, nu);
             setResults(list);
@@ -143,6 +152,16 @@ export default function AddEntryPanel({
       setSearching(false);
     }
   }
+
+  // On first mount, re-run a search restored from the URL (?q=) so a reload
+  // brings the results back instead of resetting to recommendations.
+  const didInit = useRef(false);
+  useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+    if (initialQuery && initialQuery.trim()) performSearch(initialQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Open the shared add form (manual tab) prefilled from a result/preview.
   function openAdd(item, statusValue) {

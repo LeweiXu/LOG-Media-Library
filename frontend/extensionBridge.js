@@ -6,6 +6,7 @@
 // { logarium: true, dir: 'toExt' | 'fromExt', … }.
 
 import { useEffect, useState } from 'react';
+import { BASE } from './api.jsx';
 
 // ── Presence ──────────────────────────────────────────────────────────────────
 
@@ -55,7 +56,9 @@ export function extensionNuSearch(query, timeoutMs = 25000) {
       resolve(d.ok && Array.isArray(d.results) ? d.results : []);
     }
     window.addEventListener('message', onMsg);
-    post({ type: 'searchNu', id, query: query.trim() });
+    // token + apiBase let the extension cache each result's cover server-side
+    // (NU covers 403 cross-site, so they only display from our cached copy).
+    post({ type: 'searchNu', id, query: query.trim(), token: localStorage.getItem('auth_token'), apiBase: BASE });
   });
 }
 

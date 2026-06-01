@@ -18,24 +18,104 @@ const COOKIE_RULE_ID = 1;
 
 // ── Single-cover fetch (popup) ────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'fetchCover' && msg.coverUrl) {
     fetchCoverBase64(msg.coverUrl)
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'fetch failed' }));
     return true; // keep the message channel open for the async response
   }
+  // The injected overlay couldn't load its iframe (page CSP blocks extension
+  // frames) → fall back to a centred window.
+  if (msg && msg.type === 'overlayFallback') {
+    openPopupWindow(sender && sender.tab ? sender.tab : null);
+    return false;
+  }
   // NovelUpdates keyword search, relayed by the bridge from the web app. NU's
   // Series Finder is Cloudflare-blocked server-side, so we run it here first-
   // party (with the user's cf_clearance) as a silent search fallback.
   if (msg && msg.type === 'searchNu' && msg.query) {
-    searchNovelUpdates(msg.query)
+    searchNovelUpdates(msg.query, msg.token, msg.apiBase)
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'search failed' }));
     return true;
   }
   return false;
 });
+
+// Clicking the toolbar icon injects the login/add UI as an in-page overlay on
+// the current tab (no new window). If injection is blocked (about:/store/PDF
+// pages), fall back to a centred window.
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab || tab.id == null) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: injectOverlay,
+      args: [tab.id, chrome.runtime.getURL('popup.html')],
+    });
+  } catch {
+    openPopupWindow(tab);
+  }
+});
+
+// Injected into the page (isolated world). Mounts a fixed, dimmed overlay with
+// an iframe of the extension popup, centred modal-style. Toggles off if already
+// open. If the iframe doesn't report ready (page CSP blocks extension frames),
+// it tears down and asks the background for a windowed fallback.
+function injectOverlay(tabId, popupUrl) {
+  const ID = 'logarium-ext-overlay';
+  const existing = document.getElementById(ID);
+  if (existing) { existing.remove(); return; }
+
+  const overlay = document.createElement('div');
+  overlay.id = ID;
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;';
+
+  const frame = document.createElement('iframe');
+  frame.src = `${popupUrl}?tabId=${tabId}&embed=1`;
+  frame.style.cssText = 'width:460px;max-width:96vw;height:680px;max-height:92vh;border:1px solid #2a2d31;background:#0e0f11;box-shadow:0 12px 48px rgba(0,0,0,0.55);';
+  overlay.appendChild(frame);
+
+  let ready = false;
+  const close = () => { window.removeEventListener('message', onMsg); overlay.remove(); };
+  const onMsg = (e) => {
+    if (!e || !e.data) return;
+    if (e.data.logariumExtReady) ready = true;
+    else if (e.data.logariumExtClose) close();
+  };
+  window.addEventListener('message', onMsg);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.documentElement.appendChild(overlay);
+
+  setTimeout(() => {
+    if (!ready) {
+      close();
+      try { chrome.runtime.sendMessage({ type: 'overlayFallback' }); } catch (e) { /* ignore */ }
+    }
+  }, 2500);
+}
+
+async function openPopupWindow(srcTab) {
+  const W = 460, H = 680;
+  let left, top;
+  try {
+    const cur = await chrome.windows.getCurrent();
+    if (cur && cur.width && cur.height) {
+      left = Math.round(cur.left + (cur.width - W) / 2);
+      top = Math.round(cur.top + (cur.height - H) / 2);
+    }
+  } catch { /* fall back to the browser's default placement */ }
+
+  const suffix = srcTab && srcTab.id != null ? `?tabId=${srcTab.id}` : '';
+  await chrome.windows.create({
+    url: chrome.runtime.getURL(`popup.html${suffix}`),
+    type: 'popup',
+    width: W,
+    height: H,
+    ...(left != null && top != null ? { left, top } : {}),
+  });
+}
 
 // Fetch a cover and return it base64-encoded (messages must be serialisable).
 async function fetchCoverBase64(coverUrl) {
@@ -174,30 +254,97 @@ async function apiPatchCover(apiBase, token, id, coverUrl) {
   if (!res.ok) throw new Error(`patch ${res.status}`);
 }
 
-// ── NovelUpdates keyword search (first-party fetch + parse, no visible tab) ────
+// ── NovelUpdates keyword search (background tab + injected scraper) ────────────
 
-// Mirrors backend search_providers/novelupdates.py: the Series Finder URL and
-// the search_main_box_nu result layout. A service worker has no DOMParser, so
-// we extract the essential fields by regex — enough to display + add an entry
-// (covers/genres/rating are best-effort; the page's real cover URL is kept).
-async function searchNovelUpdates(query) {
+// A service worker has no DOMParser and NU's markup needs real parsing (entity
+// decoding, precise cover/origin/rating/genre/synopsis selectors), so we run the
+// Series Finder in a background tab and scrape its DOM — mirroring
+// backend/services/search_providers/novelupdates.py. Then we fetch + cache each
+// cover first-party (NU covers 403 cross-site) so they display on the website.
+async function searchNovelUpdates(query, token, apiBase) {
   const url = `https://www.novelupdates.com/series-finder/?sf=1&sh=${encodeURIComponent(query)}&sort=sdate&order=desc`;
-  const cfValue = await getCfClearance(url);
-  const ruleApplied = await applyCookieRule(url, cfValue);
+  const tab = await chrome.tabs.create({ url, active: false });
+  let results = [];
   try {
-    const res = await fetch(url, { credentials: 'include' });
-    if (!res.ok) return { ok: false, reason: `search ${res.status}` };
-    const html = await res.text();
-    return { ok: true, results: parseNuSearchHtml(html, 15) };
+    await waitForComplete(tab.id);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const [{ result } = {}] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: scrapeNuSearchResults,
+      });
+      if (result && result.ready) { results = result.results || []; break; }
+      await delay(2000); // still on the "Just a moment…" challenge — wait it out
+    }
   } catch (e) {
     return { ok: false, reason: (e && e.message) || 'search failed' };
   } finally {
+    try { await chrome.tabs.remove(tab.id); } catch { /* ignore */ }
+  }
+
+  // Cache covers first-party so the cross-site 403 falls back to our cached copy.
+  if (token && apiBase && results.length) {
+    await cacheCoversBatch(results.map((r) => r.cover_url).filter(Boolean), token, apiBase);
+  }
+  return { ok: true, results };
+}
+
+// Cache a batch of covers concurrently. All NU search covers share one host, so
+// we set ONE cf_clearance rule for that host up front. Per-URL session rules (as
+// fetchCoverData uses for single covers) would stomp each other under
+// concurrency — one fetch's cleanup removes another's rule — so most would 403.
+async function cacheCoversBatch(coverUrls, token, apiBase) {
+  if (!coverUrls.length) return;
+  const cfValue = await getCfClearance(coverUrls[0]);
+  const ruleApplied = await applyCookieRuleForHost(coverUrls[0], cfValue);
+  let cached = 0, failed = 0;
+  try {
+    await Promise.allSettled(coverUrls.map(async (url) => {
+      try {
+        const res = await fetch(url, { credentials: 'include' });
+        const ct = res.headers.get('content-type') || '';
+        if (!res.ok || !ct.startsWith('image/')) { failed++; return; }
+        await apiUploadCover(apiBase, token, url, await res.blob());
+        cached++;
+      } catch { failed++; }
+    }));
+  } finally {
     if (ruleApplied) await clearCookieRule();
+  }
+  console.log(`[LOG] NU search: cached ${cached}/${coverUrls.length} covers (failed ${failed}), cf_clearance=${!!cfValue}`);
+}
+
+// Like applyCookieRule but matches every URL on the host (||host/), so a single
+// rule covers a whole concurrent batch without per-URL churn.
+async function applyCookieRuleForHost(sampleUrl, cfValue) {
+  if (!cfValue) return false;
+  let host = '';
+  try { host = new URL(sampleUrl).hostname; } catch { return false; }
+  try {
+    await chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [COOKIE_RULE_ID],
+      addRules: [{
+        id: COOKIE_RULE_ID,
+        priority: 1,
+        action: { type: 'modifyHeaders', requestHeaders: [{ header: 'cookie', operation: 'set', value: `cf_clearance=${cfValue}` }] },
+        condition: { urlFilter: `||${host}/` },
+      }],
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
 
-function parseNuSearchHtml(html, limit) {
-  const normaliseCover = (src) => {
+// Injected into the Series Finder page. Returns { ready, results }. `ready` is
+// false while Cloudflare's interstitial is still showing so the caller retries.
+// Mirrors the selectors in backend search_providers/novelupdates.py.
+function scrapeNuSearchResults() {
+  if (/just a moment/i.test(document.title || '') || document.readyState === 'loading') {
+    return { ready: false };
+  }
+
+  const ORIGIN = { CN: 'Chinese', KR: 'Korean', JP: 'Japanese' };
+  const norm = (src) => {
     if (!src) return '';
     if (src.startsWith('//')) return 'https:' + src;
     if (src.startsWith('/')) return 'https://cdn.novelupdates.com' + src;
@@ -205,48 +352,82 @@ function parseNuSearchHtml(html, limit) {
   };
 
   const results = [];
-  const boxes = html.split('search_main_box_nu').slice(1);
-  for (const box of boxes) {
-    if (results.length >= limit) break;
-
-    const titleMatch = box.match(/search_title[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-    if (!titleMatch) continue;
-    const external_url = titleMatch[1];
-    const title = titleMatch[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  for (const box of Array.from(document.querySelectorAll('div.search_main_box_nu')).slice(0, 15)) {
+    const titleA = box.querySelector('div.search_title a');
+    if (!titleA) continue;
+    const title = titleA.textContent.trim();          // textContent decodes &#8211; etc.
     if (!title) continue;
-
+    const external_url = titleA.getAttribute('href') || '';
     const slug = (external_url.match(/\/series\/([^/?#]+)/) || [])[1] || '';
 
-    let cover_url = '';
-    const imgBlock = box.match(/search_img_nu[\s\S]*?<img[^>]*>/i);
-    if (imgBlock) {
-      const srcMatch = imgBlock[0].match(/(?:data-src|src)="([^"]+)"/i);
-      if (srcMatch) cover_url = normaliseCover(srcMatch[1]);
+    const img = box.querySelector('div.search_img_nu img');
+    const cover_url = img ? norm(img.getAttribute('src') || img.getAttribute('data-src') || '') : '';
+
+    let external_id = slug;
+    const addtolist = box.querySelector('div.img_addtolist');
+    if (addtolist) {
+      const m = (addtolist.getAttribute('onclick') || '').match(/show_rl_genre_nu\('(\d+)'/);
+      if (m) external_id = m[1];
     }
 
-    const idMatch = box.match(/show_rl_genre_nu\('(\d+)'/);
-    const external_id = idMatch ? idMatch[1] : slug;
-
     let total = '';
-    const chapMatch = box.match(/Chapter Count[\s\S]*?>\s*([\d,]+)/i);
-    if (chapMatch) total = chapMatch[1].replace(/,/g, '');
+    let last_updated = '';
+    for (const span of box.querySelectorAll('span.ss_desk')) {
+      const icon = span.querySelector('i[title]');
+      if (!icon) continue;
+      const it = icon.getAttribute('title') || '';
+      const txt = span.textContent.trim();
+      if (it === 'Chapter Count') { const m = txt.match(/(\d[\d,]*)/); if (m) total = m[1].replace(/,/g, ''); }
+      else if (it === 'Last Updated') { const m = txt.match(/(\d{2}-\d{2}-\d{4})/); if (m) last_updated = m[1]; }
+    }
+    let year = '';
+    const ym = last_updated.match(/(\d{4})$/); if (ym) year = ym[1];
+
+    const genres = Array.from(box.querySelectorAll('.search_genre a[href*="/genre/"]'))
+      .map((a) => a.textContent.trim()).filter(Boolean);
+
+    let origin = '';
+    let external_rating = null;
+    const ratingsBox = box.querySelector('.search_ratings');
+    if (ratingsBox) {
+      const langSpan = ratingsBox.querySelector('span');
+      if (langSpan) origin = ORIGIN[langSpan.textContent.trim().toUpperCase()] || '';
+      const rm = ratingsBox.textContent.match(/\((\d+(?:\.\d+)?)\)/);
+      if (rm) external_rating = Math.round(parseFloat(rm[1]) * 2 * 10) / 10;
+    }
+
+    // Synopsis: NU keeps the full text in a hidden ".testhide" block; strip the
+    // "more>>/<<less" toggles. Fall back to a genres/updated summary.
+    let description = '';
+    const hidden = box.querySelector('.search_body_nu .testhide');
+    if (hidden) {
+      const clone = hidden.cloneNode(true);
+      clone.querySelectorAll('.morelink, .moreless, span.list, a').forEach((e) => e.remove());
+      description = clone.textContent.replace(/\s+/g, ' ').replace(/(more>>|<<\s*less)\s*$/i, '').trim();
+    }
+    if (!description) {
+      const parts = [];
+      if (genres.length) parts.push('Genres: ' + genres.join(', '));
+      if (last_updated) parts.push('Last updated: ' + last_updated);
+      description = parts.join(' | ');
+    }
 
     results.push({
       title,
       medium: 'Web Novel',
       source: 'novelupdates',
-      external_url,
-      external_id,
+      origin,
+      year,
       cover_url,
       total,
-      origin: '',
-      year: '',
-      genres: '',
-      external_rating: null,
-      description: null,
+      external_id,
+      external_url,
+      genres: genres.join(', '),
+      external_rating,
+      description: description || null,
     });
   }
-  return results;
+  return { ready: true, results };
 }
 
 // ── NovelUpdates re-scrape (background tab + injected scraper) ─────────────────

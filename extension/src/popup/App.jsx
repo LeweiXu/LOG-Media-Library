@@ -4,6 +4,15 @@ import EntryForm, { formToPayload } from '../../../frontend/pages/components/Ent
 import { fetchByUrl, createEntry, uploadCover } from '../../../frontend/api.jsx';
 import { detectSite } from '../lib/site.js';
 
+// When shown as an in-page overlay (?embed=1) we live inside an iframe on the
+// host page, so closing means telling the parent to remove the overlay rather
+// than window.close().
+const EMBED = new URLSearchParams(window.location.search).get('embed') === '1';
+function closeUi() {
+  if (EMBED) window.parent.postMessage({ logariumExtClose: true }, '*');
+  else window.close();
+}
+
 // Phases: 'auth' (logged out) | 'loading' | 'ready' | 'unsupported' | 'error' | 'done'
 // (Bulk cover resync lives on the website now — it drives the background worker
 // directly, so the popup is purely the single-page add flow.)
@@ -19,7 +28,12 @@ export default function App() {
   const loadEntry = useCallback(async () => {
     setPhase('loading'); setError('');
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      // Opened as a centred window with ?tabId=<source tab>; fall back to the
+      // active tab (e.g. if ever shown as a normal toolbar popup).
+      const tabIdParam = new URLSearchParams(window.location.search).get('tabId');
+      const tab = tabIdParam
+        ? await chrome.tabs.get(Number(tabIdParam))
+        : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
       if (!tab?.url) { setPhase('unsupported'); return; }
 
       const site = detectSite(tab.url);
@@ -51,6 +65,9 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (token) loadEntry(); }, [token, loadEntry]);
+
+  // Tell the host overlay we mounted OK (so it doesn't fall back to a window).
+  useEffect(() => { if (EMBED) window.parent.postMessage({ logariumExtReady: true }, '*'); }, []);
 
   function handleAuth(newToken) {
     // AuthModal already wrote auth_token/auth_username to localStorage; mirror the
@@ -127,7 +144,7 @@ export default function App() {
           ? <div className="ext-ok" style={{ fontSize: 11 }}>Cover cached ✓</div>
           : <div style={{ fontSize: 11, color: 'var(--dim)' }}>Cover not cached — {coverStatus.reason}</div>)}
         {!coverStatus && <div style={{ fontSize: 11, color: 'var(--dim)' }}>No cover to cache</div>}
-        <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={() => window.close()}>Close</button>
+        <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={closeUi}>Close</button>
       </div>
     );
   }
@@ -141,7 +158,7 @@ export default function App() {
       <EntryForm
         entry={entry}
         onSubmit={handleSubmit}
-        onCancel={() => window.close()}
+        onCancel={closeUi}
         submitLabel="Add to Library"
         savingLabel="Adding…"
       />

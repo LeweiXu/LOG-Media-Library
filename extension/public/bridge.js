@@ -53,7 +53,7 @@
       // Request/response: relay to the background worker, post the result back
       // tagged with the same id so the page can match it.
       const id = data.id;
-      Promise.resolve(chrome.runtime.sendMessage({ type: 'searchNu', query: data.query }))
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'searchNu', query: data.query, token: data.token, apiBase: data.apiBase }))
         .then((resp) => {
           window.postMessage({ logarium: true, dir: 'fromExt', type: 'searchNuResult', id, ...(resp || { ok: false }) }, window.location.origin);
         })

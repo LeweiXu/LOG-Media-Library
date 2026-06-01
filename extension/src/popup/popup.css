@@ -1,7 +1,9 @@
 /* Popup chrome. The reused modals/forms pull their look from frontend/styles.css;
-   this only sizes the popup window and frames the add view. */
-html, body { width: 440px; }
-body { background: var(--bg); color: var(--text); min-height: 480px; }
+   this only sizes the view and frames the add panel. It now opens as a centred
+   window (see background.js openPopupWindow), so fill the window rather than
+   fixing a toolbar-popup width. */
+html, body { width: 100%; height: 100%; }
+body { background: var(--bg); color: var(--text); min-height: 100%; }
 
 .ext-wrap { padding: 14px 16px 16px; }
 

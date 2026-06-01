@@ -52,8 +52,15 @@ export default function Explore() {
   // Mobile drawer state — '', 'left', or 'right'.
   const [drawer, setDrawer] = useState('');
   // Selected search sources — drive BOTH the top search box and the
-  // recommendation filtering below. Empty set = all sources.
-  const [selectedSources, setSelectedSources] = useState(() => loadSavedSources());
+  // recommendation filtering below. Empty set = all sources. Restored from the
+  // URL (?src=) on load so a reload keeps the search; falls back to saved prefs.
+  const initialUrlSources = useRef(searchParams.get('src'));
+  const initialUrlQuery = useRef(searchParams.get('q') || '');
+  const [selectedSources, setSelectedSources] = useState(() => {
+    const raw = initialUrlSources.current;
+    if (raw != null) return new Set(raw.split(',').filter(Boolean));
+    return loadSavedSources();
+  });
   // True while the top search/add section is showing results or a URL preview;
   // when true we hide the recommendations and show the search output instead.
   const [searchActive, setSearchActive] = useState(false);
@@ -91,6 +98,25 @@ export default function Explore() {
       return next;
     }, { replace: true });
   }, [medium, settingsLoaded, setSearchParams]);
+
+  // Keep the selected sources in the URL (?src=) so a reload restores them.
+  useEffect(() => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (selectedSources.size) next.set('src', [...selectedSources].join(','));
+      else next.delete('src');
+      return next;
+    }, { replace: true });
+  }, [selectedSources, setSearchParams]);
+
+  // The active search term is recorded in the URL (?q=) by the panel on search.
+  const handlePanelSearch = useCallback((q) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (q) next.set('q', q); else next.delete('q');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   useEffect(() => {
     const urlMedium = mediumFromParam(searchParams.get('medium'));
@@ -337,6 +363,8 @@ export default function Explore() {
           selectedSources={selectedSources}
           setSelectedSources={setSelectedSources}
           onActiveChange={setSearchActive}
+          initialQuery={initialUrlQuery.current}
+          onSearch={handlePanelSearch}
         />
 
         {/* Recommendations — hidden while a search/URL query is active. */}
