@@ -32,6 +32,7 @@ export default function AddEntryPanel({
   // Keyword path
   const [results,  setResults]  = useState(null);   // SearchResult[] | null
   const [inLibrary, setInLibrary] = useState([]);
+  const [addedResults, setAddedResults] = useState({});
 
   const [previewStatus, setPreviewStatus] = useState({});
   // Entry currently being added via the shared add form (manual tab).
@@ -80,7 +81,7 @@ export default function AddEntryPanel({
   }
 
   function resetResults() {
-    setPreviews(null); setResults(null); setInLibrary([]); setPreviewStatus({}); setSearchErr('');
+    setPreviews(null); setResults(null); setInLibrary([]); setAddedResults({}); setPreviewStatus({}); setSearchErr('');
   }
 
   function clearSourcesAndSearch() {
@@ -106,7 +107,7 @@ export default function AddEntryPanel({
     const q = (rawQuery || '').trim();
     if (!q) return;
     onSearch?.(q);  // record the executed search in the URL
-    setSearching(true); setSearchErr(''); setPreviews(null); setResults(null); setInLibrary([]); setPreviewStatus({});
+    setSearching(true); setSearchErr(''); setPreviews(null); setResults(null); setInLibrary([]); setAddedResults({}); setPreviewStatus({});
     try {
       if (isUrl(q)) {
         const src = inferSourceFromUrl(q);
@@ -164,12 +165,27 @@ export default function AddEntryPanel({
   }, []);
 
   // Open the shared add form (manual tab) prefilled from a result/preview.
-  function openAdd(item, statusValue) {
+  function openAdd(item, statusValue, resultIndex = null) {
     const entry = resultToEntry(item);
-    setPendingAdd(statusValue ? { ...entry, status: statusValue } : entry);
+    setPendingAdd({
+      entry: statusValue ? { ...entry, status: statusValue } : entry,
+      resultIndex,
+      status: statusValue || entry.status || 'planned',
+    });
   }
 
   function handleCreated(created) {
+    if (pendingAdd?.resultIndex != null) {
+      setAddedResults(prev => ({
+        ...prev,
+        [pendingAdd.resultIndex]: created || { status: pendingAdd.status },
+      }));
+      setInLibrary(prev => {
+        const next = [...prev];
+        next[pendingAdd.resultIndex] = true;
+        return next;
+      });
+    }
     onCreated?.(created);
     setPendingAdd(null);
   }
@@ -296,17 +312,19 @@ export default function AddEntryPanel({
             </div></div>
           : <div className="explore-grid" style={{ marginTop: 12 }}>
               {shownResults.map(({ r, i }) => {
-                const owned = inLibrary[i];
+                const added = addedResults[i];
+                const addedStatus = added?.status || '';
+                const owned = inLibrary[i] || Boolean(added);
                 return (
                   <article
                     key={`${r.source}:${r.external_id || r.title}:${i}`}
                     className={'explore-card' + (owned ? ' is-owned not-interactive' : '')}
                     role={owned ? undefined : 'button'}
                     tabIndex={owned ? undefined : 0}
-                    onClick={() => { if (!owned) openAdd(r, 'planned'); }}
+                    onClick={() => { if (!owned) openAdd(r, 'planned', i); }}
                     onKeyDown={e => {
                       if (owned) return;
-                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAdd(r, 'planned'); }
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAdd(r, 'planned', i); }
                     }}
                   >
                     <div className="explore-cover">
@@ -332,8 +350,8 @@ export default function AddEntryPanel({
                       {r.description && <p className="explore-desc no-match">{r.description}</p>}
                     </div>
                     {owned && (
-                      <div className="explore-card-overlay explore-card-added-overlay">
-                        <span>✓ in library</span>
+                      <div className={'explore-card-overlay explore-card-added-overlay' + (addedStatus ? ` status-${addedStatus}` : '')}>
+                        <span>{addedStatus ? `✓ added · ${statusLabel(addedStatus)}` : '✓ in library'}</span>
                       </div>
                     )}
                   </article>
@@ -351,7 +369,7 @@ export default function AddEntryPanel({
       {pendingAdd && (
         <AddEntryModal
           initialTab="manual"
-          initialEntry={pendingAdd}
+          initialEntry={pendingAdd.entry}
           hideTabs
           onClose={() => setPendingAdd(null)}
           onCreated={handleCreated}
