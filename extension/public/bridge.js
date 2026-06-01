@@ -49,6 +49,17 @@
       });
     } else if (data.type === 'cancelSync') {
       closePort(); // disconnect → background sees onDisconnect → stops the loop
+    } else if (data.type === 'searchNu') {
+      // Request/response: relay to the background worker, post the result back
+      // tagged with the same id so the page can match it.
+      const id = data.id;
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'searchNu', query: data.query }))
+        .then((resp) => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'searchNuResult', id, ...(resp || { ok: false }) }, window.location.origin);
+        })
+        .catch(() => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'searchNuResult', id, ok: false }, window.location.origin);
+        });
     }
   });
 })();

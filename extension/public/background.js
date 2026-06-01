@@ -25,6 +25,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'fetch failed' }));
     return true; // keep the message channel open for the async response
   }
+  // NovelUpdates keyword search, relayed by the bridge from the web app. NU's
+  // Series Finder is Cloudflare-blocked server-side, so we run it here first-
+  // party (with the user's cf_clearance) as a silent search fallback.
+  if (msg && msg.type === 'searchNu' && msg.query) {
+    searchNovelUpdates(msg.query)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'search failed' }));
+    return true;
+  }
   return false;
 });
 
@@ -163,6 +172,81 @@ async function apiPatchCover(apiBase, token, id, coverUrl) {
     body: JSON.stringify({ ids: [id], patch: { cover_url: coverUrl } }),
   });
   if (!res.ok) throw new Error(`patch ${res.status}`);
+}
+
+// ── NovelUpdates keyword search (first-party fetch + parse, no visible tab) ────
+
+// Mirrors backend search_providers/novelupdates.py: the Series Finder URL and
+// the search_main_box_nu result layout. A service worker has no DOMParser, so
+// we extract the essential fields by regex — enough to display + add an entry
+// (covers/genres/rating are best-effort; the page's real cover URL is kept).
+async function searchNovelUpdates(query) {
+  const url = `https://www.novelupdates.com/series-finder/?sf=1&sh=${encodeURIComponent(query)}&sort=sdate&order=desc`;
+  const cfValue = await getCfClearance(url);
+  const ruleApplied = await applyCookieRule(url, cfValue);
+  try {
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) return { ok: false, reason: `search ${res.status}` };
+    const html = await res.text();
+    return { ok: true, results: parseNuSearchHtml(html, 15) };
+  } catch (e) {
+    return { ok: false, reason: (e && e.message) || 'search failed' };
+  } finally {
+    if (ruleApplied) await clearCookieRule();
+  }
+}
+
+function parseNuSearchHtml(html, limit) {
+  const normaliseCover = (src) => {
+    if (!src) return '';
+    if (src.startsWith('//')) return 'https:' + src;
+    if (src.startsWith('/')) return 'https://cdn.novelupdates.com' + src;
+    return src;
+  };
+
+  const results = [];
+  const boxes = html.split('search_main_box_nu').slice(1);
+  for (const box of boxes) {
+    if (results.length >= limit) break;
+
+    const titleMatch = box.match(/search_title[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+    if (!titleMatch) continue;
+    const external_url = titleMatch[1];
+    const title = titleMatch[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    if (!title) continue;
+
+    const slug = (external_url.match(/\/series\/([^/?#]+)/) || [])[1] || '';
+
+    let cover_url = '';
+    const imgBlock = box.match(/search_img_nu[\s\S]*?<img[^>]*>/i);
+    if (imgBlock) {
+      const srcMatch = imgBlock[0].match(/(?:data-src|src)="([^"]+)"/i);
+      if (srcMatch) cover_url = normaliseCover(srcMatch[1]);
+    }
+
+    const idMatch = box.match(/show_rl_genre_nu\('(\d+)'/);
+    const external_id = idMatch ? idMatch[1] : slug;
+
+    let total = '';
+    const chapMatch = box.match(/Chapter Count[\s\S]*?>\s*([\d,]+)/i);
+    if (chapMatch) total = chapMatch[1].replace(/,/g, '');
+
+    results.push({
+      title,
+      medium: 'Web Novel',
+      source: 'novelupdates',
+      external_url,
+      external_id,
+      cover_url,
+      total,
+      origin: '',
+      year: '',
+      genres: '',
+      external_rating: null,
+      description: null,
+    });
+  }
+  return results;
 }
 
 // ── NovelUpdates re-scrape (background tab + injected scraper) ─────────────────

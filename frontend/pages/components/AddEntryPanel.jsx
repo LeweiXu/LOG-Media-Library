@@ -3,6 +3,8 @@ import { searchMedia, fetchByUrl, checkDuplicates } from '../../api.jsx';
 import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, onCoverError } from '../../utils.jsx';
 import { SEARCH_SOURCES, SOURCE_LABEL, saveSources, resultToEntry } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
+import ExtensionInstallHint from './ExtensionInstallHint.jsx';
+import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
 
 /**
  * Always-on search / add section that sits at the top of the unified Explore
@@ -32,6 +34,20 @@ export default function AddEntryPanel({
   const [previewStatus, setPreviewStatus] = useState({});
   // Entry currently being added via the shared add form (manual tab).
   const [pendingAdd, setPendingAdd] = useState(null);
+  const [nuSearching, setNuSearching] = useState(false);
+  const extPresent = useExtensionPresent();
+
+  const nuRequested = selectedSources.size === 0 || selectedSources.has('novelupdates');
+
+  async function runDupCheck(list) {
+    if (!list.length) { setInLibrary([]); return; }
+    try {
+      const check = await checkDuplicates(
+        list.map(r => ({ title: r.title, year: r.year ?? null, medium: r.medium ?? null }))
+      );
+      setInLibrary(check.exists);
+    } catch (_) { /* non-critical */ }
+  }
 
   const urlMode = isUrl(query);
   const detectedSource = urlMode ? inferSourceFromUrl(query.trim()) : '';
@@ -102,15 +118,24 @@ export default function AddEntryPanel({
         ? [...selectedSources]
         : SEARCH_SOURCES.map(s => s.value);
       const data = await searchMedia(query.trim(), sources, true);
-      const list = Array.isArray(data) ? data : data?.results ?? [];
+      let list = Array.isArray(data) ? data : data?.results ?? [];
       setResults(list);
-      if (list.length > 0) {
+      await runDupCheck(list);
+
+      // Silent NovelUpdates fallback via the extension (NU search is
+      // Cloudflare-blocked server-side); merge its results in when present.
+      if (nuRequested && extPresent) {
+        setNuSearching(true);
         try {
-          const check = await checkDuplicates(
-            list.map(r => ({ title: r.title, year: r.year ?? null, medium: r.medium ?? null }))
-          );
-          setInLibrary(check.exists);
-        } catch (_) { /* non-critical */ }
+          const nu = await extensionNuSearch(query.trim());
+          if (nu.length) {
+            list = mergeResults(list, nu);
+            setResults(list);
+            await runDupCheck(list);
+          }
+        } finally {
+          setNuSearching(false);
+        }
       }
     } catch (err) {
       setSearchErr(err.message);
@@ -241,9 +266,14 @@ export default function AddEntryPanel({
       {results !== null && (
         shownResults.length === 0
           ? <div className="state-block"><div className="state-detail">
-              {results.length === 0
-                ? 'No results — try a different title or source.'
-                : `No results match the “${medium}” filter.`}
+              {nuSearching
+                ? <span className="loading-dots">Searching NovelUpdates</span>
+                : results.length === 0
+                  ? 'No results — try a different title or source.'
+                  : `No results match the “${medium}” filter.`}
+              {!nuSearching && nuRequested && !extPresent && (
+                <div style={{ marginTop: 10 }}><ExtensionInstallHint context="search" /></div>
+              )}
             </div></div>
           : <div className="explore-grid" style={{ marginTop: 12 }}>
               {shownResults.map(({ r, i }) => {
@@ -291,6 +321,12 @@ export default function AddEntryPanel({
                 );
               })}
             </div>
+      )}
+
+      {nuSearching && shownResults.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--dim)', textAlign: 'center', padding: '10px 0' }}>
+          <span className="loading-dots">Searching NovelUpdates</span>
+        </div>
       )}
 
       {pendingAdd && (

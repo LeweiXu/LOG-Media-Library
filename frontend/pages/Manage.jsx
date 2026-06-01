@@ -9,6 +9,8 @@ import ListsModal from './components/ListsModal.jsx';
 import DedupModal from './components/DedupModal.jsx';
 import CacheCoversModal from './components/CacheCoversModal.jsx';
 import ResyncModal from './components/ResyncModal.jsx';
+import ExtensionInstallHint from './components/ExtensionInstallHint.jsx';
+import { useExtensionPresent } from '../extensionBridge.js';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 
 const ALL = '__all__';
@@ -53,7 +55,7 @@ export default function Manage() {
   const [showDedup, setShowDedup] = useState(false);
   const [showCacheCovers, setShowCacheCovers] = useState(false);
   const [showResync, setShowResync] = useState(false);
-  const [extPresent, setExtPresent] = useState(false);
+  const extPresent = useExtensionPresent();
   // Bulk-selection + action state.
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   // Entry id of the last toggled row — anchor for shift-click ranges.
@@ -76,15 +78,6 @@ export default function Manage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('title');
   const [order, setOrder] = useState(DEFAULT_ORDER);
-
-  // The browser extension's content script tags the page when present, so the
-  // "Resync NU covers" trigger only enables when the extension can receive it.
-  useEffect(() => {
-    const check = () => setExtPresent(document.documentElement.getAttribute('data-logarium-ext') === '1');
-    check();
-    window.addEventListener('logarium-ext-ready', check);
-    return () => window.removeEventListener('logarium-ext-ready', check);
-  }, []);
 
   const listNames = useMemo(() => lists.map(list => list.name), [lists]);
   const isAll = selectedList === ALL;
@@ -657,9 +650,9 @@ export default function Manage() {
           Cache Covers (extension)
         </button>
         {!extPresent && (
-          <p style={{ fontSize: 10, color: 'var(--dim)', margin: '0 0 18px', lineHeight: 1.5 }}>
-            Browser extension not detected.
-          </p>
+          <div style={{ margin: '2px 0 18px' }}>
+            <ExtensionInstallHint context="resync" />
+          </div>
         )}
 
         <p className="panel-title">Export / Import</p>

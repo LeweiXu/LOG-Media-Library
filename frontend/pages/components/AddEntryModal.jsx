@@ -4,6 +4,8 @@ import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, onCoverError } from '../
 import { SEARCH_SOURCES, SOURCE_LABEL, loadSavedSources, saveSources, resultToEntry } from './searchSources.js';
 import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
+import ExtensionInstallHint from './ExtensionInstallHint.jsx';
+import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
 
 export default function AddEntryModal({ onClose, onCreated, initialEntry = null, initialTab = 'search', hideTabs = false }) {
   const [tab,             setTab]             = useState(initialTab);
@@ -16,6 +18,20 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
   const [searchErr,       setSearchErr]       = useState('');
   const [selected,        setSelected]        = useState(new Set());
   const [confirmQueue,    setConfirmQueue]     = useState([]);
+  const [nuSearching,     setNuSearching]      = useState(false);
+  const extPresent = useExtensionPresent();
+
+  const nuRequested = selectedSources.size === 0 || selectedSources.has('novelupdates');
+
+  async function runDupCheck(list) {
+    if (!list.length) { setInLibrary([]); return; }
+    try {
+      const check = await checkDuplicates(
+        list.map(r => ({ title: r.title, year: r.year ?? null, medium: r.medium ?? null }))
+      );
+      setInLibrary(check.exists);
+    } catch (_) { /* non-critical */ }
+  }
 
   function toggleSource(value) {
     setSelectedSources(prev => {
@@ -49,15 +65,25 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
         return;
       }
       const data = await searchMedia(query.trim(), [...selectedSources], extended);
-      const list = Array.isArray(data) ? data : data?.results ?? [];
+      let list = Array.isArray(data) ? data : data?.results ?? [];
       setResults(list);
-      if (list.length > 0) {
+      await runDupCheck(list);
+
+      // Silent NovelUpdates fallback: NU keyword search is Cloudflare-blocked
+      // server-side, so when the extension is present run it client-side and
+      // merge the results in (progressively — backend results already showed).
+      if (nuRequested && extPresent) {
+        setNuSearching(true);
         try {
-          const check = await checkDuplicates(
-            list.map(r => ({ title: r.title, year: r.year ?? null, medium: r.medium ?? null }))
-          );
-          setInLibrary(check.exists);
-        } catch (_) { /* non-critical: ignore duplicate check errors */ }
+          const nu = await extensionNuSearch(query.trim());
+          if (nu.length) {
+            list = mergeResults(list, nu);
+            setResults(list);
+            await runDupCheck(list);
+          }
+        } finally {
+          setNuSearching(false);
+        }
       }
     } catch (err) {
       setSearchErr(err.message);
@@ -215,7 +241,10 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
               {results !== null && (
                 results.length === 0
                   ? <div style={{ color: 'var(--dim)', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>
-                      No results — try manual entry.
+                      {nuSearching ? <span className="loading-dots">Searching NovelUpdates</span> : 'No results — try manual entry.'}
+                      {!nuSearching && nuRequested && !extPresent && (
+                        <div style={{ marginTop: 10 }}><ExtensionInstallHint context="search" /></div>
+                      )}
                     </div>
                   : <>
                       <div className="search-results">
@@ -254,6 +283,11 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                           );
                         })}
                       </div>
+                      {nuSearching && (
+                        <div style={{ fontSize: 11, color: 'var(--dim)', textAlign: 'center', padding: '6px 0' }}>
+                          <span className="loading-dots">Searching NovelUpdates</span>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
                         <div style={{ display: 'flex', gap: 14, fontSize: 11, color: 'var(--dim)' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
