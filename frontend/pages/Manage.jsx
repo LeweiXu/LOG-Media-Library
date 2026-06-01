@@ -475,7 +475,7 @@ export default function Manage() {
                       className={`box-toggle${allPageSelected ? ' is-on' : ''}`}
                       onClick={toggleSelectAll} aria-pressed={allPageSelected}
                       aria-label="Select all on page">
-                      {allPageSelected ? '[x]' : '[ ]'}
+                      {allPageSelected ? '[X]' : '[ ]'}
                     </button>
                   </th>
                   <SortTh field="title">Title</SortTh>
@@ -500,7 +500,7 @@ export default function Manage() {
                         onClick={ev => { ev.stopPropagation(); handleSelectClick(ev, entry.id); }}
                         aria-pressed={selectedIds.has(entry.id)}
                         aria-label={`Select ${entry.title}`}>
-                        {selectedIds.has(entry.id) ? '[x]' : '[ ]'}
+                        {selectedIds.has(entry.id) ? '[X]' : '[ ]'}
                       </button>
                     </td>
                     <td>

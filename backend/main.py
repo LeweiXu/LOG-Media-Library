@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Media Tracker API",
+    title="LOGARIUM API",
     description="Backend for the LOG media tracking application.",
     version="1.0.0",
     lifespan=lifespan,
