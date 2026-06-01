@@ -40,8 +40,82 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'search failed' }));
     return true;
   }
+  // ── Overlay-mode delegation ──
+  // When the UI runs as an in-page overlay (iframe), Firefox sandboxes it: no
+  // chrome.tabs/scripting and no cross-origin fetch. So the iframe asks the
+  // background (full privileges) to do the page read / create / cover cache.
+  if (msg && msg.type === 'embedLoadEntry') {
+    embedLoadEntry(msg.tabId, msg.token, msg.apiBase)
+      .then(sendResponse).catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'load failed' }));
+    return true;
+  }
+  if (msg && msg.type === 'embedCreateEntry') {
+    embedCreateEntry(msg.payload, msg.token, msg.apiBase)
+      .then(sendResponse).catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'create failed' }));
+    return true;
+  }
+  if (msg && msg.type === 'embedCacheCover') {
+    embedCacheCover(msg.coverUrl, msg.token, msg.apiBase)
+      .then(sendResponse).catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'cache failed' }));
+    return true;
+  }
   return false;
 });
+
+// URL → how to read the page. NU pages are DOM-scraped; the API-backed sites
+// resolve via the backend's /search/from-url. Mirrors src/lib/site.js.
+function detectSiteUrl(url) {
+  let host = '';
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return { kind: 'unsupported' }; }
+  if (host.includes('novelupdates.com')) return { kind: 'dom' };
+  const API = [
+    'themoviedb.org', 'anilist.co', 'myanimelist.net', 'kitsu.io', 'kitsu.app',
+    'mangadex.org', 'mangaupdates.com', 'baka-updates.com', 'igdb.com', 'rawg.io',
+    'books.google.com', 'play.google.com', 'openlibrary.org',
+    'comicvine.gamespot.com', 'vndb.org', 'jjwxc.net', 'qidian.com', 'imdb.com',
+  ];
+  return API.some((d) => host.includes(d)) ? { kind: 'api' } : { kind: 'unsupported' };
+}
+
+async function embedLoadEntry(tabId, token, apiBase) {
+  const tab = await chrome.tabs.get(Number(tabId));
+  if (!tab || !tab.url) return { ok: false, reason: 'no tab' };
+  const site = detectSiteUrl(tab.url);
+  if (site.kind === 'unsupported') return { ok: false, reason: 'unsupported' };
+
+  if (site.kind === 'dom') {
+    const [{ result } = {}] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id }, func: scrapeNovelUpdates,
+    });
+    return result && result.title ? { ok: true, entry: result } : { ok: false, reason: 'noscrape' };
+  }
+
+  const res = await fetch(`${apiBase}/search/from-url?url=${encodeURIComponent(tab.url)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) return { ok: false, reason: `from-url ${res.status}` };
+  const data = await res.json();
+  const first = Array.isArray(data) && data[0] ? { ...data[0], status: 'planned' } : null;
+  return first && first.title ? { ok: true, entry: first } : { ok: false, reason: 'nofind' };
+}
+
+async function embedCreateEntry(payload, token, apiBase) {
+  const res = await fetch(`${apiBase}/entries`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) return { ok: false, reason: `${res.status} ${await res.text()}` };
+  return { ok: true, entry: await res.json() };
+}
+
+async function embedCacheCover(coverUrl, token, apiBase) {
+  if (!coverUrl) return { ok: false, reason: 'no cover' };
+  const cover = await fetchCoverData(coverUrl);
+  if (!cover.ok) return { ok: false, reason: cover.reason };
+  try { await apiUploadCover(apiBase, token, coverUrl, cover.blob); return { ok: true }; }
+  catch (e) { return { ok: false, reason: (e && e.message) || 'upload failed' }; }
+}
 
 // Clicking the toolbar icon injects the login/add UI as an in-page overlay on
 // the current tab (no new window). If injection is blocked (about:/store/PDF

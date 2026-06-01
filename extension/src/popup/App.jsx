@@ -1,36 +1,48 @@
 import { useEffect, useState, useCallback } from 'react';
 import AuthModal from '../../../frontend/pages/components/AuthModal.jsx';
 import EntryForm, { formToPayload } from '../../../frontend/pages/components/EntryForm.jsx';
-import { fetchByUrl, createEntry, uploadCover } from '../../../frontend/api.jsx';
+import { BASE, fetchByUrl, createEntry, uploadCover } from '../../../frontend/api.jsx';
 import { detectSite } from '../lib/site.js';
 
 // When shown as an in-page overlay (?embed=1) we live inside an iframe on the
-// host page, so closing means telling the parent to remove the overlay rather
-// than window.close().
+// host page. Firefox sandboxes that iframe — no chrome.tabs/scripting and no
+// cross-origin fetch — so every privileged op is delegated to the background
+// worker, and closing means telling the parent to remove the overlay.
 const EMBED = new URLSearchParams(window.location.search).get('embed') === '1';
+const getToken = () => localStorage.getItem('auth_token');
 function closeUi() {
   if (EMBED) window.parent.postMessage({ logariumExtClose: true }, '*');
   else window.close();
 }
 
 // Phases: 'auth' (logged out) | 'loading' | 'ready' | 'unsupported' | 'error' | 'done'
-// (Bulk cover resync lives on the website now — it drives the background worker
-// directly, so the popup is purely the single-page add flow.)
 export default function App() {
-  const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
+  const [token, setToken] = useState(getToken);
   const [phase, setPhase] = useState(token ? 'loading' : 'auth');
   const [entry, setEntry] = useState(null);
   const [error, setError] = useState('');
   const [coverStatus, setCoverStatus] = useState(null);   // { ok, reason } | null
 
-  // Resolve the active tab into a prefilled entry: DOM-scrape NU-style sites,
-  // otherwise relay the URL to the backend's /search/from-url.
+  // Resolve the source tab into a prefilled entry: DOM-scrape NU-style sites,
+  // otherwise relay the URL to the backend's /search/from-url. In overlay mode
+  // the sandboxed iframe can't touch chrome.tabs, so the background does it.
   const loadEntry = useCallback(async () => {
     setPhase('loading'); setError('');
     try {
-      // Opened as a centred window with ?tabId=<source tab>; fall back to the
-      // active tab (e.g. if ever shown as a normal toolbar popup).
       const tabIdParam = new URLSearchParams(window.location.search).get('tabId');
+
+      if (EMBED) {
+        const resp = await chrome.runtime.sendMessage({
+          type: 'embedLoadEntry', tabId: tabIdParam, token: getToken(), apiBase: BASE,
+        });
+        if (!resp || !resp.ok) {
+          if (resp && resp.reason === 'unsupported') { setPhase('unsupported'); return; }
+          setError("Couldn't read media details from this page."); setPhase('error'); return;
+        }
+        setEntry(resp.entry); setPhase('ready'); return;
+      }
+
+      // Full-privilege contexts (centred window / toolbar popup): do it directly.
       const tab = tabIdParam
         ? await chrome.tabs.get(Number(tabIdParam))
         : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
@@ -66,21 +78,24 @@ export default function App() {
 
   useEffect(() => { if (token) loadEntry(); }, [token, loadEntry]);
 
-  // Tell the host overlay we mounted OK (so it doesn't fall back to a window).
-  useEffect(() => { if (EMBED) window.parent.postMessage({ logariumExtReady: true }, '*'); }, []);
+  useEffect(() => {
+    if (!EMBED) return;
+    // Let the overlay know we mounted (cancels its CSP-fallback timer).
+    window.parent.postMessage({ logariumExtReady: true }, '*');
+    // Login can't fetch from the sandboxed iframe — hand sign-in to a window.
+    if (!token) {
+      try { chrome.runtime.sendMessage({ type: 'overlayFallback' }); } catch { /* ignore */ }
+      closeUi();
+    }
+  }, []);
 
   function handleAuth(newToken) {
-    // AuthModal already wrote auth_token/auth_username to localStorage; mirror the
-    // token into chrome.storage so a future background context can use it too.
     try { chrome.storage?.local.set({ auth_token: newToken }); } catch { /* ignore */ }
     setToken(newToken);
   }
 
-  // Best-effort cover caching for ALL sources. The background service worker
-  // does the privileged fetch (CORS-exempt for any host; injects cf_clearance
-  // for Cloudflare-gated covers) and returns the bytes base64-encoded; here we
-  // rebuild the blob and upload it. Never blocks the add — returns a status so
-  // the popup can show why a cover did/didn't cache.
+  // Best-effort cover caching (full-privilege contexts). The background fetches
+  // the bytes (injecting cf_clearance for Cloudflare hosts); we upload them.
   async function cacheCover(coverUrl) {
     try {
       const resp = await chrome.runtime.sendMessage({ type: 'fetchCover', coverUrl });
@@ -98,11 +113,26 @@ export default function App() {
 
   async function handleSubmit(form) {
     const payload = formToPayload(form, { isEdit: false });
-    await createEntry(payload);
+
+    if (EMBED) {
+      const resp = await chrome.runtime.sendMessage({
+        type: 'embedCreateEntry', payload, token: getToken(), apiBase: BASE,
+      });
+      if (!resp || !resp.ok) throw new Error((resp && resp.reason) || 'Failed to add entry');
+    } else {
+      await createEntry(payload);
+    }
 
     let cover = null;
     if (form.cover_url) {
-      cover = await cacheCover(form.cover_url);
+      if (EMBED) {
+        const r = await chrome.runtime.sendMessage({
+          type: 'embedCacheCover', coverUrl: form.cover_url, token: getToken(), apiBase: BASE,
+        });
+        cover = r && r.ok ? { ok: true } : { ok: false, reason: (r && r.reason) || 'fetch failed' };
+      } else {
+        cover = await cacheCover(form.cover_url);
+      }
       if (!cover.ok) console.warn('[LOG] cover not cached:', cover.reason, form.cover_url);
     }
     setCoverStatus(cover);
@@ -110,6 +140,10 @@ export default function App() {
   }
 
   if (phase === 'auth') {
+    // In overlay mode we redirect sign-in to a window (see the effect above).
+    if (EMBED) {
+      return <div className="ext-state"><span className="loading-dots">Opening sign-in</span></div>;
+    }
     return <AuthModal onAuth={handleAuth} />;
   }
 
