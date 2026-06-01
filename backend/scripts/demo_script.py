@@ -19,9 +19,10 @@ _BACKEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 os.chdir(_BACKEND_DIR)
 sys.path.insert(0, _BACKEND_DIR)
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, delete, insert, literal, select
 from sqlalchemy.orm import sessionmaker
 from config import get_settings
+from models import Entry, ExploreCache, User
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,14 +36,36 @@ DATABASE_URL = settings.DATABASE_URL
 SOURCE_USER = "lingwei"
 DEST_USER = "demo_user"
 
-# Columns to copy from entries (excludes 'id' so the DB assigns a new PK,
-# and overrides 'username').
-ENTRY_COLUMNS = [
-    "title", "medium", "origin", "year", "cover_url", "notes",
-    "external_id", "source", "external_url", "genres", "external_rating",
-    "status", "rating", "progress", "total",
-    "created_at", "updated_at", "completed_at",
-]
+USER_SETTINGS_EXCLUDE = {"username", "email", "hashed_password"}
+ENTRY_COPY_EXCLUDE = {"id", "username"}
+
+
+def _copyable_entry_columns() -> list[str]:
+    """Columns copied entry-for-entry; generated ids and owners are replaced."""
+    return [col.name for col in Entry.__table__.columns if col.name not in ENTRY_COPY_EXCLUDE]
+
+
+def _sync_demo_user(session) -> None:
+    """Ensure demo_user exists without overwriting its login credentials."""
+    source = session.get(User, SOURCE_USER)
+    if source is None:
+        raise RuntimeError(f"Source user {SOURCE_USER!r} does not exist")
+
+    dest = session.get(User, DEST_USER)
+    if dest is None:
+        dest = User(
+            username=DEST_USER,
+            email=f"{DEST_USER}@example.invalid",
+            hashed_password=source.hashed_password,
+        )
+        session.add(dest)
+        log.info("Created missing destination user '%s'.", DEST_USER)
+
+    # Keep demo browsing/settings behavior in line with the source account, but
+    # deliberately leave email/password alone.
+    for col in User.__table__.columns:
+        if col.name not in USER_SETTINGS_EXCLUDE:
+            setattr(dest, col.name, getattr(source, col.name))
 
 
 def sync_demo_entries(db_url: str) -> None:
@@ -51,21 +74,28 @@ def sync_demo_entries(db_url: str) -> None:
 
     with Session() as session:
         with session.begin():
-            # 1. Delete all demo_user entries
-            result = session.execute(
-                text("DELETE FROM entries WHERE username = :u"),
-                {"u": DEST_USER},
+            _sync_demo_user(session)
+
+            # 1. Delete stale per-user cache and demo_user entries.
+            cache_result = session.execute(
+                delete(ExploreCache).where(ExploreCache.username == DEST_USER)
             )
+            log.info("Deleted %d explore cache rows for '%s'.", cache_result.rowcount, DEST_USER)
+
+            result = session.execute(delete(Entry).where(Entry.username == DEST_USER))
             log.info("Deleted %d existing entries for '%s'.", result.rowcount, DEST_USER)
 
-            # 2. Copy lingwei's entries to demo_user
-            cols = ", ".join(ENTRY_COLUMNS)
+            # 2. Copy source entries to demo_user. The column list comes from
+            # the current SQLAlchemy model so migrations like custom_list do not
+            # silently fall out of sync with this cron job.
+            copy_cols = _copyable_entry_columns()
+            insert_cols = [*copy_cols, "username"]
+            select_cols = [getattr(Entry, col) for col in copy_cols]
             result = session.execute(
-                text(
-                    f"INSERT INTO entries ({cols}, username) "
-                    f"SELECT {cols}, :dest FROM entries WHERE username = :src"
-                ),
-                {"dest": DEST_USER, "src": SOURCE_USER},
+                insert(Entry).from_select(
+                    insert_cols,
+                    select(*select_cols, literal(DEST_USER)).where(Entry.username == SOURCE_USER),
+                )
             )
             log.info("Copied %d entries from '%s' to '%s'.", result.rowcount, SOURCE_USER, DEST_USER)
 
@@ -75,5 +105,5 @@ if __name__ == "__main__":
         sync_demo_entries(DATABASE_URL)
         log.info("Done.")
     except Exception as exc:
-        log.error("Failed: %s", exc)
+        log.exception("Failed: %s", exc)
         sys.exit(1)
