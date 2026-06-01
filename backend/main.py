@@ -91,6 +91,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    # Browser-extension origins use a random per-install UUID, so they can't be
+    # listed explicitly — match the scheme instead. The API is bearer-token only
+    # (no cookies), so the regex echoes the specific origin and credentials still work.
+    allow_origin_regex=r"^(moz-extension|chrome-extension)://.+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
