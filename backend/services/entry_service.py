@@ -30,7 +30,7 @@ def _normalise_custom_list(value: Optional[str]) -> Optional[str]:
     return stripped or None
 
 
-def _apply_filters(q, *, status, medium, origin, title, custom_list, custom_list_empty=False):
+def _apply_filters(q, *, status, medium, origin, title, custom_list, custom_list_empty=False, external_url=None):
     """Apply optional WHERE clauses to a query."""
     if status:
         q = q.where(Entry.status == status)
@@ -40,6 +40,8 @@ def _apply_filters(q, *, status, medium, origin, title, custom_list, custom_list
         q = q.where(Entry.origin == origin)
     if title:
         q = q.where(Entry.title.ilike(f"%{title}%"))
+    if external_url:
+        q = q.where(Entry.external_url == external_url)
     if custom_list_empty:
         q = q.where(or_(Entry.custom_list.is_(None), Entry.custom_list == ""))
     elif custom_list:
@@ -61,6 +63,7 @@ def get_entries(
     title:  Optional[str] = None,
     custom_list: Optional[str] = None,
     custom_list_empty: bool = False,
+    external_url: Optional[str] = None,
     sort:   str = "updated_at",
     order:  str = "desc",
     limit:  int = 40,
@@ -78,6 +81,7 @@ def get_entries(
         title=title,
         custom_list=custom_list,
         custom_list_empty=custom_list_empty,
+        external_url=external_url,
     )
 
     # Total count (before pagination)

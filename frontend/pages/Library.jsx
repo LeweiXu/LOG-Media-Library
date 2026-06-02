@@ -26,6 +26,7 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 40;
 
 const LS_QUICK_ACTIONS = 'library_quick_actions';
+const LS_FIX_TITLE = 'library_fix_title';
 
 function validParam(value, allowed, fallback = '') {
   return allowed.includes(value) ? value : fallback;
@@ -71,6 +72,16 @@ export default function Library({ initialFilters = {} }) {
   const toggleQuickActions = () => setShowActions(prev => {
     const next = !prev;
     try { localStorage.setItem(LS_QUICK_ACTIONS, next ? '1' : '0'); } catch { /* ignore */ }
+    return next;
+  });
+  // Pin the Title column to a fixed width so the other columns don't shift when
+  // the sort/search changes which (and how long) titles are shown.
+  const [fixTitle, setFixTitle] = useState(() => {
+    try { return localStorage.getItem(LS_FIX_TITLE) === '1'; } catch { return false; }
+  });
+  const toggleFixTitle = () => setFixTitle(prev => {
+    const next = !prev;
+    try { localStorage.setItem(LS_FIX_TITLE, next ? '1' : '0'); } catch { /* ignore */ }
     return next;
   });
 
@@ -233,14 +244,18 @@ export default function Library({ initialFilters = {} }) {
   const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); setOriginFilter(''); };
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;
   const totalPages   = Math.ceil(total / limit);
-  const SortTh = ({ field, className, children }) => (
+  const SortTh = ({ field, className, children, style }) => (
     <th className={`sortable${className ? ' ' + className : ''}`}
       onClick={() => handleSort(field)}
-      style={{ color: sort === field ? 'var(--accent)' : undefined }}>
+      style={{ color: sort === field ? 'var(--accent)' : undefined, ...style }}>
       {children}
       {sort === field && <span style={{ marginLeft: 4, opacity: 0.7 }}>{order === 'asc' ? '↑' : '↓'}</span>}
     </th>
   );
+
+  // Fixed width for the Title column so the other columns don't shift around
+  // when the sort/search changes the set (and therefore the longest title).
+  const TITLE_COL_WIDTH = 750;
 
   const [showImport,     setShowImport]     = useState(false);
   const [showImportAuto, setShowImportAuto] = useState(false);
@@ -408,7 +423,7 @@ export default function Library({ initialFilters = {} }) {
               <table className="media-table" data-mobile-show={mobileShow}>
               <thead>
                 <tr>
-                  <SortTh field="title">Title</SortTh>
+                  <SortTh field="title" style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>Title</SortTh>
                   <SortTh field="medium" className="col-medium">Medium</SortTh>
                   <SortTh field="year"   className="col-year">Year</SortTh>
                   <th className="col-progress">Progress</th>
@@ -426,7 +441,7 @@ export default function Library({ initialFilters = {} }) {
                   const isConfirmDel  = confirmDeleteId === e.id;
                   return (
                     <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => { setDetailEntry(e); setStartEditing(false); }}>
-                      <td>
+                      <td style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>
                         <div className="cover-cell">
                           <div className="cover-thumb">
                             {e.cover_url && (
@@ -597,6 +612,16 @@ export default function Library({ initialFilters = {} }) {
         >
           <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
           Quick Actions
+        </button>
+        <button
+          type="button"
+          className={`source-chip${fixTitle ? ' is-on' : ''}`}
+          onClick={toggleFixTitle}
+          style={{ width: '100%', marginTop: 4 }}
+          title="Pin the Title column to a fixed width so other columns don't shift when sorting or searching"
+        >
+          <span className="source-box">{fixTitle ? '[x]' : '[ ]'}</span>
+          Fixed Table
         </button>
 
         <div style={{ marginTop: 20 }}>

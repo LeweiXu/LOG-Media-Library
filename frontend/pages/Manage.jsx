@@ -26,6 +26,10 @@ const BULK_FIELDS = [
 const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
 const DEFAULT_LIMIT = 40;
 const DEFAULT_ORDER = 'desc';
+const LS_QUICK_ACTIONS = 'manage_quick_actions';
+const LS_FIX_TITLE = 'manage_fix_title';
+// Pinned Title-column width (px) — keeps other columns from shifting on sort/search.
+const TITLE_COL_WIDTH = 750;
 const SORT_FIELDS = [
   { key: 'title',      label: 'Title' },
   { key: 'medium',     label: 'Medium' },
@@ -78,6 +82,27 @@ export default function Manage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('title');
   const [order, setOrder] = useState(DEFAULT_ORDER);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [mediumFilter, setMediumFilter] = useState('');
+  const [counts, setCounts] = useState({});
+  // Quick Actions toolbar (per-row view + edit) — off by default, toggled from
+  // the right sidebar and remembered in localStorage.
+  const [showActions, setShowActions] = useState(() => {
+    try { return localStorage.getItem(LS_QUICK_ACTIONS) === '1'; } catch { return false; }
+  });
+  const toggleQuickActions = () => setShowActions(prev => {
+    const next = !prev;
+    try { localStorage.setItem(LS_QUICK_ACTIONS, next ? '1' : '0'); } catch { /* ignore */ }
+    return next;
+  });
+  const [fixTitle, setFixTitle] = useState(() => {
+    try { return localStorage.getItem(LS_FIX_TITLE) === '1'; } catch { return false; }
+  });
+  const toggleFixTitle = () => setFixTitle(prev => {
+    const next = !prev;
+    try { localStorage.setItem(LS_FIX_TITLE, next ? '1' : '0'); } catch { /* ignore */ }
+    return next;
+  });
 
   const listNames = useMemo(() => lists.map(list => list.name), [lists]);
   const isAll = selectedList === ALL;
@@ -106,14 +131,16 @@ export default function Manage() {
     if (!settingsApplied) return;
     setLoadingEntries(true);
     setError('');
-    setSelectedIds(new Set());   // selection is per-view; never act on hidden rows
-    lastSelectedId.current = null;
-    setBulkListValue('');
-    setBulkStatusValue('');
-    setBulkField('');
-    setBulkFieldValue('');
+    // NOTE: selection is intentionally NOT cleared here — it persists across
+    // searches, filters, list switches, and pagination (task requirement). It
+    // is cleared only by the Clear button, leaving the page, or a hard refresh.
     try {
-      const base = { ...(search && { title: search }), sort, order, limit, offset: (page - 1) * limit };
+      const base = {
+        ...(search && { title: search }),
+        ...(statusFilter && { status: statusFilter }),
+        ...(mediumFilter && { medium: mediumFilter }),
+        sort, order, limit, offset: (page - 1) * limit,
+      };
       const params = isAll
         ? base
         : isUnlisted
@@ -128,7 +155,22 @@ export default function Manage() {
     } finally {
       setLoadingEntries(false);
     }
-  }, [isAll, isUnlisted, limit, order, page, search, selectedList, settingsApplied, sort]);
+  }, [isAll, isUnlisted, limit, order, page, search, selectedList, settingsApplied, sort, statusFilter, mediumFilter]);
+
+  // Sidebar status/medium tallies — global across the library, like the Library
+  // page. Refreshed on mount and after any mutating action.
+  const loadCounts = useCallback(async () => {
+    try {
+      const data = await getEntries({ limit: 2000 });
+      const all = extractItems(data);
+      const c = { _total: data?.total ?? all.length };
+      all.forEach(e => {
+        if (e.status) c[e.status] = (c[e.status] || 0) + 1;
+        if (e.medium) c[e.medium] = (c[e.medium] || 0) + 1;
+      });
+      setCounts(c);
+    } catch { /* counts are best-effort */ }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,8 +185,9 @@ export default function Manage() {
   }, []);
 
   useEffect(() => { loadLists(); }, [loadLists]);
+  useEffect(() => { loadCounts(); }, [loadCounts]);
   useEffect(() => { loadEntries(); }, [loadEntries]);
-  useEffect(() => { setPage(1); }, [selectedList, limit, search, sort, order]);
+  useEffect(() => { setPage(1); }, [selectedList, limit, search, sort, order, statusFilter, mediumFilter]);
 
   function handleSort(field) {
     if (sort === field) setOrder(o => o === 'asc' ? 'desc' : 'asc');
@@ -185,8 +228,8 @@ export default function Manage() {
     }
   }
 
-  const hasFilters = Boolean(search);
-  const clearFilters = () => setSearch('');
+  const hasFilters = Boolean(search || statusFilter || mediumFilter);
+  const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); };
   async function exportCSV() {
     try {
       const blob = await exportEntries();
@@ -202,6 +245,7 @@ export default function Manage() {
 
   function refreshView() {
     loadLists();
+    loadCounts();
     loadEntries();
   }
 
@@ -248,7 +292,14 @@ export default function Manage() {
   function toggleSelectAll() {
     setConfirmBulkDelete(false);
     lastSelectedId.current = null;
-    setSelectedIds(allPageSelected ? new Set() : new Set(pageIds));
+    // Merge into (or remove from) the persistent cross-view selection rather
+    // than replacing it, so selecting all on one page keeps prior selections.
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allPageSelected) pageIds.forEach(id => next.delete(id));
+      else pageIds.forEach(id => next.add(id));
+      return next;
+    });
   }
 
   function clearSelection() {
@@ -329,10 +380,10 @@ export default function Manage() {
     }
   }
 
-  const SortTh = ({ field, className, children }) => (
+  const SortTh = ({ field, className, children, style }) => (
     <th className={`sortable${className ? ' ' + className : ''}`}
       onClick={() => handleSort(field)}
-      style={{ color: sort === field ? 'var(--accent)' : undefined }}>
+      style={{ color: sort === field ? 'var(--accent)' : undefined, ...style }}>
       {children}
       {sort === field && <span style={{ marginLeft: 4, opacity: 0.7 }}>{order === 'asc' ? '↑' : '↓'}</span>}
     </th>
@@ -346,18 +397,46 @@ export default function Manage() {
 
       <div className="sidebar-left">
         <div className="sidebar-section">
-          <div
-            className={`sidebar-item${isAll ? ' active' : ''}`}
-            onClick={() => { setSelectedList(ALL); setDrawer(''); }}
-          >
-            All Entries
-          </div>
+          <span className="sidebar-label">Status</span>
+          {[['', 'All'], ['current','Current'], ['planned','Planned'],
+            ['completed','Completed'], ['on_hold','On Hold'], ['dropped','Dropped']
+          ].map(([v, l]) => (
+            <div key={v}
+              className={`sidebar-item${statusFilter === v ? ' active' : ''}`}
+              onClick={() => setStatusFilter(v)}>
+              {l}
+              {loadingEntries
+                ? <SkeletonLine width={24} height={14} />
+                : <span className="sidebar-count">{v === '' ? (counts._total || 0) : (counts[v] || 0)}</span>}
+            </div>
+          ))}
+        </div>
+
+        <div className="sidebar-divider" />
+
+        <div className="sidebar-section">
+          <span className="sidebar-label">Medium</span>
+          <div className={`sidebar-item${mediumFilter === '' ? ' active' : ''}`} onClick={() => setMediumFilter('')}>All</div>
+          {MEDIUMS.map(m => (
+            <div key={m} className={`sidebar-item${mediumFilter === m ? ' active' : ''}`} onClick={() => setMediumFilter(m)}>
+              {m}
+              {loadingEntries
+                ? <SkeletonLine width={24} height={14} />
+                : <span className="sidebar-count">{counts[m] || 0}</span>}
+            </div>
+          ))}
         </div>
 
         <div className="sidebar-divider" />
 
         <div className="sidebar-section">
           <span className="sidebar-label">Custom Lists</span>
+          <div
+            className={`sidebar-item${isAll ? ' active' : ''}`}
+            onClick={() => { setSelectedList(ALL); setDrawer(''); }}
+          >
+            All Lists
+          </div>
           {lists.map(list => (
             <div
               key={list.name}
@@ -368,11 +447,6 @@ export default function Manage() {
               <span className="sidebar-count">{list.count}</span>
             </div>
           ))}
-        </div>
-
-        <div className="sidebar-divider" />
-
-        <div className="sidebar-section">
           <div
             className={`sidebar-item${isUnlisted ? ' active' : ''}`}
             onClick={() => { setSelectedList(UNLISTED); setDrawer(''); }}
@@ -448,10 +522,10 @@ export default function Manage() {
         {!error && loadingEntries && (
           <div className="skeleton-page" aria-label="Loading entries">
             <SkeletonTable
-              headers={['Title', 'Status', 'Medium', 'Rating', 'Progress', 'Updated', 'Custom List']}
+              headers={['Title', 'Status', 'Medium', 'Rating', 'Progress', 'Updated', 'Custom List', ...(showActions ? ['Actions'] : [])]}
               rows={12}
               cover
-              widths={['78%', '56%', '64%', '48%', '72%', '58%', '80%']}
+              widths={['78%', '56%', '64%', '48%', '72%', '58%', '80%', ...(showActions ? ['64%'] : [])]}
             />
           </div>
         )}
@@ -478,13 +552,14 @@ export default function Manage() {
                       {allPageSelected ? '[X]' : '[ ]'}
                     </button>
                   </th>
-                  <SortTh field="title">Title</SortTh>
+                  <SortTh field="title" style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>Title</SortTh>
                   <SortTh field="status" className="col-status">Status</SortTh>
                   <SortTh field="medium" className="col-medium">Medium</SortTh>
                   <SortTh field="rating" className="col-rating">Rating</SortTh>
                   <th className="col-progress">Progress</th>
                   <SortTh field="updated_at" className="col-updated">Updated</SortTh>
                   <th>Custom List</th>
+                  {showActions && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -503,7 +578,7 @@ export default function Manage() {
                         {selectedIds.has(entry.id) ? '[X]' : '[ ]'}
                       </button>
                     </td>
-                    <td>
+                    <td style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>
                       <div className="cover-cell">
                         <div className="cover-thumb">
                           {entry.cover_url && (
@@ -542,6 +617,22 @@ export default function Manage() {
                         {listNames.map(name => <option key={name} value={name}>{name}</option>)}
                       </select>
                     </td>
+                    {showActions && (
+                      <td className="action-cell" onClick={ev => ev.stopPropagation()}>
+                        <div className="action-cell-inner">
+                          <button className="icon-btn"
+                            style={{ padding: '2px 8px', fontSize: 11 }}
+                            onClick={() => { setDetailEntry(entry); setStartEditing(false); }}>
+                            view
+                          </button>
+                          <button className="icon-btn"
+                            style={{ color: 'var(--accent)', borderColor: 'var(--accent)', padding: '2px 8px', fontSize: 11 }}
+                            onClick={() => { setDetailEntry(entry); setStartEditing(true); }}>
+                            edit
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -621,10 +712,10 @@ export default function Manage() {
               onClick={() => confirmBulkDelete ? doBulkDelete() : setConfirmBulkDelete(true)}>
               {bulkBusy ? 'Working…' : confirmBulkDelete ? 'Confirm delete' : 'Delete'}
             </button>
-            <button className="icon-btn" disabled={bulkBusy} onClick={clearSelection}>Clear</button>
             <button className="icon-btn accent" disabled={bulkBusy || selectedIds.size === 0 || !buildBulkPatch()} onClick={applyBulkChange}>
               Apply
             </button>
+            <button className="icon-btn" disabled={bulkBusy} onClick={clearSelection}>Clear</button>
           </div>
 
           {bulkError && <div style={{ color: 'var(--red)', fontSize: 11 }}>{bulkError}</div>}
@@ -671,6 +762,28 @@ export default function Manage() {
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
           onClick={() => setShowImportMal(true)}>
           Import (MAL XML)
+        </button>
+
+        <p className="panel-title" style={{ marginTop: 20 }}>View</p>
+        <button
+          type="button"
+          className={`source-chip${showActions ? ' is-on' : ''}`}
+          onClick={toggleQuickActions}
+          style={{ width: '100%' }}
+          title="Show per-row view and edit buttons in the table"
+        >
+          <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
+          Quick Actions
+        </button>
+        <button
+          type="button"
+          className={`source-chip${fixTitle ? ' is-on' : ''}`}
+          onClick={toggleFixTitle}
+          style={{ width: '100%', marginTop: 4 }}
+          title="Pin the Title column to a fixed width so other columns don't shift when sorting or searching"
+        >
+          <span className="source-box">{fixTitle ? '[x]' : '[ ]'}</span>
+          Fixed Table
         </button>
 
         <div style={{ marginTop: 20 }}>

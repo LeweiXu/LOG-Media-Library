@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import AuthModal from '../../../frontend/pages/components/AuthModal.jsx';
 import EntryForm, { formToPayload } from '../../../frontend/pages/components/EntryForm.jsx';
-import { BASE, fetchByUrl, createEntry, uploadCover } from '../../../frontend/api.jsx';
+import { BASE, fetchByUrl, createEntry, uploadCover, findEntryByUrl } from '../../../frontend/api.jsx';
+import { statusLabel } from '../../../frontend/utils.jsx';
 import { detectSite } from '../lib/site.js';
 
 // When shown as an in-page overlay (?embed=1) we live inside an iframe on the
@@ -22,12 +23,13 @@ export default function App() {
   const [entry, setEntry] = useState(null);
   const [error, setError] = useState('');
   const [coverStatus, setCoverStatus] = useState(null);   // { ok, reason } | null
+  const [existing, setExisting] = useState(null);         // matching library entry | null
 
   // Resolve the source tab into a prefilled entry: DOM-scrape NU-style sites,
   // otherwise relay the URL to the backend's /search/from-url. In overlay mode
   // the sandboxed iframe can't touch chrome.tabs, so the background does it.
   const loadEntry = useCallback(async () => {
-    setPhase('loading'); setError('');
+    setPhase('loading'); setError(''); setExisting(null);
     try {
       const tabIdParam = new URLSearchParams(window.location.search).get('tabId');
 
@@ -39,7 +41,7 @@ export default function App() {
           if (resp && resp.reason === 'unsupported') { setPhase('unsupported'); return; }
           setError("Couldn't read media details from this page."); setPhase('error'); return;
         }
-        setEntry(resp.entry); setPhase('ready'); return;
+        setEntry(resp.entry); setExisting(resp.existing || null); setPhase('ready'); return;
       }
 
       // Full-privilege contexts (centred window / toolbar popup): do it directly.
@@ -69,6 +71,8 @@ export default function App() {
         return;
       }
       setEntry(data);
+      // Best-effort check: is this source link already in the user's library?
+      findEntryByUrl(data.external_url || tab.url).then(setExisting).catch(() => {});
       setPhase('ready');
     } catch (e) {
       setError(e.message || 'Failed to read this page.');
@@ -189,6 +193,12 @@ export default function App() {
         <span className="ext-title">Add to Library</span>
         {entry?.source && <span className="ext-source">{entry.source}</span>}
       </div>
+      {existing && (
+        <div className="ext-exists" role="status">
+          ✓ Already in your library — {statusLabel(existing.status)}
+          {existing.rating != null && ` · ${existing.rating}/10`}
+        </div>
+      )}
       <EntryForm
         entry={entry}
         onSubmit={handleSubmit}

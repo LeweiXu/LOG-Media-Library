@@ -65,6 +65,16 @@ export const getEntries = (params = {}) => {
   return req(`/entries${qs ? '?' + qs : ''}`);
 };
 
+// Returns the user's existing entry whose source/external URL matches, or null.
+export async function findEntryByUrl(externalUrl) {
+  if (!externalUrl) return null;
+  const data = await getEntries({ external_url: externalUrl, limit: 1 });
+  const item = data?.items && data.items[0];
+  // Guard: confirm the match (a backend that ignores the filter would otherwise
+  // return an arbitrary first entry and cause a false positive).
+  return item && item.external_url === externalUrl ? item : null;
+}
+
 export const getEntry    = (id)        => req(`/entries/${id}`);
 export const createEntry = (data)      => req('/entries', { method: 'POST', body: JSON.stringify(data) });
 export const updateEntry = (id, data)  => req(`/entries/${id}`, { method: 'PUT',  body: JSON.stringify(data) });

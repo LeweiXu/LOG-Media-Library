@@ -22,3 +22,13 @@ body { background: var(--bg); color: var(--text); min-height: 100%; }
 .ext-state .ext-state-title { font-size: 13px; color: var(--text); margin-bottom: 6px; }
 
 .ext-ok { color: var(--green); }
+
+/* Notice shown when the current page's source link is already in the library. */
+.ext-exists {
+  font-size: 11px;
+  color: var(--green);
+  border: 1px solid var(--green);
+  background: var(--surface);
+  padding: 6px 10px;
+  margin-bottom: 12px;
+}

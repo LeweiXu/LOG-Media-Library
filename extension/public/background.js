@@ -83,20 +83,27 @@ async function embedLoadEntry(tabId, token, apiBase) {
   const site = detectSiteUrl(tab.url);
   if (site.kind === 'unsupported') return { ok: false, reason: 'unsupported' };
 
+  let entry = null;
   if (site.kind === 'dom') {
     const [{ result } = {}] = await chrome.scripting.executeScript({
       target: { tabId: tab.id }, func: scrapeNovelUpdates,
     });
-    return result && result.title ? { ok: true, entry: result } : { ok: false, reason: 'noscrape' };
+    if (!result || !result.title) return { ok: false, reason: 'noscrape' };
+    entry = result;
+  } else {
+    const res = await fetch(`${apiBase}/search/from-url?url=${encodeURIComponent(tab.url)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return { ok: false, reason: `from-url ${res.status}` };
+    const data = await res.json();
+    const first = Array.isArray(data) && data[0] ? { ...data[0], status: 'planned' } : null;
+    if (!first || !first.title) return { ok: false, reason: 'nofind' };
+    entry = first;
   }
 
-  const res = await fetch(`${apiBase}/search/from-url?url=${encodeURIComponent(tab.url)}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) return { ok: false, reason: `from-url ${res.status}` };
-  const data = await res.json();
-  const first = Array.isArray(data) && data[0] ? { ...data[0], status: 'planned' } : null;
-  return first && first.title ? { ok: true, entry: first } : { ok: false, reason: 'nofind' };
+  // Flag entries whose source link already exists in the user's library.
+  const existing = await apiFindEntryByUrl(apiBase, token, entry.external_url || tab.url);
+  return { ok: true, entry, existing };
 }
 
 async function embedCreateEntry(payload, token, apiBase) {
@@ -305,6 +312,24 @@ async function apiGetEntries(apiBase, token) {
     offset += items.length;
   }
   return out;
+}
+
+// Returns the user's existing entry whose external URL matches, or null.
+async function apiFindEntryByUrl(apiBase, token, externalUrl) {
+  if (!externalUrl) return null;
+  try {
+    const res = await fetch(
+      `${apiBase}/entries?external_url=${encodeURIComponent(externalUrl)}&limit=1`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const item = data && data.items && data.items[0];
+    // Confirm the match in case the backend ignored the (unknown) filter param.
+    return item && item.external_url === externalUrl ? item : null;
+  } catch {
+    return null;
+  }
 }
 
 async function apiUploadCover(apiBase, token, coverUrl, blob) {
