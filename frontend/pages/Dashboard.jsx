@@ -4,6 +4,7 @@ import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeA
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
+import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
 
 function CoverThumb({ url, title }) {
   return (
@@ -546,6 +547,7 @@ export default function DashboardAlt({ onFilterChange }) {
 
       {/* ── Right sidebar ── */}
       <div className="sidebar-right">
+        <ExtensionInstallButton />
         <p className="panel-title">Summary</p>
         {loading ? (
           <SkeletonStatGrid />

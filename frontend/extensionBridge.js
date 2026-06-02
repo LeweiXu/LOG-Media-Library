@@ -75,18 +75,92 @@ export function mergeResults(base, extra) {
 }
 
 // ── Install links ─────────────────────────────────────────────────────────────
-// Fill these in after publishing/signing the extension. Chrome can't be
-// installed from an arbitrary site (Web Store only); Firefox can install from a
-// link to the AMO listing or a signed .xpi.
+// Chrome can't be installed from an arbitrary site (Web Store only). Firefox
+// installs from a signed .xpi — rather than hardcoding a versioned URL that goes
+// stale on every `npm run sign:firefox`, we resolve the newest .xpi committed to
+// the repo's dist-artifacts folder via the GitHub contents API at runtime.
 
 export const EXTENSION_CHROME_URL = '';   // e.g. https://chromewebstore.google.com/detail/…
-export const EXTENSION_FIREFOX_URL = 'https://addons.mozilla.org/firefox/downloads/file/4830622/2836703171014861a2fb-1.0.0.xpi';  // e.g. https://addons.mozilla.org/…/logarium/ or a signed .xpi URL
+
+const GH_REPO         = 'LeweiXu/logarium';
+const GH_ARTIFACT_DIR = 'extension/dist-artifacts';
+
+// [major, minor, patch] from the dotted version token in a filename, e.g.
+// "<hash>-1.2.0.xpi" or "logarium-1.2.0-chrome.zip" → [1, 2, 0]. We match the
+// LAST dotted token so a non-dotted digit run (like the AMO hash prefix) isn't
+// mistaken for the version. Missing parts default to 0 so unversioned names
+// sort last.
+function versionInName(name) {
+  const tokens = name.match(/\d+\.\d+(?:\.\d+)?/g);
+  const parts = (tokens ? tokens[tokens.length - 1] : '').split('.').map(Number);
+  return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+}
+
+let _assetsPromise = null;
+/**
+ * Resolve the download URLs of the newest signed Firefox .xpi and Chrome .zip
+ * committed under dist-artifacts (highest version in each filename). Cached for
+ * the page load. Each field is '' if absent or the API call fails.
+ */
+export function fetchExtensionAssets() {
+  if (_assetsPromise) return _assetsPromise;
+  _assetsPromise = (async () => {
+    const api = `https://api.github.com/repos/${GH_REPO}/contents/${GH_ARTIFACT_DIR}?ref=main`;
+    const res = await fetch(api, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    const files = await res.json();
+    const list = Array.isArray(files) ? files : [];
+    const latest = (ext) => {
+      const matches = list.filter(f => f?.name?.toLowerCase().endsWith(ext));
+      if (!matches.length) return '';
+      matches.sort((a, b) => {
+        const va = versionInName(a.name), vb = versionInName(b.name);
+        for (let i = 0; i < 3; i++) if (va[i] !== vb[i]) return vb[i] - va[i];
+        return b.name.localeCompare(a.name);
+      });
+      return matches[0].download_url || '';
+    };
+    return { firefox: latest('.xpi'), chrome: latest('.zip') };
+  })().catch(() => ({ firefox: '', chrome: '' }));
+  return _assetsPromise;
+}
+
+/** Newest Firefox .xpi download URL (or '' on failure). */
+export function fetchLatestFirefoxXpiUrl() {
+  return fetchExtensionAssets().then(a => a.firefox);
+}
 
 export function isFirefox() {
   return typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent);
 }
 
-/** Best install URL for the current browser, or '' if not configured yet. */
-export function extensionInstallUrl() {
-  return isFirefox() ? EXTENSION_FIREFOX_URL : EXTENSION_CHROME_URL;
+/**
+ * React hook: the best inline install URL for the current browser, or '' until
+ * resolved. Firefox resolves the latest repo .xpi; Chrome has no one-click link
+ * (the .zip is load-unpacked only), so it falls back to EXTENSION_CHROME_URL.
+ */
+export function useExtensionInstallUrl() {
+  const [url, setUrl] = useState(() => (isFirefox() ? '' : EXTENSION_CHROME_URL));
+  useEffect(() => {
+    if (!isFirefox()) { setUrl(EXTENSION_CHROME_URL); return; }
+    let cancelled = false;
+    fetchLatestFirefoxXpiUrl().then(u => { if (!cancelled) setUrl(u); });
+    return () => { cancelled = true; };
+  }, []);
+  return url;
+}
+
+/**
+ * React hook: { firefox, chrome, loading } download URLs, resolving from the
+ * repo. `loading` is true until the API call settles so consumers can tell
+ * "still resolving" apart from "resolved but no asset present".
+ */
+export function useExtensionDownloads() {
+  const [state, setState] = useState({ firefox: '', chrome: '', loading: true });
+  useEffect(() => {
+    let cancelled = false;
+    fetchExtensionAssets().then(a => { if (!cancelled) setState({ ...a, loading: false }); });
+    return () => { cancelled = true; };
+  }, []);
+  return state;
 }

@@ -7,6 +7,7 @@ import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import AddEntryPanel from './components/AddEntryPanel.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
+import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it.
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
@@ -484,6 +485,7 @@ export default function Explore() {
 
       {/* ── Right sidebar: affinity snapshot ───────────────────────────────── */}
       <aside className="sidebar-right">
+        <ExtensionInstallButton />
         <div className="panel-title">Your library</div>
         {!affinity || affinity.sample_size === 0 ? (
           <p className="explore-affinity-empty">

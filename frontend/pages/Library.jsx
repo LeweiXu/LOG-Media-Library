@@ -8,6 +8,7 @@ import ImportModal from './components/ImportModal.jsx';
 import ImportAutoModal from './components/ImportAutoModal.jsx';
 import ImportMalModal from './components/ImportMalModal.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
+import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
 
 const SORT_FIELDS = [
   { key: 'title',        label: 'Title' },
@@ -570,6 +571,7 @@ export default function Library({ initialFilters = {} }) {
 
       {/* ── Right sidebar ── */}
       <div className="sidebar-right">
+        <ExtensionInstallButton />
         <p className="panel-title">Sort</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
           {SORT_FIELDS.map(f => (

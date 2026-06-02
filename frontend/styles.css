@@ -1885,3 +1885,65 @@ input[type="radio"]:focus-visible {
 }
 input[type="checkbox"]:disabled,
 input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Extension install (right-sidebar button + modal) ─────────────────────── */
+.ext-install-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 18px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.ext-install-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.ext-feature-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ext-feature-list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.ext-feature-list li::before {
+  content: '+';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
+.ext-dl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.ext-dl-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ext-dl-browser { font-size: 12px; color: var(--bright); display: flex; align-items: center; gap: 8px; }
+.ext-dl-rec {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 1px 5px;
+}
+.ext-dl-note { font-size: 10px; color: var(--dim); line-height: 1.5; }

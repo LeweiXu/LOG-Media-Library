@@ -9,7 +9,7 @@ import ListsModal from './components/ListsModal.jsx';
 import DedupModal from './components/DedupModal.jsx';
 import CacheCoversModal from './components/CacheCoversModal.jsx';
 import ResyncModal from './components/ResyncModal.jsx';
-import ExtensionInstallHint from './components/ExtensionInstallHint.jsx';
+import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
 import { useExtensionPresent } from '../extensionBridge.js';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 
@@ -652,6 +652,7 @@ export default function Manage() {
       </div>
 
       <div className="sidebar-right">
+        <ExtensionInstallButton />
         <p className="panel-title">Batch Edit</p>
         <div className="batch-panel">
           <div className={`batch-hint${selectedIds.size ? ' is-active' : ''}`}>
@@ -734,17 +735,12 @@ export default function Manage() {
           onClick={() => setShowCacheCovers(true)}>
           Cache Covers (server)
         </button>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: extPresent ? 18 : 4 }}
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: 18 }}
           disabled={!extPresent}
           title={extPresent ? 'Resync covers via the browser extension' : 'Requires the Logarium browser extension'}
           onClick={() => setShowResync(true)}>
           Cache Covers (extension)
         </button>
-        {!extPresent && (
-          <div style={{ margin: '2px 0 18px' }}>
-            <ExtensionInstallHint context="resync" />
-          </div>
-        )}
 
         <p className="panel-title">Export / Import</p>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
