@@ -51,7 +51,9 @@ export default function ExtensionInstallModal({ onClose }) {
 
           {outOfDate && (
             <div className="ext-update-note">
-              Update available — you have v{installedVersion}, latest is v{latestVersion}.
+              {installedVersion
+                ? `Update available — you have v${installedVersion}, latest is v${latestVersion}.`
+                : `A newer version (v${latestVersion}) is available.`}
             </div>
           )}
 

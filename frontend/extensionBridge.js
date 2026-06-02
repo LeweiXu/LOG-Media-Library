@@ -205,9 +205,12 @@ export function useExtensionStatus() {
     return () => { cancelled = true; };
   }, []);
 
+  // Out of date when a newer version exists than the installed one. If the
+  // installed copy doesn't report a version at all (a build predating version
+  // tagging), treat it as outdated whenever we know a latest version.
   const outOfDate = Boolean(
-    info.present && info.installedVersion && assets.version
-    && compareVersions(assets.version, info.installedVersion) > 0,
+    info.present && assets.version
+    && (!info.installedVersion || compareVersions(assets.version, info.installedVersion) > 0),
   );
   return {
     present: info.present,

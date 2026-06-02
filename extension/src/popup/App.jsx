@@ -170,7 +170,10 @@ export default function App() {
 
   function handleAuth(newToken) {
     try { chrome.storage?.local.set({ auth_token: newToken }); } catch { /* ignore */ }
-    setToken(newToken);
+    // Sign-in happens in its own window; close it instead of dropping into the
+    // add form. The token is already persisted, so re-opening the extension on
+    // the target page picks up straight at the add/edit step.
+    closeUi();
   }
 
   // Best-effort cover caching (full-privilege contexts). The background fetches
