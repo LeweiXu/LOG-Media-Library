@@ -15,6 +15,11 @@
  */
 (() => {
   document.documentElement.setAttribute('data-logarium-ext', '1');
+  // Expose the installed version so the web app can flag out-of-date installs.
+  try {
+    const v = chrome.runtime.getManifest().version;
+    if (v) document.documentElement.setAttribute('data-logarium-ext-version', v);
+  } catch { /* manifest unavailable — version detection just won't run */ }
   window.dispatchEvent(new CustomEvent('logarium-ext-ready'));
 
   let port = null;

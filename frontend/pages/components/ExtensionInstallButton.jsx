@@ -1,18 +1,19 @@
 import { useState } from 'react';
-import { useExtensionPresent } from '../../extensionBridge.js';
+import { useExtensionStatus } from '../../extensionBridge.js';
 import ExtensionInstallModal from './ExtensionInstallModal.jsx';
 
-// Tasteful right-sidebar entry point to the extension install modal. Hidden once
-// the extension is detected on the page (nothing left to install).
+// Tasteful right-sidebar entry point to the extension modal. Hidden once the
+// extension is detected and up to date; shows "Update Extension" when an installed
+// copy is older than the latest .xpi/.zip in the repo.
 export default function ExtensionInstallButton() {
-  const present = useExtensionPresent();
+  const { present, outOfDate } = useExtensionStatus();
   const [open, setOpen] = useState(false);
-  if (present) return null;
+  if (present && !outOfDate) return null;
 
   return (
     <>
       <button type="button" className="ext-install-btn" onClick={() => setOpen(true)}>
-        Install Extension
+        {present ? 'Update Extension' : 'Install Extension'}
       </button>
       {open && <ExtensionInstallModal onClose={() => setOpen(false)} />}
     </>

@@ -1947,3 +1947,13 @@ input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
   padding: 1px 5px;
 }
 .ext-dl-note { font-size: 10px; color: var(--dim); line-height: 1.5; }
+.ext-dl-ver { font-size: 10px; color: var(--dim); }
+
+.ext-update-note {
+  font-size: 11px;
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  background: rgba(245, 166, 35, 0.08);
+  padding: 6px 10px;
+  margin-bottom: 14px;
+}

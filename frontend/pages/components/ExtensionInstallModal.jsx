@@ -1,4 +1,4 @@
-import { useExtensionDownloads, isFirefox } from '../../extensionBridge.js';
+import { useExtensionStatus, isFirefox } from '../../extensionBridge.js';
 
 // Describes what the Logarium browser extension adds and offers the latest
 // signed Firefox .xpi and Chrome .zip (resolved from the repo at runtime).
@@ -9,12 +9,13 @@ const FEATURES = [
   'Unlock NovelUpdates search results inside Logarium.',
 ];
 
-function DownloadRow({ browser, url, note, recommended, loading }) {
+function DownloadRow({ browser, url, version, note, recommended, loading }) {
   return (
     <div className="ext-dl-row">
       <div className="ext-dl-main">
         <span className="ext-dl-browser">
           {browser}
+          {version && <span className="ext-dl-ver">v{version}</span>}
           {recommended && <span className="ext-dl-rec">recommended</span>}
         </span>
         <span className="ext-dl-note">{note}</span>
@@ -29,7 +30,10 @@ function DownloadRow({ browser, url, note, recommended, loading }) {
 }
 
 export default function ExtensionInstallModal({ onClose }) {
-  const { firefox, chrome, loading } = useExtensionDownloads();
+  const {
+    firefox, chrome, firefoxVersion, chromeVersion,
+    loading, outOfDate, installedVersion, latestVersion,
+  } = useExtensionStatus();
   const ff = isFirefox();
 
   return (
@@ -45,6 +49,12 @@ export default function ExtensionInstallModal({ onClose }) {
             entries from the source page, and caches covers the server can’t fetch itself.
           </p>
 
+          {outOfDate && (
+            <div className="ext-update-note">
+              Update available — you have v{installedVersion}, latest is v{latestVersion}.
+            </div>
+          )}
+
           <ul className="ext-feature-list">
             {FEATURES.map(f => <li key={f}>{f}</li>)}
           </ul>
@@ -54,6 +64,7 @@ export default function ExtensionInstallModal({ onClose }) {
           <DownloadRow
             browser="Firefox"
             url={firefox}
+            version={firefoxVersion}
             loading={loading}
             recommended={ff}
             note="Signed add-on — open the downloaded file to install (or drag it into about:addons)."
@@ -61,6 +72,7 @@ export default function ExtensionInstallModal({ onClose }) {
           <DownloadRow
             browser="Chrome"
             url={chrome}
+            version={chromeVersion}
             loading={loading}
             recommended={!ff}
             note="Unzip, then chrome://extensions → enable Developer mode → Load unpacked."

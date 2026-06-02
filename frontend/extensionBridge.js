@@ -15,6 +15,23 @@ export function extensionPresent() {
     && document.documentElement.getAttribute('data-logarium-ext') === '1';
 }
 
+/** Installed extension version (e.g. "1.2.0"), or '' if absent/unknown. */
+export function extensionVersion() {
+  return (typeof document !== 'undefined'
+    && document.documentElement.getAttribute('data-logarium-ext-version')) || '';
+}
+
+// Compare dotted versions; returns >0 if a is newer than b, 0 if equal, <0 else.
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x - y;
+  }
+  return 0;
+}
+
 /** React hook: true once the extension's bridge has tagged the page. */
 export function useExtensionPresent() {
   const [present, setPresent] = useState(extensionPresent);
@@ -96,11 +113,14 @@ function versionInName(name) {
   return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
 }
 
+const EMPTY_ASSETS = { firefox: '', chrome: '', firefoxVersion: '', chromeVersion: '', version: '' };
+
 let _assetsPromise = null;
 /**
- * Resolve the download URLs of the newest signed Firefox .xpi and Chrome .zip
- * committed under dist-artifacts (highest version in each filename). Cached for
- * the page load. Each field is '' if absent or the API call fails.
+ * Resolve the newest signed Firefox .xpi and Chrome .zip committed under
+ * dist-artifacts (highest version in each filename), with their versions and the
+ * overall latest version. Cached for the page load; empty fields if absent or
+ * the API call fails.
  */
 export function fetchExtensionAssets() {
   if (_assetsPromise) return _assetsPromise;
@@ -112,16 +132,25 @@ export function fetchExtensionAssets() {
     const list = Array.isArray(files) ? files : [];
     const latest = (ext) => {
       const matches = list.filter(f => f?.name?.toLowerCase().endsWith(ext));
-      if (!matches.length) return '';
+      if (!matches.length) return { url: '', version: '' };
       matches.sort((a, b) => {
         const va = versionInName(a.name), vb = versionInName(b.name);
         for (let i = 0; i < 3; i++) if (va[i] !== vb[i]) return vb[i] - va[i];
         return b.name.localeCompare(a.name);
       });
-      return matches[0].download_url || '';
+      const top = matches[0];
+      const v = versionInName(top.name);
+      return { url: top.download_url || '', version: (v[0] || v[1] || v[2]) ? v.join('.') : '' };
     };
-    return { firefox: latest('.xpi'), chrome: latest('.zip') };
-  })().catch(() => ({ firefox: '', chrome: '' }));
+    const ff = latest('.xpi'), ch = latest('.zip');
+    const version = compareVersions(ff.version || '0', ch.version || '0') >= 0
+      ? ff.version : ch.version;
+    return {
+      firefox: ff.url, firefoxVersion: ff.version,
+      chrome: ch.url, chromeVersion: ch.version,
+      version,
+    };
+  })().catch(() => ({ ...EMPTY_ASSETS }));
   return _assetsPromise;
 }
 
@@ -151,16 +180,44 @@ export function useExtensionInstallUrl() {
 }
 
 /**
- * React hook: { firefox, chrome, loading } download URLs, resolving from the
- * repo. `loading` is true until the API call settles so consumers can tell
- * "still resolving" apart from "resolved but no asset present".
+ * React hook reporting install/update status and the latest downloadable assets:
+ *   { present, installedVersion, latestVersion, outOfDate,
+ *     firefox, chrome, firefoxVersion, chromeVersion, loading }
+ * `present`/`installedVersion` track the page tag (re-checked on the ready
+ * event); the asset fields resolve from the repo. `loading` is true until the
+ * API call settles so consumers can tell "still resolving" from "no asset".
  */
-export function useExtensionDownloads() {
-  const [state, setState] = useState({ firefox: '', chrome: '', loading: true });
+export function useExtensionStatus() {
+  const [info, setInfo] = useState(() => ({
+    present: extensionPresent(), installedVersion: extensionVersion(),
+  }));
+  useEffect(() => {
+    const check = () => setInfo({ present: extensionPresent(), installedVersion: extensionVersion() });
+    check();
+    window.addEventListener('logarium-ext-ready', check);
+    return () => window.removeEventListener('logarium-ext-ready', check);
+  }, []);
+
+  const [assets, setAssets] = useState({ ...EMPTY_ASSETS, loading: true });
   useEffect(() => {
     let cancelled = false;
-    fetchExtensionAssets().then(a => { if (!cancelled) setState({ ...a, loading: false }); });
+    fetchExtensionAssets().then(a => { if (!cancelled) setAssets({ ...a, loading: false }); });
     return () => { cancelled = true; };
   }, []);
-  return state;
+
+  const outOfDate = Boolean(
+    info.present && info.installedVersion && assets.version
+    && compareVersions(assets.version, info.installedVersion) > 0,
+  );
+  return {
+    present: info.present,
+    installedVersion: info.installedVersion,
+    latestVersion: assets.version,
+    outOfDate,
+    firefox: assets.firefox,
+    chrome: assets.chrome,
+    firefoxVersion: assets.firefoxVersion,
+    chromeVersion: assets.chromeVersion,
+    loading: assets.loading,
+  };
 }
