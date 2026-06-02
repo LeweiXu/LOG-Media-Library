@@ -32,3 +32,10 @@ body { background: var(--bg); color: var(--text); min-height: 100%; }
   padding: 6px 10px;
   margin-bottom: 12px;
 }
+.ext-exists-sub {
+  margin-top: 3px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}

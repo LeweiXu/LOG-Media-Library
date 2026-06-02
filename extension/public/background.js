@@ -49,9 +49,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .then(sendResponse).catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'load failed' }));
     return true;
   }
+  if (msg && msg.type === 'embedFetchEntry') {
+    embedFetchEntry(msg.tabId, msg.token, msg.apiBase)
+      .then(sendResponse).catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'load failed' }));
+    return true;
+  }
   if (msg && msg.type === 'embedCreateEntry') {
     embedCreateEntry(msg.payload, msg.token, msg.apiBase)
       .then(sendResponse).catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'create failed' }));
+    return true;
+  }
+  if (msg && msg.type === 'embedUpdateEntry') {
+    embedUpdateEntry(msg.id, msg.payload, msg.token, msg.apiBase)
+      .then(sendResponse).catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'update failed' }));
     return true;
   }
   if (msg && msg.type === 'embedCacheCover') {
@@ -77,33 +87,67 @@ function detectSiteUrl(url) {
   return API.some((d) => host.includes(d)) ? { kind: 'api' } : { kind: 'unsupported' };
 }
 
-async function embedLoadEntry(tabId, token, apiBase) {
-  const tab = await chrome.tabs.get(Number(tabId));
-  if (!tab || !tab.url) return { ok: false, reason: 'no tab' };
-  const site = detectSiteUrl(tab.url);
-  if (site.kind === 'unsupported') return { ok: false, reason: 'unsupported' };
-
-  let entry = null;
+// Resolve a tab into a prefilled entry: DOM-scrape NU-style sites, otherwise
+// relay to the backend's /search/from-url. Returns the entry object or null.
+async function scrapeOrFetchEntry(tab, site, token, apiBase) {
   if (site.kind === 'dom') {
     const [{ result } = {}] = await chrome.scripting.executeScript({
       target: { tabId: tab.id }, func: scrapeNovelUpdates,
     });
-    if (!result || !result.title) return { ok: false, reason: 'noscrape' };
-    entry = result;
-  } else {
-    const res = await fetch(`${apiBase}/search/from-url?url=${encodeURIComponent(tab.url)}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) return { ok: false, reason: `from-url ${res.status}` };
-    const data = await res.json();
-    const first = Array.isArray(data) && data[0] ? { ...data[0], status: 'planned' } : null;
-    if (!first || !first.title) return { ok: false, reason: 'nofind' };
-    entry = first;
+    return result && result.title ? result : null;
   }
+  const res = await fetch(`${apiBase}/search/from-url?url=${encodeURIComponent(tab.url)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const first = Array.isArray(data) && data[0] ? { ...data[0], status: 'planned' } : null;
+  return first && first.title ? first : null;
+}
 
-  // Flag entries whose source link already exists in the user's library.
-  const existing = await apiFindEntryByUrl(apiBase, token, entry.external_url || tab.url);
+async function embedLoadEntry(tabId, token, apiBase) {
+  const tab = await chrome.tabs.get(Number(tabId));
+  if (!tab || !tab.url) return { ok: false, reason: 'no tab' };
+
+  // 1) Existence check by the page URL first — if the source link is already in
+  //    the library, skip the scrape/API fetch entirely (we'll edit it instead).
+  const existingByTab = await apiFindEntryByUrl(apiBase, token, tab.url);
+  if (existingByTab) return { ok: true, existing: existingByTab, entry: null };
+
+  // 2) Not in the library → read the media details.
+  const site = detectSiteUrl(tab.url);
+  if (site.kind === 'unsupported') return { ok: false, reason: 'unsupported' };
+  const entry = await scrapeOrFetchEntry(tab, site, token, apiBase);
+  if (!entry) return { ok: false, reason: 'nofind' };
+
+  // 3) Second check against the resolved canonical URL (e.g. a NU chapter page
+  //    resolves to the series URL that was actually stored).
+  let existing = null;
+  if (entry.external_url && entry.external_url !== tab.url) {
+    existing = await apiFindEntryByUrl(apiBase, token, entry.external_url);
+  }
   return { ok: true, entry, existing };
+}
+
+// Fetch the media details only (no existence short-circuit) — used by the popup
+// "New Entry" action when the page's link already matches a library entry.
+async function embedFetchEntry(tabId, token, apiBase) {
+  const tab = await chrome.tabs.get(Number(tabId));
+  if (!tab || !tab.url) return { ok: false, reason: 'no tab' };
+  const site = detectSiteUrl(tab.url);
+  if (site.kind === 'unsupported') return { ok: false, reason: 'unsupported' };
+  const entry = await scrapeOrFetchEntry(tab, site, token, apiBase);
+  return entry ? { ok: true, entry } : { ok: false, reason: 'nofind' };
+}
+
+async function embedUpdateEntry(id, payload, token, apiBase) {
+  const res = await fetch(`${apiBase}/entries/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) return { ok: false, reason: `${res.status} ${await res.text()}` };
+  return { ok: true, entry: await res.json() };
 }
 
 async function embedCreateEntry(payload, token, apiBase) {
@@ -155,7 +199,7 @@ function injectOverlay(tabId, popupUrl) {
 
   const frame = document.createElement('iframe');
   frame.src = `${popupUrl}?tabId=${tabId}&embed=1`;
-  frame.style.cssText = 'width:460px;max-width:96vw;height:680px;max-height:92vh;border:1px solid #2a2d31;background:#0e0f11;box-shadow:0 12px 48px rgba(0,0,0,0.55);';
+  frame.style.cssText = 'width:460px;max-width:96vw;height:560px;max-height:92vh;border:1px solid #2a2d31;background:#0e0f11;box-shadow:0 12px 48px rgba(0,0,0,0.55);';
   overlay.appendChild(frame);
 
   let ready = false;
@@ -164,6 +208,11 @@ function injectOverlay(tabId, popupUrl) {
     if (!e || !e.data) return;
     if (e.data.logariumExtReady) ready = true;
     else if (e.data.logariumExtClose) close();
+    // The popup reports its content height so the iframe fits the form without
+    // an inner scrollbar (capped at 92vh by max-height).
+    else if (typeof e.data.logariumExtHeight === 'number') {
+      frame.style.height = Math.max(140, e.data.logariumExtHeight) + 'px';
+    }
   };
   window.addEventListener('message', onMsg);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -178,7 +227,7 @@ function injectOverlay(tabId, popupUrl) {
 }
 
 async function openPopupWindow(srcTab) {
-  const W = 460, H = 680;
+  const W = 460, H = 880;
   let left, top;
   try {
     const cur = await chrome.windows.getCurrent();

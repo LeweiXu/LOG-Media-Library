@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import AuthModal from '../../../frontend/pages/components/AuthModal.jsx';
 import EntryForm, { formToPayload } from '../../../frontend/pages/components/EntryForm.jsx';
-import { BASE, fetchByUrl, createEntry, uploadCover, findEntryByUrl } from '../../../frontend/api.jsx';
+import { BASE, fetchByUrl, createEntry, updateEntry, uploadCover, findEntryByUrl } from '../../../frontend/api.jsx';
 import { statusLabel } from '../../../frontend/utils.jsx';
 import { detectSite } from '../lib/site.js';
 
@@ -20,16 +20,25 @@ function closeUi() {
 export default function App() {
   const [token, setToken] = useState(getToken);
   const [phase, setPhase] = useState(token ? 'loading' : 'auth');
-  const [entry, setEntry] = useState(null);
+  const [fetchedEntry, setFetchedEntry] = useState(null);  // scraped/API media data
+  const [existing, setExisting] = useState(null);          // matching library entry | null
+  const [addingNew, setAddingNew] = useState(false);       // user chose "New Entry" despite a match
   const [error, setError] = useState('');
-  const [coverStatus, setCoverStatus] = useState(null);   // { ok, reason } | null
-  const [existing, setExisting] = useState(null);         // matching library entry | null
+  const [coverStatus, setCoverStatus] = useState(null);    // { ok, reason } | null
+  const [doneLabel, setDoneLabel] = useState('Added to your library');
+  const rootRef = useRef(null);
 
-  // Resolve the source tab into a prefilled entry: DOM-scrape NU-style sites,
-  // otherwise relay the URL to the backend's /search/from-url. In overlay mode
-  // the sandboxed iframe can't touch chrome.tabs, so the background does it.
+  // When a library match exists and the user hasn't overridden it, we edit that
+  // entry; otherwise we add a new one.
+  const editing = Boolean(existing) && !addingNew;
+  const formEntry = editing ? existing : fetchedEntry;
+
+  // Resolve the source tab into a prefilled entry — but check the library FIRST:
+  // if the page's source link already exists we edit it and skip the scrape/API
+  // fetch entirely. Only when there's no match do we read the media details.
   const loadEntry = useCallback(async () => {
-    setPhase('loading'); setError(''); setExisting(null);
+    setPhase('loading'); setError('');
+    setExisting(null); setFetchedEntry(null); setAddingNew(false);
     try {
       const tabIdParam = new URLSearchParams(window.location.search).get('tabId');
 
@@ -41,7 +50,10 @@ export default function App() {
           if (resp && resp.reason === 'unsupported') { setPhase('unsupported'); return; }
           setError("Couldn't read media details from this page."); setPhase('error'); return;
         }
-        setEntry(resp.entry); setExisting(resp.existing || null); setPhase('ready'); return;
+        setExisting(resp.existing || null);
+        setFetchedEntry(resp.entry || null);
+        setPhase('ready');
+        return;
       }
 
       // Full-privilege contexts (centred window / toolbar popup): do it directly.
@@ -50,35 +62,82 @@ export default function App() {
         : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
       if (!tab?.url) { setPhase('unsupported'); return; }
 
-      const site = detectSite(tab.url);
-      if (site.kind === 'unsupported') { setPhase('unsupported'); return; }
+      // 1) Existence check by the page URL — before any scrape/API fetch.
+      const existingByTab = await findEntryByUrl(tab.url).catch(() => null);
+      if (existingByTab) { setExisting(existingByTab); setPhase('ready'); return; }
 
-      let data = null;
-      if (site.kind === 'dom') {
-        const [{ result } = {}] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: site.scraper,
-        });
-        data = result;
-      } else {
-        const results = await fetchByUrl(tab.url);
-        data = Array.isArray(results) && results[0] ? { ...results[0], status: 'planned' } : null;
-      }
-
+      // 2) Not in the library → resolve the page into a prefilled entry.
+      const data = await scrapeOrFetch(tab);
       if (!data || !data.title) {
         setError("Couldn't read media details from this page.");
         setPhase('error');
         return;
       }
-      setEntry(data);
-      // Best-effort check: is this source link already in the user's library?
-      findEntryByUrl(data.external_url || tab.url).then(setExisting).catch(() => {});
+
+      // 3) Second check against the resolved canonical URL (e.g. a chapter page
+      //    resolves to the series URL that was actually stored).
+      let ex2 = null;
+      if (data.external_url && data.external_url !== tab.url) {
+        ex2 = await findEntryByUrl(data.external_url).catch(() => null);
+      }
+      setExisting(ex2);
+      setFetchedEntry(data);
       setPhase('ready');
     } catch (e) {
       setError(e.message || 'Failed to read this page.');
       setPhase('error');
     }
   }, []);
+
+  // Scrape (NU-style) or relay to /search/from-url. Non-embed only — the embed
+  // path delegates the equivalent work to the background worker.
+  async function scrapeOrFetch(tab) {
+    const site = detectSite(tab.url);
+    if (site.kind === 'unsupported') { const e = new Error('unsupported'); e.code = 'unsupported'; throw e; }
+    if (site.kind === 'dom') {
+      const [{ result } = {}] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: site.scraper,
+      });
+      return result;
+    }
+    const results = await fetchByUrl(tab.url);
+    return Array.isArray(results) && results[0] ? { ...results[0], status: 'planned' } : null;
+  }
+
+  // "New Entry": fetch the media details (if not already fetched) and switch to
+  // add mode, leaving the existing entry untouched.
+  async function startNewEntry() {
+    if (fetchedEntry) { setAddingNew(true); return; }
+    setPhase('loading');
+    try {
+      const tabIdParam = new URLSearchParams(window.location.search).get('tabId');
+      let data;
+      if (EMBED) {
+        const resp = await chrome.runtime.sendMessage({
+          type: 'embedFetchEntry', tabId: tabIdParam, token: getToken(), apiBase: BASE,
+        });
+        if (!resp || !resp.ok) throw new Error(resp?.reason === 'unsupported'
+          ? "This page isn't a supported source — can't auto-fill a new entry."
+          : "Couldn't read media details from this page.");
+        data = resp.entry;
+      } else {
+        const tab = tabIdParam
+          ? await chrome.tabs.get(Number(tabIdParam))
+          : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+        data = await scrapeOrFetch(tab);
+        if (!data || !data.title) throw new Error("Couldn't read media details from this page.");
+      }
+      setFetchedEntry(data);
+      setAddingNew(true);
+    } catch (e) {
+      alert(e.code === 'unsupported'
+        ? "This page isn't a supported source — can't auto-fill a new entry."
+        : (e.message || 'Failed to read this page.'));
+    } finally {
+      setPhase('ready');
+    }
+  }
 
   useEffect(() => { if (token) loadEntry(); }, [token, loadEntry]);
 
@@ -91,6 +150,22 @@ export default function App() {
       try { chrome.runtime.sendMessage({ type: 'overlayFallback' }); } catch { /* ignore */ }
       closeUi();
     }
+  }, []);
+
+  // Report our content height to the overlay so the iframe fits the form without
+  // an inner scrollbar (the host-page overlay can't measure us cross-origin).
+  useEffect(() => {
+    if (!EMBED || !rootRef.current) return;
+    const el = rootRef.current;
+    const post = () => {
+      try {
+        window.parent.postMessage({ logariumExtHeight: Math.ceil(el.getBoundingClientRect().height) }, '*');
+      } catch { /* ignore */ }
+    };
+    post();
+    const ro = new ResizeObserver(post);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   function handleAuth(newToken) {
@@ -116,15 +191,26 @@ export default function App() {
   }
 
   async function handleSubmit(form) {
-    const payload = formToPayload(form, { isEdit: false });
+    const payload = formToPayload(form, { isEdit: editing });
 
-    if (EMBED) {
-      const resp = await chrome.runtime.sendMessage({
-        type: 'embedCreateEntry', payload, token: getToken(), apiBase: BASE,
-      });
-      if (!resp || !resp.ok) throw new Error((resp && resp.reason) || 'Failed to add entry');
+    if (editing) {
+      if (EMBED) {
+        const resp = await chrome.runtime.sendMessage({
+          type: 'embedUpdateEntry', id: existing.id, payload, token: getToken(), apiBase: BASE,
+        });
+        if (!resp || !resp.ok) throw new Error((resp && resp.reason) || 'Failed to update entry');
+      } else {
+        await updateEntry(existing.id, payload);
+      }
     } else {
-      await createEntry(payload);
+      if (EMBED) {
+        const resp = await chrome.runtime.sendMessage({
+          type: 'embedCreateEntry', payload, token: getToken(), apiBase: BASE,
+        });
+        if (!resp || !resp.ok) throw new Error((resp && resp.reason) || 'Failed to add entry');
+      } else {
+        await createEntry(payload);
+      }
     }
 
     let cover = null;
@@ -140,44 +226,37 @@ export default function App() {
       if (!cover.ok) console.warn('[LOG] cover not cached:', cover.reason, form.cover_url);
     }
     setCoverStatus(cover);
+    setDoneLabel(editing ? 'Updated library entry' : 'Added to your library');
     setPhase('done');
   }
 
+  let content;
   if (phase === 'auth') {
     // In overlay mode we redirect sign-in to a window (see the effect above).
-    if (EMBED) {
-      return <div className="ext-state"><span className="loading-dots">Opening sign-in</span></div>;
-    }
-    return <AuthModal onAuth={handleAuth} />;
-  }
-
-  if (phase === 'loading') {
-    return <div className="ext-state"><span className="loading-dots">Reading page</span></div>;
-  }
-
-  if (phase === 'unsupported') {
-    return (
+    content = EMBED
+      ? <div className="ext-state"><span className="loading-dots">Opening sign-in</span></div>
+      : <AuthModal onAuth={handleAuth} />;
+  } else if (phase === 'loading') {
+    content = <div className="ext-state"><span className="loading-dots">Reading page</span></div>;
+  } else if (phase === 'unsupported') {
+    content = (
       <div className="ext-state">
         <div className="ext-state-title">Not a supported media page</div>
         <div>Open a NovelUpdates series or a supported source page, then try again.</div>
       </div>
     );
-  }
-
-  if (phase === 'error') {
-    return (
+  } else if (phase === 'error') {
+    content = (
       <div className="ext-state">
         <div className="ext-state-title">Couldn’t add from this page</div>
         <div>{error}</div>
         <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={loadEntry}>Retry</button>
       </div>
     );
-  }
-
-  if (phase === 'done') {
-    return (
+  } else if (phase === 'done') {
+    content = (
       <div className="ext-state">
-        <div className="ext-state-title ext-ok">✓ Added to your library</div>
+        <div className="ext-state-title ext-ok">✓ {doneLabel}</div>
         {coverStatus && (coverStatus.ok
           ? <div className="ext-ok" style={{ fontSize: 11 }}>Cover cached ✓</div>
           : <div style={{ fontSize: 11, color: 'var(--dim)' }}>Cover not cached — {coverStatus.reason}</div>)}
@@ -185,27 +264,32 @@ export default function App() {
         <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={closeUi}>Close</button>
       </div>
     );
+  } else {
+    content = (
+      <div className="ext-wrap">
+        <div className="ext-header">
+          <span className="ext-title">Add to Library</span>
+          {formEntry?.source && <span className="ext-source">{formEntry.source}</span>}
+        </div>
+        {editing && (
+          <div className="ext-exists" role="status">
+            ✓ Already in your library — editing existing entry
+          </div>
+        )}
+        <EntryForm
+          key={editing ? `edit-${existing.id}` : 'new'}
+          entry={formEntry}
+          onSubmit={handleSubmit}
+          onCancel={closeUi}
+          submitLabel={editing ? 'Update' : 'Add to Library'}
+          savingLabel={editing ? 'Updating…' : 'Adding…'}
+          leftAction={editing
+            ? <button type="button" className="btn btn-outline" onClick={startNewEntry}>New Entry</button>
+            : null}
+        />
+      </div>
+    );
   }
 
-  return (
-    <div className="ext-wrap">
-      <div className="ext-header">
-        <span className="ext-title">Add to Library</span>
-        {entry?.source && <span className="ext-source">{entry.source}</span>}
-      </div>
-      {existing && (
-        <div className="ext-exists" role="status">
-          ✓ Already in your library — {statusLabel(existing.status)}
-          {existing.rating != null && ` · ${existing.rating}/10`}
-        </div>
-      )}
-      <EntryForm
-        entry={entry}
-        onSubmit={handleSubmit}
-        onCancel={closeUi}
-        submitLabel="Add to Library"
-        savingLabel="Adding…"
-      />
-    </div>
-  );
+  return <div ref={rootRef}>{content}</div>;
 }
