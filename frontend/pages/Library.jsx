@@ -376,7 +376,7 @@ export default function Library({ initialFilters = {} }) {
         <div className="filter-bar">
           <input placeholder="Search titles…" value={search} style={{ width: 200 }}
             onChange={e => setSearch(e.target.value)} />
-          <select value={sort} onChange={e => setSort(e.target.value)}>
+          <select value={sort} onChange={e => setSort(e.target.value)} style={{ width: 130 }}>
             {SORT_FIELDS.map(f => <option key={f.key} value={f.key}>Sort: {f.label}</option>)}
           </select>
           <button className="icon-btn" style={{ padding: '5px 10px' }}
@@ -386,12 +386,11 @@ export default function Library({ initialFilters = {} }) {
           {hasFilters && (
             <button className="icon-btn" onClick={clearFilters}>✕ Clear</button>
           )}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select value={limit} onChange={e => setLimit(Number(e.target.value))}>
-              {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n} / page</option>)}
-            </select>
-            <button className="icon-btn" onClick={() => load()} title="Refresh" style={{ padding: '5px 10px' }}>Refresh</button>
-          </div>
+          <select value={limit} onChange={e => setLimit(Number(e.target.value))}
+            style={{ marginLeft: 'auto' }}>
+            {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n} / page</option>)}
+          </select>
+          <button className="icon-btn" onClick={() => load()} title="Refresh" style={{ padding: '5px 10px' }}>Refresh</button>
         </div>
 
         {error && (
