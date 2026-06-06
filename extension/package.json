@@ -1,6 +1,6 @@
 {
   "name": "log-extension",
-  "version": "1.0.0",
+  "version": "1.2.3",
   "private": true,
   "type": "module",
   "description": "Logarium browser extension — add media to your library from the page you're on.",
@@ -9,7 +9,8 @@
     "dev": "vite build --watch",
     "lint": "web-ext lint --source-dir dist",
     "package": "vite build && web-ext build --source-dir dist --artifacts-dir dist-artifacts --overwrite-dest --filename logarium-{version}-chrome.zip",
-    "sign:firefox": "vite build && node --env-file=.env node_modules/.bin/web-ext sign --source-dir dist --artifacts-dir dist-artifacts --channel unlisted"
+    "sign:firefox": "vite build && node --env-file=.env node_modules/.bin/web-ext sign --source-dir dist --artifacts-dir dist-artifacts --channel unlisted",
+    "release": "node --env-file=.env scripts/release.js"
   },
   "dependencies": {
     "react": "^18.3.1",

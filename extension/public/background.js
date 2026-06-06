@@ -635,8 +635,33 @@ function scrapeNovelUpdates() {
   const slugMatch = location.pathname.match(/\/series\/([^/?#]+)/);
   const slug = slugMatch ? slugMatch[1] : '';
 
-  const img = document.querySelector('div.seriesimg img');
-  const cover_url = img ? normaliseCover(img.getAttribute('src') || img.getAttribute('data-src') || '') : '';
+  // Find the cover by hunting for any <img> on the page that points at the
+  // NovelUpdates image CDN — wherever it sits, whatever the format. Covers can
+  // lazy-load, so check the common src-holding attributes, not just `src`.
+  // The first `cdn.novelupdates.com/images` link wins.
+  let cover_url = '';
+  const COVER_ATTRS = ['src', 'data-src', 'data-cfsrc', 'data-lazy-src', 'data-original'];
+  for (const el of document.querySelectorAll('img')) {
+    for (const attr of COVER_ATTRS) {
+      const candidate = normaliseCover(el.getAttribute(attr) || '');
+      if (candidate.includes('cdn.novelupdates.com/images')) { cover_url = candidate; break; }
+    }
+    if (!cover_url) {
+      const first = (el.getAttribute('srcset') || '').split(',')[0].trim().split(/\s+/)[0] || '';
+      const candidate = normaliseCover(first);
+      if (candidate.includes('cdn.novelupdates.com/images')) cover_url = candidate;
+    }
+    if (cover_url) break;
+  }
+  if (!cover_url) {
+    const img = document.querySelector('div.seriesimg img');
+    if (img) {
+      for (const attr of COVER_ATTRS) {
+        const candidate = normaliseCover(img.getAttribute(attr) || '');
+        if (candidate) { cover_url = candidate; break; }
+      }
+    }
+  }
 
   const postId = document.querySelector('#mypostid');
   const external_id = (postId && postId.value) ? postId.value : slug;

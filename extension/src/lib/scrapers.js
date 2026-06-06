@@ -32,22 +32,33 @@ export function scrapeNovelUpdates() {
   const slugMatch = location.pathname.match(/\/series\/([^/?#]+)/);
   const slug = slugMatch ? slugMatch[1] : '';
 
-  // Find the cover by hunting for any <img> that points at the NovelUpdates
-  // image CDN, wherever it sits in the DOM. Don't care about container, format,
-  // or layout — the first cdn.novelupdates.com/images link is the cover.
+  // Find the cover by hunting for any <img> on the page that points at the
+  // NovelUpdates image CDN — wherever it sits, whatever the format. Covers can
+  // lazy-load, so check the common src-holding attributes, not just `src`.
+  // The first `cdn.novelupdates.com/images` link wins.
   let cover_url = '';
+  const COVER_ATTRS = ['src', 'data-src', 'data-cfsrc', 'data-lazy-src', 'data-original'];
   for (const el of document.querySelectorAll('img')) {
-    const raw = el.getAttribute('src') || el.getAttribute('data-src') || '';
-    const candidate = normaliseCover(raw);
-    if (candidate.includes('cdn.novelupdates.com/images')) {
-      cover_url = candidate;
-      break;
+    for (const attr of COVER_ATTRS) {
+      const candidate = normaliseCover(el.getAttribute(attr) || '');
+      if (candidate.includes('cdn.novelupdates.com/images')) { cover_url = candidate; break; }
     }
+    if (!cover_url) {
+      const first = (el.getAttribute('srcset') || '').split(',')[0].trim().split(/\s+/)[0] || '';
+      const candidate = normaliseCover(first);
+      if (candidate.includes('cdn.novelupdates.com/images')) cover_url = candidate;
+    }
+    if (cover_url) break;
   }
-  // Fall back to the conventional series-image container if nothing matched.
+  // Fall back to whatever the series-image container holds, even if off-CDN.
   if (!cover_url) {
     const img = document.querySelector('div.seriesimg img');
-    if (img) cover_url = normaliseCover(img.getAttribute('src') || img.getAttribute('data-src') || '');
+    if (img) {
+      for (const attr of COVER_ATTRS) {
+        const candidate = normaliseCover(img.getAttribute(attr) || '');
+        if (candidate) { cover_url = candidate; break; }
+      }
+    }
   }
 
   const postId = document.querySelector('#mypostid');
