@@ -1687,8 +1687,10 @@ a.explore-title:hover { color: var(--accent); }
 .batch-field-row { display: flex; gap: 6px; align-items: center; }
 .batch-actions { display: flex; gap: 6px; align-items: center; }
 /* The batch panel renders in the sidebar on desktop; the mobile copy in the
-   main column is hidden here and revealed in the mobile media query. */
-.batch-mobile { display: none; }
+   main column is hidden above the breakpoint. Scoped to a min-width query (not
+   a plain rule) so it never overrides the max-width:720 rule that reveals it on
+   mobile, regardless of source order. */
+@media (min-width: 721px) { .batch-mobile { display: none; } }
 
 /* Small Apply button — accent-coloured sibling to the small .icon-btn delete. */
 .icon-btn.accent { border-color: rgba(74, 158, 255, 0.5); color: var(--accent); }

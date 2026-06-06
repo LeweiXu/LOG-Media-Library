@@ -565,6 +565,10 @@ export default function Manage() {
           </div>
         </div>
 
+        {/* Mobile-only: batch edit lives inline above the search box instead of
+            in the right drawer. */}
+        <div className="batch-mobile">{batchPanel}</div>
+
         <div className="filter-bar">
           <input placeholder="Search titles…" value={search} style={{ width: 200 }}
             onChange={e => setSearch(e.target.value)} />
@@ -586,9 +590,6 @@ export default function Manage() {
             Refresh
           </button>
         </div>
-
-        {/* Mobile-only: batch edit lives inline here instead of the drawer. */}
-        <div className="batch-mobile">{batchPanel}</div>
 
         {error && (
           <div className="state-block">
