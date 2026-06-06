@@ -9,7 +9,7 @@
     "dev": "vite build --watch",
     "lint": "web-ext lint --source-dir dist",
     "package": "vite build && web-ext build --source-dir dist --artifacts-dir dist-artifacts --overwrite-dest --filename logarium-{version}-chrome.zip",
-    "sign:firefox": "vite build && web-ext sign --source-dir dist --artifacts-dir dist-artifacts --channel unlisted"
+    "sign:firefox": "vite build && node --env-file=.env node_modules/.bin/web-ext sign --source-dir dist --artifacts-dir dist-artifacts --channel unlisted"
   },
   "dependencies": {
     "react": "^18.3.1",
