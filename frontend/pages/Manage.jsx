@@ -389,6 +389,81 @@ export default function Manage() {
     </th>
   );
 
+  // Batch-edit controls — rendered in the right sidebar on desktop and inline
+  // in the main column on mobile (the two copies share the same state).
+  const batchPanel = (
+    <>
+      <p className="panel-title">Batch Edit</p>
+      <div className="batch-panel">
+        <div className={`batch-hint${selectedIds.size ? ' is-active' : ''}`}>
+          {selectedIds.size ? `${selectedIds.size} selected` : 'Select entries to edit in bulk'}
+        </div>
+
+        <select className="inline-select batch-select" value={bulkListValue} disabled={bulkBusy || selectedIds.size === 0}
+          onChange={e => bulkAssignList(e.target.value)}>
+          <option value="" disabled>Assign to list…</option>
+          {listNames.map(n => <option key={n} value={n}>{n}</option>)}
+          <option value="__none__">— Remove from list —</option>
+        </select>
+
+        <select className="inline-select batch-select" value={bulkStatusValue} disabled={bulkBusy || selectedIds.size === 0}
+          onChange={e => bulkSetStatus(e.target.value)}>
+          <option value="" disabled>Set status…</option>
+          {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+        </select>
+
+        <select className="inline-select batch-select" value={bulkField} disabled={bulkBusy || selectedIds.size === 0}
+          onChange={e => {
+            setBulkField(e.target.value);
+            setBulkFieldValue('');
+            setBulkListValue('');
+            setBulkStatusValue('');
+          }}>
+          <option value="">Edit field…</option>
+          {BULK_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+        </select>
+
+        {bulkField && (
+          <div className="batch-field-row">
+            {(() => {
+              const meta = BULK_FIELDS.find(f => f.key === bulkField);
+              if (meta.kind === 'medium' || meta.kind === 'origin') {
+                const opts = meta.kind === 'medium' ? MEDIUMS : ORIGINS;
+                return (
+                  <select className="inline-select batch-select" value={bulkFieldValue} disabled={bulkBusy}
+                    style={{ flex: 1 }}
+                    onChange={e => setBulkFieldValue(e.target.value)}>
+                    <option value="">Choose {meta.label.toLowerCase()}…</option>
+                    {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                );
+              }
+              return (
+                <input className="inline-select batch-select" type="number" placeholder={meta.label}
+                  min={meta.min} max={meta.max} value={bulkFieldValue} disabled={bulkBusy}
+                  style={{ flex: 1 }}
+                  onChange={e => setBulkFieldValue(e.target.value)} />
+              );
+            })()}
+          </div>
+        )}
+
+        <div className="batch-actions">
+          <button className="icon-btn danger" disabled={bulkBusy || selectedIds.size === 0}
+            onClick={() => confirmBulkDelete ? doBulkDelete() : setConfirmBulkDelete(true)}>
+            {bulkBusy ? 'Working…' : confirmBulkDelete ? 'Confirm delete' : 'Delete'}
+          </button>
+          <button className="icon-btn accent" disabled={bulkBusy || selectedIds.size === 0 || !buildBulkPatch()} onClick={applyBulkChange}>
+            Apply
+          </button>
+          <button className="icon-btn" disabled={bulkBusy} onClick={clearSelection}>Clear</button>
+        </div>
+
+        {bulkError && <div style={{ color: 'var(--red)', fontSize: 11 }}>{bulkError}</div>}
+      </div>
+    </>
+  );
+
   return (
     <div className="layout-3col" data-drawer={drawer}>
       {drawer && (
@@ -512,6 +587,9 @@ export default function Manage() {
           </button>
         </div>
 
+        {/* Mobile-only: batch edit lives inline here instead of the drawer. */}
+        <div className="batch-mobile">{batchPanel}</div>
+
         {error && (
           <div className="state-block">
             <div className="state-title">Error</div>
@@ -558,7 +636,7 @@ export default function Manage() {
                   <SortTh field="rating" className="col-rating">Rating</SortTh>
                   <th className="col-progress">Progress</th>
                   <SortTh field="updated_at" className="col-updated">Updated</SortTh>
-                  <th>Custom List</th>
+                  <th className="col-custom-list">Custom List</th>
                   {showActions && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
@@ -605,7 +683,7 @@ export default function Manage() {
                     <td className="col-updated">
                       <span style={{ color: 'var(--dim)' }}>{fmtDate(entry.updated_at)}</span>
                     </td>
-                    <td onClick={ev => ev.stopPropagation()}>
+                    <td className="col-custom-list" onClick={ev => ev.stopPropagation()}>
                       <select
                         className="inline-select"
                         value={entry.custom_list || ''}
@@ -625,8 +703,8 @@ export default function Manage() {
                             onClick={() => { setDetailEntry(entry); setStartEditing(false); }}>
                             view
                           </button>
-                          <button className="icon-btn"
-                            style={{ color: 'var(--accent)', borderColor: 'var(--accent)', padding: '2px 8px', fontSize: 11 }}
+                          <button className="icon-btn edit"
+                            style={{ padding: '2px 8px', fontSize: 11 }}
                             onClick={() => { setDetailEntry(entry); setStartEditing(true); }}>
                             edit
                           </button>
@@ -653,74 +731,7 @@ export default function Manage() {
 
       <div className="sidebar-right">
         <ExtensionInstallButton />
-        <p className="panel-title">Batch Edit</p>
-        <div className="batch-panel">
-          <div className={`batch-hint${selectedIds.size ? ' is-active' : ''}`}>
-            {selectedIds.size ? `${selectedIds.size} selected` : 'Select entries to edit in bulk'}
-          </div>
-
-          <select className="inline-select batch-select" value={bulkListValue} disabled={bulkBusy || selectedIds.size === 0}
-            onChange={e => bulkAssignList(e.target.value)}>
-            <option value="" disabled>Assign to list…</option>
-            {listNames.map(n => <option key={n} value={n}>{n}</option>)}
-            <option value="__none__">— Remove from list —</option>
-          </select>
-
-          <select className="inline-select batch-select" value={bulkStatusValue} disabled={bulkBusy || selectedIds.size === 0}
-            onChange={e => bulkSetStatus(e.target.value)}>
-            <option value="" disabled>Set status…</option>
-            {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-          </select>
-
-          <select className="inline-select batch-select" value={bulkField} disabled={bulkBusy || selectedIds.size === 0}
-            onChange={e => {
-              setBulkField(e.target.value);
-              setBulkFieldValue('');
-              setBulkListValue('');
-              setBulkStatusValue('');
-            }}>
-            <option value="">Edit field…</option>
-            {BULK_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-          </select>
-
-          {bulkField && (
-            <div className="batch-field-row">
-              {(() => {
-                const meta = BULK_FIELDS.find(f => f.key === bulkField);
-                if (meta.kind === 'medium' || meta.kind === 'origin') {
-                  const opts = meta.kind === 'medium' ? MEDIUMS : ORIGINS;
-                  return (
-                    <select className="inline-select batch-select" value={bulkFieldValue} disabled={bulkBusy}
-                      style={{ flex: 1 }}
-                      onChange={e => setBulkFieldValue(e.target.value)}>
-                      <option value="">Choose {meta.label.toLowerCase()}…</option>
-                      {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  );
-                }
-                return (
-                  <input className="inline-select batch-select" type="number" placeholder={meta.label}
-                    min={meta.min} max={meta.max} value={bulkFieldValue} disabled={bulkBusy}
-                    style={{ flex: 1 }}
-                    onChange={e => setBulkFieldValue(e.target.value)} />
-                );
-              })()}
-            </div>
-          )}
-
-          <div className="batch-actions">
-            <button className="icon-btn danger" disabled={bulkBusy || selectedIds.size === 0}
-              onClick={() => confirmBulkDelete ? doBulkDelete() : setConfirmBulkDelete(true)}>
-              {bulkBusy ? 'Working…' : confirmBulkDelete ? 'Confirm delete' : 'Delete'}
-            </button>
-            <button className="icon-btn accent" disabled={bulkBusy || selectedIds.size === 0 || !buildBulkPatch()} onClick={applyBulkChange}>
-              Apply
-            </button>
-            <button className="icon-btn" disabled={bulkBusy} onClick={clearSelection}>Clear</button>
-          </div>
-
-          {bulkError && <div style={{ color: 'var(--red)', fontSize: 11 }}>{bulkError}</div>}
-        </div>
+        <div className="batch-desktop">{batchPanel}</div>
 
         <p className="panel-title">Tools</p>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}

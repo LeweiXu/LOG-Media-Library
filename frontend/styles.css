@@ -1603,6 +1603,11 @@ a.explore-title:hover { color: var(--accent); }
   .media-table th, .media-table td { padding: 6px 4px; }
   .media-table .action-cell { min-width: 0; }
   .media-table .action-cell-inner { gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  /* Manage's custom-list select would otherwise force horizontal overflow. */
+  .media-table td.col-custom-list .inline-select { min-width: 0 !important; width: 100%; }
+  /* Manage batch edit moves into the main column on mobile (out of the drawer). */
+  .batch-desktop { display: none; }
+  .batch-mobile { display: block; margin-bottom: 14px; }
   .cover-thumb { width: 24px; height: 34px; }
   .media-name { font-size: 12px; }
 
@@ -1681,12 +1686,19 @@ a.explore-title:hover { color: var(--accent); }
 .batch-select { width: 100%; }
 .batch-field-row { display: flex; gap: 6px; align-items: center; }
 .batch-actions { display: flex; gap: 6px; align-items: center; }
+/* The batch panel renders in the sidebar on desktop; the mobile copy in the
+   main column is hidden here and revealed in the mobile media query. */
+.batch-mobile { display: none; }
 
 /* Small Apply button — accent-coloured sibling to the small .icon-btn delete. */
 .icon-btn.accent { border-color: rgba(74, 158, 255, 0.5); color: var(--accent); }
 .icon-btn.accent:hover { border-color: var(--accent); background: rgba(74, 158, 255, 0.08); }
 .icon-btn.danger { color: var(--red); border-color: rgba(224, 86, 86, 0.5); }
 .icon-btn.danger:hover { border-color: var(--red); background: rgba(224, 86, 86, 0.08); }
+/* Edit buttons: accent-tinted, with the border darkening to full accent on
+   hover — mirrors the danger button's hover emphasis. */
+.icon-btn.edit { color: var(--accent); border-color: rgba(74, 158, 255, 0.5); }
+.icon-btn.edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(74, 158, 255, 0.08); }
 
 .media-table .col-select { width: 34px; text-align: center; }
 /* Selected row gets a blue tint plus a continuous accent outline around the
