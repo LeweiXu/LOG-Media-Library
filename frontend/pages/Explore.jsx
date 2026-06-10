@@ -45,8 +45,11 @@ export default function Explore() {
   const [refreshFlag, setRefreshFlag] = useState(false);
   // Mobile drawer state — '', 'left', or 'right'.
   const [drawer, setDrawer] = useState('');
-  // Quick-add (backfill) modal toggle.
+  // Quick-add (backfill) modal toggle. We don't re-query mid-session on each add
+  // (the background reshuffle looked jarring) — instead reconcile once on close
+  // if anything was added, so recs drop the now-owned titles.
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const quickAddDirty = useRef(false);
   // Selected search sources — drive BOTH the top search box and the
   // recommendation filtering below. Empty set = all sources. Restored from the
   // URL (?src=) on load so a reload keeps the search; falls back to saved prefs.
@@ -501,8 +504,14 @@ export default function Explore() {
       {quickAddOpen && (
         <QuickAddModal
           medium={medium}
-          onClose={() => setQuickAddOpen(false)}
-          onCreated={handleAddPanelCreated}
+          onClose={() => {
+            setQuickAddOpen(false);
+            if (quickAddDirty.current) {
+              quickAddDirty.current = false;
+              fetchExplore();
+            }
+          }}
+          onCreated={() => { quickAddDirty.current = true; }}
         />
       )}
 

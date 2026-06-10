@@ -2077,39 +2077,46 @@ a.quickadd-title:hover { color: var(--accent); }
   word-break: break-word;
 }
 
-/* Segmented control — connected buttons spanning the full width, shared by the
-   status and rating pickers. Active colour is set per-variant below. */
-.quickadd-seg { display: flex; border: 1px solid var(--border2); }
+/* Segmented control — connected cells spanning the full width, shared by the
+   status and rating pickers. Terminal style: a recessed --bg strip (like the
+   form inputs) with 1px divider lines; the selected cell reads as "active" via
+   background contrast (--surface2) plus coloured text — the same active idiom
+   as the sidebar items and the Explore mode toggle, no rgba tint fills. */
+.quickadd-seg {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
 .quickadd-seg-btn {
   flex: 1;
   text-align: center;
   background: transparent;
   border: none;
-  border-right: 1px solid var(--border2);
+  border-right: 1px solid var(--border);
   color: var(--dim);
   font-family: inherit;
-  font-size: 11px;
-  letter-spacing: 0.03em;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   padding: 9px 4px;
   cursor: pointer;
   transition: color 0.12s, background 0.12s;
 }
 .quickadd-seg-btn:last-child { border-right: none; }
-.quickadd-seg-btn:hover { color: var(--text); background: var(--surface2); }
+.quickadd-seg-btn:hover { color: var(--text); background: var(--surface); }
+.quickadd-seg-btn.is-on { background: var(--surface2); color: var(--bright); }
 
-/* Rating lights up amber. Narrower padding since there are 11 cells. */
-.quickadd-rating-seg .quickadd-seg-btn { padding: 9px 2px; }
-.quickadd-rating-seg .quickadd-seg-btn.is-on {
-  color: var(--amber);
-  background: rgba(245, 166, 35, 0.15);
-}
+/* Rating: 11 cells, slightly tighter; active text is amber (ratings are amber
+   throughout the app). */
+.quickadd-rating-seg .quickadd-seg-btn { padding: 9px 2px; letter-spacing: 0; }
+.quickadd-rating-seg .quickadd-seg-btn.is-on { color: var(--amber); }
 
-/* Status follows the canonical per-status colours (matching the badges). */
-.quickadd-seg-btn.is-on.status-current   { color: var(--accent); background: rgba(74, 158, 255, 0.15); }
-.quickadd-seg-btn.is-on.status-planned   { color: var(--dim);    background: rgba(90, 93, 98, 0.30);   }
-.quickadd-seg-btn.is-on.status-completed { color: var(--green);  background: rgba(62, 207, 106, 0.14); }
-.quickadd-seg-btn.is-on.status-on_hold   { color: var(--amber);  background: rgba(245, 166, 35, 0.15); }
-.quickadd-seg-btn.is-on.status-dropped   { color: var(--red);    background: rgba(224, 86, 86, 0.15);  }
+/* Status: active text follows the canonical per-status colour. */
+.quickadd-seg-btn.is-on.status-current   { color: var(--accent); }
+.quickadd-seg-btn.is-on.status-planned   { color: var(--text);   }
+.quickadd-seg-btn.is-on.status-completed { color: var(--green);  }
+.quickadd-seg-btn.is-on.status-on_hold   { color: var(--amber);  }
+.quickadd-seg-btn.is-on.status-dropped   { color: var(--red);    }
 
 .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
