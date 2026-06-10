@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getCustomLists, fetchChapterCount } from '../../api.jsx';
 import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
+import CustomListField from './CustomListField.jsx';
 
 function toDateInput(iso) {
   if (!iso) return '';
@@ -178,13 +179,11 @@ export default function EntryForm({
 
       <div className="form-row" style={{ marginBottom: 14 }}>
         <label className="form-label">Custom List</label>
-        <select className="form-input" value={form.custom_list}
-          onChange={e => setField('custom_list', e.target.value)}>
-          <option value="">No List</option>
-          {customLists.map(list => (
-            <option key={list.name} value={list.name}>{list.name}</option>
-          ))}
-        </select>
+        <CustomListField
+          value={form.custom_list}
+          onChange={v => setField('custom_list', v)}
+          lists={customLists}
+        />
       </div>
 
       {form.status === 'completed' && (

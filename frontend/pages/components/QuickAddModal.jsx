@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getExplore, createEntry, getCustomLists } from '../../api.jsx';
 import { MEDIUMS, STATUSES, RATING_OPTIONS, statusLabel, onCoverError } from '../../utils.jsx';
+import CustomListField from './CustomListField.jsx';
 
 // Large candidate pool so the queue keeps going as the user adds/skips.
 const POOL_LIMIT = 120;
@@ -319,14 +320,11 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
                   </div>
                   <div>
                     <label className="form-label">Custom List</label>
-                    <select className="form-input" value={form.custom_list}
-                      onChange={e => setField('custom_list', e.target.value)}
-                      disabled={customLists.length === 0}>
-                      <option value="">No List</option>
-                      {customLists.map(list => (
-                        <option key={list.name} value={list.name}>{list.name}</option>
-                      ))}
-                    </select>
+                    <CustomListField
+                      value={form.custom_list}
+                      onChange={v => setField('custom_list', v)}
+                      lists={customLists}
+                    />
                   </div>
                 </div>
 
