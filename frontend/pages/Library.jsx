@@ -385,10 +385,10 @@ export default function Library({ initialFilters = {} }) {
             }))}
             onChange={setSort}
             className="filter-select"
-            style={{ width: 130 }}
+            containerClassName="library-manage-sort"
             ariaLabel="Sort library"
           />
-          <button className="icon-btn" style={{ padding: '5px 10px' }}
+          <button className="icon-btn library-manage-order" style={{ padding: '5px 10px' }}
             onClick={() => setOrder(o => o === 'asc' ? 'desc' : 'asc')}>
             {order === 'asc' ? '↑ Asc' : '↓ Desc'}
           </button>

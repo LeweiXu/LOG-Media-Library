@@ -14,6 +14,7 @@ export default function CustomSelect({
   placeholder = 'Select…',
   disabled = false,
   className = 'form-input',
+  containerClassName = '',
   style,
   menuClassName = '',
   maxVisible = 10,
@@ -130,7 +131,7 @@ export default function CustomSelect({
   }, [activeIndex, open]);
 
   return (
-    <div className="custom-select" style={style}>
+    <div className={`custom-select ${containerClassName}`.trim()} style={style}>
       <button
         ref={triggerRef}
         type="button"

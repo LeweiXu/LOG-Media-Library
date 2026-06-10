@@ -996,6 +996,8 @@ html.light .skeleton-pie::after {
 .filter-bar select,
 .filter-select                { cursor: pointer; }
 .filter-bar .filter-count     { margin-left: auto; font-size: 11px; color: var(--dim); }
+.custom-select.library-manage-sort { width: 135px; }
+.library-manage-sort .custom-select-trigger { white-space: nowrap; }
 
 /* ── Inline status select ────────────────────────────────────────────────── */
 .inline-select {
@@ -1724,6 +1726,8 @@ a.explore-title:hover { color: var(--accent); }
   /* Filter bar: search input shrinks, sort row wraps cleanly. */
   .filter-bar input { width: 100% !important; }
   .filter-bar select { font-size: 11px; }
+  .library-manage-sort,
+  .library-manage-order { display: none; }
 
   /* ── Mobile column hiding on the Library/Dashboard tables ──
    * Every <th>/<td> opts in via a class like `.col-medium`. By default on
@@ -1758,11 +1762,21 @@ a.explore-title:hover { color: var(--accent); }
   .media-table[data-mobile-show="completed"] td.col-completed {
     display: table-cell;
   }
+  .manage-entry-table th.col-rating,
+  .manage-entry-table td.col-rating {
+    display: none;
+  }
+  .manage-entry-table th.col-custom-list,
+  .manage-entry-table td.col-custom-list {
+    display: table-cell;
+    width: 116px;
+  }
   .media-table th, .media-table td { padding: 6px 4px; }
   .media-table .action-cell { min-width: 0; }
   .media-table .action-cell-inner { gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
   /* Manage's custom-list select would otherwise force horizontal overflow. */
   .media-table td.col-custom-list .inline-select { min-width: 0 !important; width: 100%; }
+  .manage-list-select { width: 108px; min-width: 0; }
   /* Manage batch edit moves into the main column on mobile (out of the drawer). */
   .batch-desktop { display: none; }
   .batch-mobile { display: block; margin-bottom: 14px; }
@@ -1867,6 +1881,9 @@ a.explore-title:hover { color: var(--accent); }
 .icon-btn.edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(74, 158, 255, 0.08); }
 
 .media-table .col-select { width: 34px; text-align: center; }
+@media (min-width: 721px) {
+  .manage-list-select { min-width: 180px; }
+}
 /* Selected row gets a blue tint plus a continuous accent outline around the
    whole entry. Inset box-shadows draw the border without nudging layout. */
 .media-table tr.row-selected td { background: rgba(74, 158, 255, 0.08); }
@@ -2302,6 +2319,12 @@ a.quickadd-title:hover { color: var(--accent); }
   gap: 8px;
   cursor: pointer;
 }
+.custom-select-trigger > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .custom-select-trigger:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -2351,6 +2374,10 @@ a.quickadd-title:hover { color: var(--accent); }
 
 .quickadd-completion-date .custom-select {
   width: 110px;
+}
+@media (max-width: 720px) {
+  .filter-bar .library-manage-sort { display: none; }
+  .manage-list-select { width: 108px; }
 }
 @media (max-width: 480px) {
   .quickadd-completion-date {

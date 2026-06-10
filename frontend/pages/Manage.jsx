@@ -602,10 +602,10 @@ export default function Manage() {
             }))}
             onChange={setSort}
             className="filter-select"
-            style={{ width: 140 }}
+            containerClassName="library-manage-sort"
             ariaLabel="Sort entries"
           />
-          <button className="icon-btn" style={{ padding: '5px 10px' }}
+          <button className="icon-btn library-manage-order" style={{ padding: '5px 10px' }}
             onClick={() => setOrder(o => o === 'asc' ? 'desc' : 'asc')}>
             {order === 'asc' ? '↑ Asc' : '↓ Desc'}
           </button>
@@ -661,7 +661,7 @@ export default function Manage() {
 
         {!error && !loadingEntries && entries.length > 0 && (
           <div>
-            <table className="media-table" data-mobile-show="status">
+            <table className="media-table manage-entry-table" data-mobile-show="status">
               <thead>
                 <tr>
                   <th className="col-select">
@@ -735,7 +735,7 @@ export default function Manage() {
                           ...listNames.map(name => ({ value: name, label: name })),
                         ]}
                         onChange={value => saveEntryList(entry, value)}
-                        style={{ minWidth: 180 }}
+                        containerClassName="manage-list-select"
                         ariaLabel={`Custom list for ${entry.title}`}
                       />
                     </td>
