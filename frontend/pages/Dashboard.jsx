@@ -5,6 +5,7 @@ import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
 import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
+import CustomSelect from './components/CustomSelect.jsx';
 
 function CoverThumb({ url, title }) {
   return (
@@ -356,10 +357,16 @@ export default function DashboardAlt({ onFilterChange }) {
                                 )}
                             </td>
                             <td className="col-status" onClick={ev => ev.stopPropagation()}>
-                                <select className="inline-select" value={e.status}
-                                onChange={ev => handleStatusChange(e.id, ev.target.value)}>
-                                {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-                                </select>
+                                <CustomSelect
+                                  className="inline-select"
+                                  value={e.status}
+                                  options={STATUSES.map(status => ({
+                                    value: status,
+                                    label: statusLabel(status),
+                                  }))}
+                                  onChange={value => handleStatusChange(e.id, value)}
+                                  ariaLabel={`Status for ${e.title}`}
+                                />
                             </td>
                             <td className="col-rating" onClick={ev => ev.stopPropagation()}>
                                 {isEditingRating ? (
@@ -426,10 +433,16 @@ export default function DashboardAlt({ onFilterChange }) {
                             </td>
                             <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium ?? '—'}</span></td>
                             <td className="col-status" onClick={ev => ev.stopPropagation()}>
-                            <select className="inline-select" value={e.status}
-                                onChange={ev => handleStatusChange(e.id, ev.target.value)}>
-                                {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-                            </select>
+                            <CustomSelect
+                              className="inline-select"
+                              value={e.status}
+                              options={STATUSES.map(status => ({
+                                value: status,
+                                label: statusLabel(status),
+                              }))}
+                              onChange={value => handleStatusChange(e.id, value)}
+                              ariaLabel={`Status for ${e.title}`}
+                            />
                             </td>
                         </tr>
                         ))}

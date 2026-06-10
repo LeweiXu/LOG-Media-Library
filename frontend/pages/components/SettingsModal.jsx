@@ -4,6 +4,7 @@ import {
   getBackupStatus, runBackup,
 } from '../../api.jsx';
 import { MEDIUMS } from '../../utils.jsx';
+import CustomSelect from './CustomSelect.jsx';
 
 // Must match the options surfaced on the Library page.
 const LIBRARY_SORT_FIELDS = [
@@ -214,14 +215,15 @@ export default function SettingsModal({
           <p className="settings-section-label">Display</p>
           <div className="form-row" style={{ marginBottom: 14 }}>
             <label className="form-label">Theme</label>
-            <select
-              className="form-input"
+            <CustomSelect
               value={theme || 'dark'}
-              onChange={e => onThemeChange?.(e.target.value)}
-            >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </select>
+              options={[
+                { value: 'dark', label: 'Dark' },
+                { value: 'light', label: 'Light' },
+              ]}
+              onChange={value => onThemeChange?.(value)}
+              ariaLabel="Theme"
+            />
           </div>
 
           <div className="settings-divider" />
@@ -301,31 +303,31 @@ export default function SettingsModal({
           <div className="form-row-2">
             <div>
               <label className="form-label">Default sort</label>
-              <select
-                className="form-input"
+              <CustomSelect
                 value={librarySort}
-                onChange={e => setLibrarySort(e.target.value)}
+                options={LIBRARY_SORT_FIELDS.map(field => ({
+                  value: field.key,
+                  label: field.label,
+                }))}
+                onChange={setLibrarySort}
                 disabled={!prefsLoaded}
-              >
-                <option value="" hidden />
-                {LIBRARY_SORT_FIELDS.map(f => (
-                  <option key={f.key} value={f.key}>{f.label}</option>
-                ))}
-              </select>
+                placeholder="Loading…"
+                ariaLabel="Default sort"
+              />
             </div>
             <div>
               <label className="form-label">Entries per page</label>
-              <select
-                className="form-input"
+              <CustomSelect
                 value={libraryPerPage}
-                onChange={e => setLibraryPerPage(Number(e.target.value))}
+                options={LIBRARY_PAGE_SIZE_OPTIONS.map(size => ({
+                  value: size,
+                  label: String(size),
+                }))}
+                onChange={value => setLibraryPerPage(Number(value))}
                 disabled={!prefsLoaded}
-              >
-                <option value="" hidden />
-                {LIBRARY_PAGE_SIZE_OPTIONS.map(n => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
+                placeholder="Loading…"
+                ariaLabel="Entries per page"
+              />
             </div>
           </div>
 
@@ -335,30 +337,32 @@ export default function SettingsModal({
           <div className="form-row-2">
             <div>
               <label className="form-label">Default medium</label>
-              <select
-                className="form-input"
-                value={prefsLoaded ? exploreMedium : '__loading'}
-                onChange={e => setExploreMedium(e.target.value)}
+              <CustomSelect
+                value={prefsLoaded ? exploreMedium : ''}
+                options={[
+                  { value: '', label: 'All' },
+                  ...MEDIUMS.map(medium => ({ value: medium, label: medium })),
+                ]}
+                onChange={setExploreMedium}
                 disabled={!prefsLoaded}
-              >
-                <option value="__loading" hidden />
-                <option value="">All</option>
-                {MEDIUMS.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+                placeholder="Loading…"
+                maxVisible={MEDIUMS.length + 1}
+                ariaLabel="Default medium"
+              />
             </div>
             <div>
               <label className="form-label">Explore by</label>
-              <select
-                className="form-input"
+              <CustomSelect
                 value={exploreBy}
-                onChange={e => setExploreBy(e.target.value)}
+                options={EXPLORE_BY_OPTIONS.map(option => ({
+                  value: option.key,
+                  label: option.label,
+                }))}
+                onChange={setExploreBy}
                 disabled={!prefsLoaded}
-              >
-                <option value="" hidden />
-                {EXPLORE_BY_OPTIONS.map(o => (
-                  <option key={o.key} value={o.key}>{o.label}</option>
-                ))}
-              </select>
+                placeholder="Loading…"
+                ariaLabel="Explore by"
+              />
             </div>
           </div>
 
@@ -373,17 +377,18 @@ export default function SettingsModal({
           <div className="form-row-2">
             <div>
               <label className="form-label">Backup frequency</label>
-              <select
-                className="form-input"
+              <CustomSelect
                 value={backupFreq}
-                onChange={e => setBackupFreq(e.target.value)}
+                options={[
+                  { value: 'never', label: 'Never' },
+                  { value: 'daily', label: 'Daily' },
+                  { value: 'weekly', label: 'Weekly' },
+                  { value: 'monthly', label: 'Monthly' },
+                ]}
+                onChange={setBackupFreq}
                 disabled={!prefsLoaded}
-              >
-                <option value="never">Never</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
+                ariaLabel="Backup frequency"
+              />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
               <button

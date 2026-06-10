@@ -9,6 +9,7 @@ import ImportAutoModal from './components/ImportAutoModal.jsx';
 import ImportMalModal from './components/ImportMalModal.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
+import CustomSelect from './components/CustomSelect.jsx';
 
 const SORT_FIELDS = [
   { key: 'title',        label: 'Title' },
@@ -376,9 +377,17 @@ export default function Library({ initialFilters = {} }) {
         <div className="filter-bar">
           <input placeholder="Search titles…" value={search} style={{ width: 200 }}
             onChange={e => setSearch(e.target.value)} />
-          <select value={sort} onChange={e => setSort(e.target.value)} style={{ width: 130 }}>
-            {SORT_FIELDS.map(f => <option key={f.key} value={f.key}>Sort: {f.label}</option>)}
-          </select>
+          <CustomSelect
+            value={sort}
+            options={SORT_FIELDS.map(field => ({
+              value: field.key,
+              label: `Sort: ${field.label}`,
+            }))}
+            onChange={setSort}
+            className="filter-select"
+            style={{ width: 130 }}
+            ariaLabel="Sort library"
+          />
           <button className="icon-btn" style={{ padding: '5px 10px' }}
             onClick={() => setOrder(o => o === 'asc' ? 'desc' : 'asc')}>
             {order === 'asc' ? '↑ Asc' : '↓ Desc'}
@@ -386,10 +395,17 @@ export default function Library({ initialFilters = {} }) {
           {hasFilters && (
             <button className="icon-btn" onClick={clearFilters}>✕ Clear</button>
           )}
-          <select value={limit} onChange={e => setLimit(Number(e.target.value))}
-            style={{ marginLeft: 'auto' }}>
-            {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n} / page</option>)}
-          </select>
+          <CustomSelect
+            value={limit}
+            options={PAGE_SIZE_OPTIONS.map(size => ({
+              value: size,
+              label: `${size} / page`,
+            }))}
+            onChange={value => setLimit(Number(value))}
+            className="filter-select"
+            style={{ width: 110, marginLeft: 'auto' }}
+            ariaLabel="Entries per page"
+          />
           <button className="icon-btn" onClick={() => load()} title="Refresh" style={{ padding: '5px 10px' }}>Refresh</button>
         </div>
 
@@ -486,10 +502,16 @@ export default function Library({ initialFilters = {} }) {
                         )}
                       </td>
                       <td className="col-status" onClick={ev => ev.stopPropagation()}>
-                        <select className="inline-select" value={e.status}
-                          onChange={ev => handleStatusChange(e.id, ev.target.value)}>
-                          {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-                        </select>
+                        <CustomSelect
+                          className="inline-select"
+                          value={e.status}
+                          options={STATUSES.map(status => ({
+                            value: status,
+                            label: statusLabel(status),
+                          }))}
+                          onChange={value => handleStatusChange(e.id, value)}
+                          ariaLabel={`Status for ${e.title}`}
+                        />
                       </td>
                       <td className="col-rating" onClick={ev => ev.stopPropagation()}>
                         {editingRating?.id === e.id ? (

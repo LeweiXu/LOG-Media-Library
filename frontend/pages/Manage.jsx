@@ -12,6 +12,7 @@ import ResyncModal from './components/ResyncModal.jsx';
 import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
 import { useExtensionPresent } from '../extensionBridge.js';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
+import CustomSelect from './components/CustomSelect.jsx';
 
 const ALL = '__all__';
 const UNLISTED = '';
@@ -399,29 +400,49 @@ export default function Manage() {
           {selectedIds.size ? `${selectedIds.size} selected` : 'Select entries to edit in bulk'}
         </div>
 
-        <select className="inline-select batch-select" value={bulkListValue} disabled={bulkBusy || selectedIds.size === 0}
-          onChange={e => bulkAssignList(e.target.value)}>
-          <option value="" disabled>Assign to list…</option>
-          {listNames.map(n => <option key={n} value={n}>{n}</option>)}
-          <option value="__none__">— Remove from list —</option>
-        </select>
+        <CustomSelect
+          className="inline-select batch-select"
+          value={bulkListValue}
+          options={[
+            ...listNames.map(name => ({ value: name, label: name })),
+            { value: '__none__', label: '— Remove from list —' },
+          ]}
+          onChange={bulkAssignList}
+          placeholder="Assign to list…"
+          disabled={bulkBusy || selectedIds.size === 0}
+          style={{ width: '100%' }}
+          ariaLabel="Assign selected entries to list"
+        />
 
-        <select className="inline-select batch-select" value={bulkStatusValue} disabled={bulkBusy || selectedIds.size === 0}
-          onChange={e => bulkSetStatus(e.target.value)}>
-          <option value="" disabled>Set status…</option>
-          {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-        </select>
+        <CustomSelect
+          className="inline-select batch-select"
+          value={bulkStatusValue}
+          options={STATUSES.map(status => ({
+            value: status,
+            label: statusLabel(status),
+          }))}
+          onChange={bulkSetStatus}
+          placeholder="Set status…"
+          disabled={bulkBusy || selectedIds.size === 0}
+          style={{ width: '100%' }}
+          ariaLabel="Set status for selected entries"
+        />
 
-        <select className="inline-select batch-select" value={bulkField} disabled={bulkBusy || selectedIds.size === 0}
-          onChange={e => {
-            setBulkField(e.target.value);
+        <CustomSelect
+          className="inline-select batch-select"
+          value={bulkField}
+          options={BULK_FIELDS.map(field => ({ value: field.key, label: field.label }))}
+          onChange={value => {
+            setBulkField(value);
             setBulkFieldValue('');
             setBulkListValue('');
             setBulkStatusValue('');
-          }}>
-          <option value="">Edit field…</option>
-          {BULK_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-        </select>
+          }}
+          placeholder="Edit field…"
+          disabled={bulkBusy || selectedIds.size === 0}
+          style={{ width: '100%' }}
+          ariaLabel="Choose field to edit"
+        />
 
         {bulkField && (
           <div className="batch-field-row">
@@ -430,12 +451,17 @@ export default function Manage() {
               if (meta.kind === 'medium' || meta.kind === 'origin') {
                 const opts = meta.kind === 'medium' ? MEDIUMS : ORIGINS;
                 return (
-                  <select className="inline-select batch-select" value={bulkFieldValue} disabled={bulkBusy}
+                  <CustomSelect
+                    className="inline-select batch-select"
+                    value={bulkFieldValue}
+                    options={opts.map(option => ({ value: option, label: option }))}
+                    onChange={setBulkFieldValue}
+                    placeholder={`Choose ${meta.label.toLowerCase()}…`}
+                    disabled={bulkBusy}
                     style={{ flex: 1 }}
-                    onChange={e => setBulkFieldValue(e.target.value)}>
-                    <option value="">Choose {meta.label.toLowerCase()}…</option>
-                    {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                    maxVisible={opts.length}
+                    ariaLabel={`Choose ${meta.label.toLowerCase()}`}
+                  />
                 );
               }
               return (
@@ -568,9 +594,17 @@ export default function Manage() {
         <div className="filter-bar">
           <input placeholder="Search titles…" value={search} style={{ width: 200 }}
             onChange={e => setSearch(e.target.value)} />
-          <select value={sort} onChange={e => setSort(e.target.value)}>
-            {SORT_FIELDS.map(f => <option key={f.key} value={f.key}>Sort: {f.label}</option>)}
-          </select>
+          <CustomSelect
+            value={sort}
+            options={SORT_FIELDS.map(field => ({
+              value: field.key,
+              label: `Sort: ${field.label}`,
+            }))}
+            onChange={setSort}
+            className="filter-select"
+            style={{ width: 140 }}
+            ariaLabel="Sort entries"
+          />
           <button className="icon-btn" style={{ padding: '5px 10px' }}
             onClick={() => setOrder(o => o === 'asc' ? 'desc' : 'asc')}>
             {order === 'asc' ? '↑ Asc' : '↓ Desc'}
@@ -578,10 +612,17 @@ export default function Manage() {
           {hasFilters && (
             <button className="icon-btn" onClick={clearFilters}>✕ Clear</button>
           )}
-          <select value={limit} onChange={e => setLimit(Number(e.target.value))}
-            style={{ marginLeft: 'auto' }}>
-            {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n} / page</option>)}
-          </select>
+          <CustomSelect
+            value={limit}
+            options={PAGE_SIZE_OPTIONS.map(size => ({
+              value: size,
+              label: `${size} / page`,
+            }))}
+            onChange={value => setLimit(Number(value))}
+            className="filter-select"
+            style={{ width: 110, marginLeft: 'auto' }}
+            ariaLabel="Entries per page"
+          />
           <button className="icon-btn" onClick={() => { loadLists(); loadEntries(); }} title="Refresh" style={{ padding: '5px 10px' }}>
             Refresh
           </button>
@@ -685,16 +726,18 @@ export default function Manage() {
                       <span style={{ color: 'var(--dim)' }}>{fmtDate(entry.updated_at)}</span>
                     </td>
                     <td className="col-custom-list" onClick={ev => ev.stopPropagation()}>
-                      <select
+                      <CustomSelect
                         className="inline-select"
                         value={entry.custom_list || ''}
                         disabled={saving === `entry:${entry.id}`}
-                        onChange={ev => saveEntryList(entry, ev.target.value)}
+                        options={[
+                          { value: '', label: 'No List' },
+                          ...listNames.map(name => ({ value: name, label: name })),
+                        ]}
+                        onChange={value => saveEntryList(entry, value)}
                         style={{ minWidth: 180 }}
-                      >
-                        <option value="">No List</option>
-                        {listNames.map(name => <option key={name} value={name}>{name}</option>)}
-                      </select>
+                        ariaLabel={`Custom list for ${entry.title}`}
+                      />
                     </td>
                     {showActions && (
                       <td className="action-cell" onClick={ev => ev.stopPropagation()}>

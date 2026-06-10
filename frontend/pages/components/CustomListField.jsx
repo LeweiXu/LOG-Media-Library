@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
+import CustomSelect from './CustomSelect.jsx';
 
 // Sentinel option value that flips the picker into "new list" text-entry mode.
 const NEW_SENTINEL = '__new__';
 
 /**
- * Custom-list picker that doubles as a creator. Renders the styled <select> of
+ * Custom-list picker that doubles as a creator. Renders the styled dropdown of
  * existing lists plus a trailing "+ New List…" option; choosing it swaps to a
  * text input (with a cancel button) so a brand-new list name can be typed.
  *
@@ -27,8 +28,7 @@ export default function CustomListField({ value, onChange, lists = [] }) {
   // an orphaned name), so editing an entry doesn't briefly show a blank select.
   const showValueOption = value && !names.includes(value);
 
-  function handleSelect(e) {
-    const v = e.target.value;
+  function handleSelect(v) {
     if (v === NEW_SENTINEL) {
       onChange('');
       setCreating(true);
@@ -68,11 +68,16 @@ export default function CustomListField({ value, onChange, lists = [] }) {
   }
 
   return (
-    <select className="form-input" value={value} onChange={handleSelect}>
-      <option value="">No List</option>
-      {showValueOption && <option value={value}>{value}</option>}
-      {names.map(name => <option key={name} value={name}>{name}</option>)}
-      <option value={NEW_SENTINEL}>+ New List…</option>
-    </select>
+    <CustomSelect
+      value={value}
+      options={[
+        { value: '', label: 'No List' },
+        ...(showValueOption ? [{ value, label: value }] : []),
+        ...names.map(name => ({ value: name, label: name })),
+        { value: NEW_SENTINEL, label: '+ New List…' },
+      ]}
+      onChange={handleSelect}
+      ariaLabel="Custom list"
+    />
   );
 }

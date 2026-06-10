@@ -2,10 +2,25 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getExplore, createEntry, getCustomLists } from '../../api.jsx';
 import { MEDIUMS, STATUSES, RATING_OPTIONS, statusLabel, onCoverError } from '../../utils.jsx';
 import CustomListField from './CustomListField.jsx';
+import CustomSelect from './CustomSelect.jsx';
 
 // Large candidate pool so the queue keeps going as the user adds/skips.
 const POOL_LIMIT = 120;
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
+const today = () => new Date().toISOString().slice(0, 10);
+const CURRENT_YEAR = new Date().getFullYear();
+const COMPLETION_YEARS = Array.from({ length: 101 }, (_, index) => CURRENT_YEAR - index);
+const COMPLETION_YEAR_OPTIONS = COMPLETION_YEARS.map(year => ({
+  value: String(year),
+  label: String(year),
+}));
+
+function randomDateInYear(year) {
+  const start = new Date(Date.UTC(year, 0, 1));
+  const days = Math.round((Date.UTC(year + 1, 0, 1) - start.getTime()) / 86400000);
+  const offset = Math.floor(Math.random() * days);
+  return new Date(start.getTime() + offset * 86400000).toISOString().slice(0, 10);
+}
 
 // Stable identity for an explore item (no DB id until added).
 const keyOf = (it) => `${it.source || ''}:${it.external_id || it.title}`;
@@ -16,6 +31,7 @@ function defaultForm(item) {
   const total = item?.total != null && item.total !== '' ? String(item.total) : '';
   return {
     status:   'completed',
+    completed_at: today(),
     rating:   '',
     progress: total,
     total,
@@ -121,8 +137,13 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
     // Progress tracks completion: a completed entry is fully progressed (when a
     // total is known), and progress clears when leaving the completed status.
     if (k === 'status') {
-      if (v === 'completed') next.progress = next.total;
-      else next.progress = '';
+      if (v === 'completed') {
+        next.progress = next.total;
+        if (!next.completed_at) next.completed_at = today();
+      } else {
+        next.progress = '';
+        next.completed_at = '';
+      }
     }
     if (k === 'total' && next.status === 'completed') next.progress = v;
     return next;
@@ -144,6 +165,10 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
 
   async function add() {
     if (!current || saving) return;
+    if (form.status === 'completed' && !form.completed_at) {
+      setAddErr('Completion date is required for completed entries.');
+      return;
+    }
     setSaving(true); setAddErr('');
     try {
       await createEntry({
@@ -151,6 +176,9 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
         medium:          current.medium || '',
         origin:          current.origin || '',
         status:          form.status,
+        completed_at:    form.status === 'completed'
+          ? `${form.completed_at}T00:00:00Z`
+          : undefined,
         year:            current.year   || undefined,
         rating:          form.rating   !== '' ? parseFloat(form.rating)   : undefined,
         progress:        form.progress !== '' ? parseInt(form.progress)   : undefined,
@@ -286,6 +314,44 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
                     ))}
                   </div>
                 </div>
+
+                {form.status === 'completed' && (
+                  <div className="form-row" style={{ marginBottom: 14 }}>
+                    <label className="form-label">Completed Date</label>
+                    <div className="quickadd-completion-date">
+                      <input
+                        className="form-input"
+                        type="date"
+                        value={form.completed_at}
+                        onChange={event => setField('completed_at', event.target.value)}
+                      />
+                      <CustomSelect
+                        value={form.completed_at?.slice(0, 4) || ''}
+                        options={COMPLETION_YEAR_OPTIONS}
+                        onChange={year => setField(
+                          'completed_at',
+                          `${year}-01-01`,
+                        )}
+                        placeholder="Year"
+                        maxVisible={5}
+                        ariaLabel="Completion year"
+                      />
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          const year = Number(form.completed_at?.slice(0, 4))
+                            || Number(current.year)
+                            || new Date().getFullYear();
+                          setField('completed_at', randomDateInYear(year));
+                        }}
+                        title="Choose a random completion date in the selected year"
+                      >
+                        Randomize
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="form-row" style={{ marginBottom: 14 }}>
                   <label className="form-label">Rating</label>

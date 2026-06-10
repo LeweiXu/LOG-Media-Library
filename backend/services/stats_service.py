@@ -233,6 +233,7 @@ def get_stats(db: Session, username: str) -> StatsResponse:
     )
     total = len(entries)
     completed_count = status_counts["completed"]
+    resolved_count = completed_count + status_counts["dropped"]
 
     return StatsResponse(
         total=total,
@@ -246,7 +247,7 @@ def get_stats(db: Session, username: str) -> StatsResponse:
         by_medium=by_medium,
         by_origin=by_origin,
         entries_per_month=entries_per_month,
-        completion_rate=round(completed_count / total * 100, 1) if total else 0,
+        completion_rate=round(completed_count / resolved_count * 100, 1) if resolved_count else 0,
         rating_coverage=round(rated_completed / completed_count * 100, 1) if completed_count else 0,
         average_active_progress=_average(active_progress, 1),
         oldest_planned_title=oldest_planned[0].title if oldest_planned else None,

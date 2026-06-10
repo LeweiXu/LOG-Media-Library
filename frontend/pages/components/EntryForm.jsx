@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getCustomLists, fetchChapterCount } from '../../api.jsx';
 import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
 import CustomListField from './CustomListField.jsx';
+import CustomSelect from './CustomSelect.jsx';
 
 function toDateInput(iso) {
   if (!iso) return '';
@@ -162,18 +163,25 @@ export default function EntryForm({
       <div className="form-row-2" style={{ marginBottom: 14 }}>
         <div>
           <label className="form-label">Medium</label>
-          <select className="form-input" value={form.medium}
-            onChange={e => setField('medium', e.target.value)}>
-            <option value="">-</option>
-            {MEDIUMS.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <CustomSelect
+            value={form.medium}
+            options={[
+              { value: '', label: '-' },
+              ...MEDIUMS.map(medium => ({ value: medium, label: medium })),
+            ]}
+            onChange={value => setField('medium', value)}
+            maxVisible={MEDIUMS.length + 1}
+            ariaLabel="Medium"
+          />
         </div>
         <div>
           <label className="form-label">Status</label>
-          <select className="form-input" value={form.status}
-            onChange={e => setField('status', e.target.value)}>
-            {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-          </select>
+          <CustomSelect
+            value={form.status}
+            options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
+            onChange={value => setField('status', value)}
+            ariaLabel="Status"
+          />
         </div>
       </div>
 
@@ -222,11 +230,15 @@ export default function EntryForm({
       <div className="form-row-2" style={{ marginBottom: 14 }}>
         <div>
           <label className="form-label">Origin</label>
-          <select className="form-input" value={form.origin}
-            onChange={e => setField('origin', e.target.value)}>
-            <option value="">-</option>
-            {ORIGINS.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
+          <CustomSelect
+            value={form.origin}
+            options={[
+              { value: '', label: '-' },
+              ...ORIGINS.map(origin => ({ value: origin, label: origin })),
+            ]}
+            onChange={value => setField('origin', value)}
+            ariaLabel="Origin"
+          />
         </div>
         <div>
           <label className="form-label">Year</label>

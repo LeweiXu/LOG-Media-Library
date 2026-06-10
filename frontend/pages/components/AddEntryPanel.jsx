@@ -4,6 +4,7 @@ import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, o
 import { SEARCH_SOURCES, SOURCE_LABEL, saveSources, resultToEntry } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
+import CustomSelect from './CustomSelect.jsx';
 import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
 
 /**
@@ -279,14 +280,16 @@ export default function AddEntryPanel({
                     {item.genres && <div className="add-preview-genres">{item.genres}</div>}
                     {item.description && <p className="add-preview-desc">{item.description}</p>}
                     <div className="add-preview-actions">
-                      <select
-                        className="form-input"
-                        style={{ width: 'auto' }}
+                      <CustomSelect
                         value={previewStatus[idx] || 'current'}
-                        onChange={e => setPreviewStatus(s => ({ ...s, [idx]: e.target.value }))}
-                      >
-                        {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-                      </select>
+                        options={STATUSES.map(status => ({
+                          value: status,
+                          label: statusLabel(status),
+                        }))}
+                        onChange={value => setPreviewStatus(s => ({ ...s, [idx]: value }))}
+                        style={{ width: 140 }}
+                        ariaLabel={`Status for ${item.title}`}
+                      />
                       <button className="btn" type="button" onClick={() => openAdd(item, previewStatus[idx] || 'current')}>
                         Add to Library
                       </button>
