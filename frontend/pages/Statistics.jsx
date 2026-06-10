@@ -1,38 +1,125 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { getEntries, getStats } from '../api.jsx';
-import { extractItems } from '../utils.jsx';
-import { SkeletonChartBox, SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
+import { useEffect, useMemo, useState } from 'react';
+import { getStats } from '../api.jsx';
+import { SkeletonChartBox, SkeletonLine } from './components/Skeletons.jsx';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, PieChart, Pie, Cell,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Line,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
 
-const COLORS = ['#4a9eff','#3ecf6a','#f5a623','#e05656','#a78bfa','#38bdf8','#fb923c'];
+const COLORS = ['#4a9eff', '#3ecf6a', '#f5a623', '#e05656', '#a78bfa', '#38bdf8', '#fb923c'];
 
 const STATUS_LABELS = {
-  current: 'Current', planned: 'Planned', completed: 'Completed',
-  on_hold: 'On Hold', dropped: 'Dropped',
+  current: 'Current',
+  planned: 'Planned',
+  completed: 'Completed',
+  on_hold: 'On Hold',
+  dropped: 'Dropped',
 };
+
+const CONSUMED_RANGE_KEY = 'statistics_consumed_range';
+const ADDED_RANGE_KEY = 'statistics_added_range';
+
+const MONTH_INPUT_STYLE = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  color: 'var(--text)',
+  fontSize: 10,
+  padding: '2px 6px',
+  outline: 'none',
+  fontFamily: 'inherit',
+  textTransform: 'none',
+  letterSpacing: 'normal',
+  colorScheme: 'dark',
+  cursor: 'pointer',
+};
+
+function monthParam(value) {
+  return /^\d{4}-\d{2}$/.test(value || '') ? value : '';
+}
+
+function loadStoredRange(key) {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(key));
+    return {
+      start: monthParam(value?.start),
+      end: monthParam(value?.end),
+    };
+  } catch {
+    return { start: '', end: '' };
+  }
+}
+
+function storeRange(key, start, end) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ start, end }));
+  } catch {
+    // Storage may be unavailable in restricted browser contexts.
+  }
+}
+
+function resolveRange(range, defaultStart, minimum, maximum) {
+  if (!minimum || !maximum) return { start: '', end: '' };
+
+  const requestedStart = range.start || defaultStart;
+  const requestedEnd = range.end || maximum;
+  const start = requestedStart < minimum
+    ? minimum
+    : requestedStart > maximum ? maximum : requestedStart;
+  const end = requestedEnd < minimum
+    ? minimum
+    : requestedEnd > maximum ? maximum : requestedEnd;
+
+  return start <= end ? { start, end } : { start: end, end };
+}
 
 function Tooltip_({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="custom-tooltip">
       <div className="tt-label">{label}</div>
-      {payload.map((p, i) => (
-        <div key={i} className="tt-val" style={{ color: p.color }}>{p.name}: {p.value}</div>
+      {payload.map((item, index) => (
+        <div key={index} className="tt-val" style={{ color: item.color }}>
+          {item.name}: {item.value}
+        </div>
       ))}
     </div>
   );
 }
 
-function StatCard({ val, label, sub }) {
+function StatCard({ value, label, sub }) {
   return (
     <div className="stats-card">
-      <span className="stats-card-val">{val ?? '—'}</span>
+      <span className="stats-card-val">{value ?? '—'}</span>
       <span className="stats-card-lbl">{label}</span>
       {sub && <span className="stats-card-sub">{sub}</span>}
+    </div>
+  );
+}
+
+function PieLegend({ data, colorOffset = 0 }) {
+  return (
+    <div className="stats-pie-legend">
+      {data.map((item, index) => (
+        <div key={item.name} className="stats-pie-legend-row">
+          <span
+            className="stats-pie-swatch"
+            style={{ background: COLORS[(index + colorOffset) % COLORS.length] }}
+          />
+          <span>{item.name}</span>
+          <span className="stats-pie-leader" aria-hidden="true" />
+          <span className="stats-pie-count">{item.value}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -41,248 +128,141 @@ function StatisticsSkeleton() {
   return (
     <div className="skeleton-page" aria-label="Loading statistics">
       <div className="stats-grid">
-        {['Total Entries', 'Completed', 'Avg Rating', 'Media Types'].map((label, i) => (
-          <div key={label} className="stats-card">
-            <SkeletonLine width={i === 2 ? 68 : 48} height={28} />
+        {[
+          'Total Entries', 'Completed', 'Current', 'Planned',
+          'Completion Rate', 'Avg Rating', 'Rating Coverage', 'Avg Rating',
+        ].map((label, index) => (
+          <div key={`${label}-${index}`} className="stats-card">
+            <SkeletonLine width={64} height={28} />
             <span className="stats-card-lbl">{label}</span>
-            {i === 2 && <SkeletonLine width={82} height={10} style={{ marginTop: 6 }} />}
           </div>
         ))}
       </div>
-
       <div className="chart-section">
         <div className="chart-section-title">Consumed per Month</div>
         <SkeletonChartBox variant="plot" />
       </div>
-
-      <div className="charts-2col" style={{ marginBottom: 28 }}>
-        <SkeletonChartBox rows={7} />
-        <SkeletonChartBox rows={7} />
-      </div>
-
-      <div className="charts-2col" style={{ marginBottom: 28 }}>
-        <div className="chart-box">
-          <SkeletonLine width={72} height={10} style={{ marginBottom: 18 }} />
-          <div className="skeleton-pie-layout">
-            <div className="skeleton-pie" />
-            <div style={{ flex: 1 }}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="skeleton-legend-row">
-                  <SkeletonLine width={8} height={8} />
-                  <SkeletonLine width={`${48 + i * 8}%`} height={10} />
-                  <SkeletonLine width={20} height={10} style={{ marginLeft: 'auto' }} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="chart-box">
-          <SkeletonLine width={72} height={10} style={{ marginBottom: 18 }} />
-          <div className="skeleton-pie-layout">
-            <div className="skeleton-pie" />
-            <div style={{ flex: 1 }}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="skeleton-legend-row">
-                  <SkeletonLine width={8} height={8} />
-                  <SkeletonLine width={`${52 + i * 6}%`} height={10} />
-                  <SkeletonLine width={20} height={10} style={{ marginLeft: 'auto' }} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="chart-section">
-        <div className="chart-section-title">Top Rated</div>
-        <div className="chart-box">
-          <SkeletonTable
-            headers={['#', 'Title', 'Medium', 'Origin', 'Rating']}
-            rows={7}
-            widths={['30%', '78%', '54%', '52%', '42%']}
-          />
-        </div>
+        <div className="chart-section-title">Added per Month</div>
+        <SkeletonChartBox variant="plot" />
+      </div>
+      <div className="charts-2col" style={{ marginBottom: 28 }}>
+        <SkeletonChartBox rows={7} />
+        <SkeletonChartBox rows={7} />
+      </div>
+      <div className="charts-2col" style={{ marginBottom: 28 }}>
+        <SkeletonChartBox rows={7} />
+        <SkeletonChartBox rows={7} />
+      </div>
+      <div className="chart-section">
+        <div className="chart-section-title">Release Year Profile</div>
+        <SkeletonChartBox variant="plot" />
       </div>
     </div>
   );
-}
-
-function PieLegend({ data, colorOffset = 0 }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      {data.map((d, i) => (
-        <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-          <div style={{ width: 8, height: 8, borderRadius: 2, background: COLORS[(i + colorOffset) % COLORS.length], flexShrink: 0 }} />
-          <span style={{ color: 'var(--text)' }}>{d.name}</span>
-          <span style={{ color: 'var(--dim)', marginLeft: 'auto' }}>{d.value}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function deriveStats(entries) {
-  if (!entries.length) return {};
-
-  const completed = entries.filter(e => e.status === 'completed');
-  const rated     = completed.filter(e => e.rating != null);
-  const avgRating = rated.length
-    ? rated.reduce((a, e) => a + e.rating, 0) / rated.length
-    : null;
-
-  const medMap = {};
-  entries.forEach(e => { if (e.medium) medMap[e.medium] = (medMap[e.medium] || 0) + 1; });
-  const by_medium = Object.entries(medMap).sort((a, b) => b[1] - a[1]).map(([medium, count]) => ({ medium, count }));
-
-  const stMap = {};
-  entries.forEach(e => { stMap[e.status] = (stMap[e.status] || 0) + 1; });
-  const by_status = Object.entries(stMap).map(([status, count]) => ({ status, count }));
-
-  const oriMap = {};
-  entries.forEach(e => { if (e.origin) oriMap[e.origin] = (oriMap[e.origin] || 0) + 1; });
-  const by_origin = Object.entries(oriMap).sort((a, b) => b[1] - a[1]).map(([origin, count]) => ({ origin, count }));
-
-  // Rating distribution at 0.5 increments, only non-empty buckets
-  const buckets = {};
-  rated.forEach(e => {
-    const r = Math.round(e.rating * 2) / 2;
-    if (r >= 0.5 && r <= 10) buckets[r] = (buckets[r] || 0) + 1;
-  });
-  const rating_dist = Object.keys(buckets)
-    .map(r => parseFloat(r))
-    .sort((a, b) => a - b)
-    .map(r => ({ rating: r, count: buckets[r] }));
-
-  const monthMap = {};
-  entries.forEach(e => {
-    if (!e.completed_at) return;
-    const d = new Date(e.completed_at);
-    if (isNaN(d)) return;
-    const key   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
-    if (!monthMap[key]) monthMap[key] = { key, label, count: 0 };
-    monthMap[key].count++;
-  });
-  const entries_per_month = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
-
-  const yearMap = {};
-  entries.forEach(e => { if (e.year) yearMap[e.year] = (yearMap[e.year] || 0) + 1; });
-  const by_year = Object.entries(yearMap).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).map(([year, count]) => ({ year, count }));
-
-  const top_rated = [...rated].sort((a, b) => b.rating - a.rating).slice(0, 10);
-
-  return {
-    total: entries.length, completed: completed.length, avg_rating: avgRating,
-    by_medium, by_status, by_origin, rating_dist, entries_per_month, by_year, top_rated,
-  };
-}
-
-const MONTH_INPUT_STYLE = {
-  background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)',
-  fontSize: 10, padding: '2px 6px', outline: 'none', fontFamily: 'inherit',
-  textTransform: 'none', letterSpacing: 'normal', colorScheme: 'dark', cursor: 'pointer',
-};
-
-function monthParam(value) {
-  return /^\d{4}-\d{2}$/.test(value || '') ? value : '';
 }
 
 export default function Statistics() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [apiStats,   setApiStats]   = useState(null);
-  const [entries,    setEntries]    = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState('');
-  const [rangeStart, setRangeStart] = useState(() => monthParam(searchParams.get('start')));
-  const [rangeEnd,   setRangeEnd]   = useState(() => monthParam(searchParams.get('end')));
-  const [barsReady,  setBarsReady]  = useState(false);
-  const [pieAnimId,  setPieAnimId]  = useState(0);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [consumedRange, setConsumedRange] = useState(() => loadStoredRange(CONSUMED_RANGE_KEY));
+  const [addedRange, setAddedRange] = useState(() => loadStoredRange(ADDED_RANGE_KEY));
+  const [barsReady, setBarsReady] = useState(false);
+  const [pieAnimId, setPieAnimId] = useState(0);
 
   useEffect(() => {
-    async function load() {
-      setLoading(true); setError('');
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError('');
       try {
-        const [statsData, allEntries] = await Promise.all([
-          getStats().catch(() => null),
-          getEntries({ limit: 2000 }),
-        ]);
-        setEntries(extractItems(allEntries));
-        setApiStats(statsData);
-      } catch (e) {
-        setError(e.message);
+        const data = await getStats();
+        if (!cancelled) setStats(data);
+      } catch (err) {
+        if (!cancelled) setError(err.message);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
-    load();
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  // Animate CSS bars after data loads. The rAF ensures this fires in a new
-  // macro-task so the cleanup+rerun from React StrictMode (dev) doesn't cancel it.
   useEffect(() => {
-    if (!loading) {
-      setBarsReady(false);
-      const id = requestAnimationFrame(() => setBarsReady(true));
-      return () => cancelAnimationFrame(id);
-    }
+    if (loading) return;
+    setBarsReady(false);
+    const id = requestAnimationFrame(() => {
+      setBarsReady(true);
+      setPieAnimId(value => value + 1);
+    });
+    return () => cancelAnimationFrame(id);
   }, [loading]);
 
-  // Recharts pie animations can get stuck after reloads/HMR in some dev flows.
-  // Bumping animationId after data load forces a clean animation cycle.
-  useEffect(() => {
-    if (!loading) {
-      const id = requestAnimationFrame(() => {
-        setPieAnimId(prev => prev + 1);
-      });
-      return () => cancelAnimationFrame(id);
-    }
-  }, [loading, entries.length]);
-
-  // Memoize expensive derivation so references stay stable across renders
-  const derived = useMemo(() => deriveStats(entries), [entries]);
-  const s = useMemo(
-    () => ({ ...derived, ...(apiStats || {}), entries_per_month: derived.entries_per_month }),
-    [derived, apiStats],
+  const activity = stats?.activity_per_month ?? [];
+  const activityStart = activity[0]?.key ?? '';
+  const activityEnd = activity[activity.length - 1]?.key ?? '';
+  const defaultConsumedStart = activity.length > 12 ? activity[activity.length - 12].key : activityStart;
+  const defaultAddedStart = activity.length > 5 ? activity[activity.length - 5].key : activityStart;
+  const { start: consumedStart, end: consumedEnd } = resolveRange(
+    consumedRange,
+    defaultConsumedStart,
+    activityStart,
+    activityEnd,
   );
-
-  const allMonths = s.entries_per_month ?? [];
-
-  // Compute the visible range directly in the render phase — no useEffect, no
-  // extra state update — so filteredMonths is correct on the very first render
-  // with data and never changes out from under a running recharts animation.
-  const defaultStart = allMonths.length > 12 ? allMonths[allMonths.length - 12].key : allMonths[0]?.key ?? '';
-  const defaultEnd   = allMonths[allMonths.length - 1]?.key ?? '';
-  const effectiveStart = rangeStart || defaultStart;
-  const effectiveEnd   = rangeEnd   || defaultEnd;
-
-  const filteredMonths = useMemo(
-    () => allMonths.filter(m => m.key >= effectiveStart && m.key <= effectiveEnd),
-    [allMonths, effectiveStart, effectiveEnd],
+  const { start: addedStart, end: addedEnd } = resolveRange(
+    addedRange,
+    defaultAddedStart,
+    activityStart,
+    activityEnd,
+  );
+  const consumedActivity = useMemo(
+    () => activity.filter(item => item.key >= consumedStart && item.key <= consumedEnd),
+    [activity, consumedEnd, consumedStart],
+  );
+  const addedActivity = useMemo(
+    () => activity.filter(item => item.key >= addedStart && item.key <= addedEnd),
+    [activity, addedEnd, addedStart],
   );
 
   useEffect(() => {
-    if (!allMonths.length) return;
-    const params = new URLSearchParams();
-    if (rangeStart && rangeStart !== defaultStart) params.set('start', rangeStart);
-    if (rangeEnd && rangeEnd !== defaultEnd) params.set('end', rangeEnd);
-    setSearchParams(params, { replace: true });
-  }, [allMonths.length, rangeStart, rangeEnd, defaultStart, defaultEnd, setSearchParams]);
+    if (!activity.length) return;
+    storeRange(CONSUMED_RANGE_KEY, consumedStart, consumedEnd);
+  }, [activity.length, consumedEnd, consumedStart]);
 
-  const maxMedium = s.by_medium?.length ? Math.max(...s.by_medium.map(m => m.count), 1) : 1;
-  const maxRating = s.rating_dist?.length ? Math.max(...s.rating_dist.map(r => r.count), 1) : 1;
+  useEffect(() => {
+    if (!activity.length) return;
+    storeRange(ADDED_RANGE_KEY, addedStart, addedEnd);
+  }, [activity.length, addedEnd, addedStart]);
 
-  const statusPieData = useMemo(
-    () => (s.by_status || []).map(({ status, count }) => ({ name: STATUS_LABELS[status] || status, value: count })),
-    [s.by_status],
-  );
+  const statusPieData = useMemo(() => {
+    if (!stats) return [];
+    return ['current', 'planned', 'completed', 'on_hold', 'dropped']
+      .map(status => ({ name: STATUS_LABELS[status], value: stats[status] || 0 }))
+      .filter(item => item.value > 0);
+  }, [stats]);
+
   const originPieData = useMemo(
-    () => (s.by_origin || []).slice(0, 6).map(({ origin, count }) => ({ name: origin, value: count })),
-    [s.by_origin],
+    () => (stats?.by_origin || []).slice(0, 6).map(item => ({
+      name: item.origin,
+      value: item.count,
+    })),
+    [stats],
   );
-  return (
-    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <div className="stats-layout">
 
+  const maxCompletionTotal = Math.max(
+    ...(stats?.completion_by_medium || []).map(item => item.total),
+    1,
+  );
+  const maxMedium = Math.max(...(stats?.by_medium || []).map(item => item.count), 1);
+  const maxBacklog = Math.max(...(stats?.backlog_age || []).map(item => item.count), 1);
+  const maxRatingBucket = Math.max(
+    ...(stats?.rating_distribution || []).map(item => item.count),
+    1,
+  );
+
+  return (
+    <div className="statistics-page">
+      <div className="stats-layout">
         <div className="page-head" style={{ marginBottom: 24 }}>
           <div className="page-head-left">
             <span className="page-title">Statistics</span>
@@ -299,121 +279,285 @@ export default function Statistics() {
 
         {loading && <StatisticsSkeleton />}
 
-        {!loading && !error && (
+        {!loading && !error && stats && (
           <>
-            {/* Summary cards */}
             <div className="stats-grid">
-              <StatCard val={s.total}     label="Total Entries" />
-              <StatCard val={s.completed} label="Completed" />
-              <StatCard val={s.avg_rating != null ? s.avg_rating.toFixed(2) : '—'} label="Avg Rating" sub="rated entries" />
-              <StatCard val={s.by_medium?.length} label="Media Types" />
+              <StatCard value={stats.total} label="Total Entries" />
+              <StatCard value={stats.completed} label="Completed" />
+              <StatCard value={stats.current} label="Current" />
+              <StatCard value={stats.planned} label="Planned" />
+              <StatCard value={`${stats.completion_rate.toFixed(1)}%`} label="Completion Rate" />
+              <StatCard
+                value={stats.avg_rating != null ? stats.avg_rating.toFixed(2) : '—'}
+                label="Avg Rating"
+                sub="completed entries"
+              />
+              <StatCard
+                value={`${stats.rating_coverage.toFixed(1)}%`}
+                label="Rating Coverage"
+                sub="completed entries rated"
+              />
+              <StatCard
+                value={stats.avg_rating_all != null ? stats.avg_rating_all.toFixed(2) : '—'}
+                label="Avg Rating"
+                sub="all entries"
+              />
             </div>
 
-            {/* Entries per month */}
-            {allMonths.length > 0 && (
-              <div className="chart-section">
-                <div className="chart-section-title">
-                  Consumed per Month
-                  <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', textTransform: 'none', letterSpacing: 'normal' }}>
-                    <input type="month" value={effectiveStart} min={allMonths[0]?.key} max={effectiveEnd}
-                      onChange={e => setRangeStart(e.target.value)} style={MONTH_INPUT_STYLE} />
-                    <span style={{ color: 'var(--dim)' }}>–</span>
-                    <input type="month" value={effectiveEnd} min={effectiveStart} max={allMonths[allMonths.length - 1]?.key}
-                      onChange={e => setRangeEnd(e.target.value)} style={MONTH_INPUT_STYLE} />
-                  </span>
+            {activity.length > 0 && (
+              <>
+                <div className="chart-section">
+                  <div className="chart-section-title">
+                    Consumed per Month
+                    <span className="stats-range-controls">
+                      <input
+                        type="month"
+                        value={consumedStart}
+                        min={activityStart}
+                        max={consumedEnd}
+                        onChange={event => setConsumedRange(range => ({
+                          ...range,
+                          start: event.target.value,
+                        }))}
+                        style={MONTH_INPUT_STYLE}
+                      />
+                      <span>to</span>
+                      <input
+                        type="month"
+                        value={consumedEnd}
+                        min={consumedStart}
+                        max={activityEnd}
+                        onChange={event => setConsumedRange(range => ({
+                          ...range,
+                          end: event.target.value,
+                        }))}
+                        style={MONTH_INPUT_STYLE}
+                      />
+                    </span>
+                  </div>
+                  <div className="chart-box">
+                    <div className="chart-canvas chart-canvas-activity">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={consumedActivity} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                          <CartesianGrid vertical={false} stroke="var(--border)" />
+                          <XAxis dataKey="label" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                          <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                          <Bar dataKey="completed" name="Consumed" fill="var(--accent)" opacity={0.72} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
-                <div className="chart-box">
-                  <div className="chart-canvas chart-canvas-month">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={filteredMonths} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                        <CartesianGrid vertical={false} stroke="var(--border)" />
-                        <XAxis dataKey="label" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                        <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                        <Bar dataKey="count" fill="var(--accent)" opacity={0.7} radius={[2, 2, 0, 0]} name="Consumed" />
-                      </BarChart>
-                    </ResponsiveContainer>
+
+                <div className="chart-section">
+                  <div className="chart-section-title">
+                    Added per Month
+                    <span className="stats-range-controls">
+                      <input
+                        type="month"
+                        value={addedStart}
+                        min={activityStart}
+                        max={addedEnd}
+                        onChange={event => setAddedRange(range => ({
+                          ...range,
+                          start: event.target.value,
+                        }))}
+                        style={MONTH_INPUT_STYLE}
+                      />
+                      <span>to</span>
+                      <input
+                        type="month"
+                        value={addedEnd}
+                        min={addedStart}
+                        max={activityEnd}
+                        onChange={event => setAddedRange(range => ({
+                          ...range,
+                          end: event.target.value,
+                        }))}
+                        style={MONTH_INPUT_STYLE}
+                      />
+                    </span>
+                  </div>
+                  <div className="chart-box">
+                    <div className="chart-canvas chart-canvas-activity">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={addedActivity} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                          <CartesianGrid vertical={false} stroke="var(--border)" />
+                          <XAxis dataKey="label" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                          <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                          <Bar dataKey="added" name="Added" fill="var(--green)" opacity={0.72} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="charts-2col stats-section-gap">
+              <div className="chart-box">
+                <div className="chart-box-title">By Medium</div>
+                {(stats.by_medium || []).map((item, index) => (
+                  <div key={item.medium} className="h-bar-row">
+                    <span className="lbl">{item.medium}</span>
+                    <div className="bar-bg">
+                      <div
+                        className="bar-v"
+                        style={{
+                          width: barsReady ? `${item.count / maxMedium * 100}%` : '0%',
+                          background: COLORS[index % COLORS.length],
+                        }}
+                      />
+                    </div>
+                    <span className="cnt">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="chart-box">
+                <div className="chart-box-title">Completion by Medium</div>
+                {(stats.completion_by_medium || []).map(item => (
+                  <div key={item.medium} className="stats-completion-row">
+                    <span className="lbl">{item.medium}</span>
+                    <div className="bar-bg">
+                      <div
+                        className="bar-v"
+                        style={{
+                          width: barsReady ? `${item.rate}%` : '0%',
+                          opacity: 0.5 + (item.total / maxCompletionTotal) * 0.5,
+                        }}
+                      />
+                    </div>
+                    <span className="cnt">{item.completed}/{item.total}</span>
+                    <span className="pct">{item.rate.toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+
+            </div>
+
+            <div className="charts-2col stats-section-gap">
+              <div className="chart-box">
+                <div className="chart-box-title">Backlog Health</div>
+                {(stats.backlog_age || []).map(item => (
+                  <div key={item.key} className="h-bar-row">
+                    <span className="lbl">{item.label}</span>
+                    <div className="bar-bg">
+                      <div
+                        className="bar-v stats-backlog-bar"
+                        style={{ width: barsReady ? `${item.count / maxBacklog * 100}%` : '0%' }}
+                      />
+                    </div>
+                    <span className="cnt">{item.count}</span>
+                  </div>
+                ))}
+                <div className="stats-fact-grid">
+                  <div>
+                    <span className="stats-fact-value">
+                      {stats.average_active_progress != null ? `${stats.average_active_progress.toFixed(0)}%` : '—'}
+                    </span>
+                    <span className="stats-fact-label">active progress</span>
+                  </div>
+                  <div>
+                    <span className="stats-fact-value">{stats.current_completion_streak}</span>
+                    <span className="stats-fact-label">month streak</span>
+                  </div>
+                  <div>
+                    <span className="stats-fact-value">{stats.longest_completion_streak}</span>
+                    <span className="stats-fact-label">best streak</span>
                   </div>
                 </div>
               </div>
-            )}
 
-            <div className="charts-2col" style={{ marginBottom: 28 }}>
-              {/* By medium */}
-              {s.by_medium?.length > 0 && (
-                <div className="chart-box">
-                  <div className="chart-box-title">By Medium</div>
-                  {s.by_medium.map((m, i) => (
-                    <div key={m.medium} className="h-bar-row">
-                      <span className="lbl">{m.medium}</span>
-                      <div className="bar-bg">
-                        <div className="bar-v" style={{
-                          width: barsReady ? `${Math.round((m.count / maxMedium) * 100)}%` : '0%',
-                          background: COLORS[i % COLORS.length],
-                        }} />
-                      </div>
-                      <span className="cnt">{m.count}</span>
+              <div className="chart-box">
+                <div className="chart-box-title">Rating Distribution</div>
+                {(stats.rating_distribution || []).map(item => (
+                  <div key={item.rating} className="rating-dist-row">
+                    <span className="r-lbl">{item.rating}</span>
+                    <div className="r-bar-bg">
+                      <div
+                        className="r-bar-v"
+                        style={{ width: barsReady ? `${item.count / maxRatingBucket * 100}%` : '0%' }}
+                      />
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Rating distribution */}
-              {s.rating_dist?.length > 0 && (
-                <div className="chart-box">
-                  <div className="chart-box-title">Rating Distribution</div>
-                  {s.rating_dist.map(r => (
-                    <div key={r.rating} className="rating-dist-row">
-                      <span className="r-lbl">{r.rating}</span>
-                      <div className="r-bar-bg">
-                        <div className="r-bar-v" style={{ width: barsReady ? `${Math.round((r.count / maxRating) * 100)}%` : '0%' }} />
-                      </div>
-                      <span className="r-cnt">{r.count}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    <span className="r-cnt">{item.count}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="charts-2col" style={{ marginBottom: 28 }}>
-              {/* Status pie */}
+            <div className="chart-section">
+              <div className="chart-section-title">Rating Comparison</div>
+              <div className="chart-box">
+                <div className="chart-box-title">Personal vs External Rating</div>
+                <div className="stats-rating-head">
+                  <span>Medium</span><span>You</span><span>External</span><span>Delta</span>
+                </div>
+                {(stats.rating_comparison_by_medium || []).map(item => (
+                  <div key={item.medium} className="stats-rating-row">
+                    <span>{item.medium}<small>{item.matched} matched</small></span>
+                    <span>{item.personal.toFixed(2)}</span>
+                    <span>{item.external.toFixed(2)}</span>
+                    <span className={item.difference >= 0 ? 'is-positive' : 'is-negative'}>
+                      {item.difference >= 0 ? '+' : ''}{item.difference.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+                {stats.rating_comparison_by_medium?.length === 0 && (
+                  <div className="stats-empty">No entries have both personal and external ratings.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="charts-2col stats-section-gap">
               {statusPieData.length > 0 && (
                 <div className="chart-box">
                   <div className="chart-box-title">By Status</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div className="stats-pie-layout">
                     <PieChart width={140} height={140}>
-                      <Pie data={statusPieData} dataKey="value" cx="50%" cy="50%"
-                        outerRadius={60} innerRadius={30} paddingAngle={2}
-                        key={`status-pie-${pieAnimId}`}
+                      <Pie
+                        data={statusPieData}
+                        dataKey="value"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={60}
+                        innerRadius={30}
+                        paddingAngle={2}
+                        key={`status-${pieAnimId}`}
                         animationId={pieAnimId}
-                        isAnimationActive
-                        animationBegin={40}
                         animationDuration={700}
-                        animationEasing="ease-out">
-                        {statusPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      >
+                        {statusPieData.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
                       </Pie>
                       <Tooltip content={<Tooltip_ />} />
                     </PieChart>
-                    <PieLegend data={statusPieData} colorOffset={0} />
+                    <PieLegend data={statusPieData} />
                   </div>
                 </div>
               )}
 
-              {/* Origin pie */}
               {originPieData.length > 0 && (
                 <div className="chart-box">
                   <div className="chart-box-title">By Origin</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div className="stats-pie-layout">
                     <PieChart width={140} height={140}>
-                      <Pie data={originPieData} dataKey="value" cx="50%" cy="50%"
-                        outerRadius={60} innerRadius={30} paddingAngle={2}
-                        key={`origin-pie-${pieAnimId}`}
+                      <Pie
+                        data={originPieData}
+                        dataKey="value"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={60}
+                        innerRadius={30}
+                        paddingAngle={2}
+                        key={`origin-${pieAnimId}`}
                         animationId={pieAnimId + 1}
-                        isAnimationActive
-                        animationBegin={80}
                         animationDuration={750}
-                        animationEasing="ease-out">
-                        {originPieData.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
+                      >
+                        {originPieData.map((_, index) => (
+                          <Cell key={index} fill={COLORS[(index + 2) % COLORS.length]} />
+                        ))}
                       </Pie>
                       <Tooltip content={<Tooltip_ />} />
                     </PieChart>
@@ -423,45 +567,48 @@ export default function Statistics() {
               )}
             </div>
 
-            {/* Top rated */}
-            {s.top_rated?.length > 0 && (
+            {stats.release_years?.length > 0 && (
               <div className="chart-section">
-                <div className="chart-section-title">Top Rated</div>
+                <div className="chart-section-title">Release Year Profile</div>
                 <div className="chart-box">
-                  <table className="media-table">
-                    <thead>
-                      <tr><th>#</th><th>Title</th><th>Medium</th><th>Origin</th><th>Rating</th></tr>
-                    </thead>
-                    <tbody>
-                      {s.top_rated.map((e, i) => (
-                        <tr key={e.id}>
-                          <td style={{ color: 'var(--dim)', width: 30 }}>{i + 1}</td>
-                          <td><span className="media-name">{e.title}</span></td>
-                          <td><span style={{ color: 'var(--dim)' }}>{e.medium}</span></td>
-                          <td><span style={{ color: 'var(--dim)' }}>{e.origin}</span></td>
-                          <td><span className="rating-cell">{e.rating}<span>/10</span></span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* By release year */}
-            {s.by_year?.length > 0 && (
-              <div className="chart-section">
-                <div className="chart-section-title">Entries by Release Year</div>
-                <div className="chart-box">
-                  <div className="chart-canvas chart-canvas-year">
+                  <div className="chart-canvas chart-canvas-release-year">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={s.by_year} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                      <ComposedChart data={stats.release_years} margin={{ top: 8, right: 4, bottom: 0, left: -20 }}>
                         <CartesianGrid vertical={false} stroke="var(--border)" />
-                        <XAxis dataKey="year" tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: 'var(--dim)', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <XAxis
+                          dataKey="year"
+                          tick={{ fill: 'var(--dim)', fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                          minTickGap={18}
+                        />
+                        <YAxis
+                          yAxisId="count"
+                          tick={{ fill: 'var(--dim)', fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                          allowDecimals={false}
+                        />
+                        <YAxis
+                          yAxisId="rating"
+                          orientation="right"
+                          domain={[0, 10]}
+                          tick={{ fill: 'var(--dim)', fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
                         <Tooltip content={<Tooltip_ />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                        <Bar dataKey="count" fill="var(--green)" opacity={0.6} radius={[2, 2, 0, 0]} name="Entries" />
-                      </BarChart>
+                        <Bar yAxisId="count" dataKey="count" name="Entries" fill="var(--accent)" opacity={0.55} />
+                        <Line
+                          yAxisId="rating"
+                          dataKey="avg_rating"
+                          name="Avg rating"
+                          stroke="var(--amber)"
+                          strokeWidth={2}
+                          connectNulls
+                          dot={{ r: 2, fill: 'var(--amber)', strokeWidth: 0 }}
+                        />
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                 </div>

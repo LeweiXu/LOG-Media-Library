@@ -387,13 +387,58 @@ class ExploreResponse(BaseModel):
 class MediumCount(BaseModel):
     medium: str
     count:  int
+
+
 class OriginCount(BaseModel):
     origin: str
     count:  int
+
+
 class MonthCount(BaseModel):
     key:   str
     label: str
     count: int
+
+
+class MonthActivity(BaseModel):
+    key:       str
+    label:     str
+    added:     int
+    completed: int
+
+
+class RatingBucket(BaseModel):
+    rating: float
+    count:  int
+
+
+class MediumCompletion(BaseModel):
+    medium:    str
+    total:     int
+    completed: int
+    rate:      float
+
+
+class BacklogBucket(BaseModel):
+    key:   str
+    label: str
+    count: int
+
+
+class MediumRatingComparison(BaseModel):
+    medium:      str
+    personal:    float
+    external:    float
+    difference:  float
+    matched:     int
+
+
+class ReleaseYearStat(BaseModel):
+    year:       int
+    count:      int
+    avg_rating: Optional[float] = None
+
+
 class StatsResponse(BaseModel):
     total:     int
     current:   int
@@ -401,7 +446,21 @@ class StatsResponse(BaseModel):
     completed: int
     on_hold:   int
     dropped:   int
-    avg_rating: Optional[float] = None
+    avg_rating:     Optional[float] = None
+    avg_rating_all: Optional[float] = None
     by_medium: list[MediumCount]
     by_origin: list[OriginCount]
     entries_per_month: list[MonthCount]
+    completion_rate: float
+    rating_coverage: float
+    average_active_progress: Optional[float] = None
+    oldest_planned_title: Optional[str] = None
+    oldest_planned_days: Optional[int] = None
+    current_completion_streak: int
+    longest_completion_streak: int
+    rating_distribution: list[RatingBucket]
+    activity_per_month: list[MonthActivity]
+    completion_by_medium: list[MediumCompletion]
+    backlog_age: list[BacklogBucket]
+    rating_comparison_by_medium: list[MediumRatingComparison]
+    release_years: list[ReleaseYearStat]

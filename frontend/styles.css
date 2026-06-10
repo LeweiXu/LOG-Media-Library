@@ -1009,6 +1009,13 @@ html.light .skeleton-pie::after {
 .inline-select:focus { border-color: var(--accent); }
 
 /* ── Statistics page ─────────────────────────────────────────────────────── */
+.statistics-page {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .stats-layout { flex: 1; overflow-y: auto; padding: 20px 28px; }
 
 .stats-grid {
@@ -1066,6 +1073,155 @@ html.light .skeleton-pie::after {
  * roughly match the (taller) bar-list and pie chart boxes when stacked. */
 .chart-canvas-month { height: 180px; }
 .chart-canvas-year  { height: 160px; }
+.chart-canvas-activity { height: 220px; }
+.chart-canvas-release-year { height: 220px; }
+
+.stats-section-gap { margin-bottom: 28px; }
+
+.stats-range-controls {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--dim);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.stats-completion-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 48px 38px;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.stats-completion-row:last-child { border-bottom: none; }
+.stats-completion-row .lbl {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stats-completion-row .bar-bg {
+  height: 4px;
+  background: var(--border);
+  position: relative;
+}
+.stats-completion-row .bar-v {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  background: var(--green);
+  transition: width 0.6s ease;
+}
+.stats-completion-row .cnt,
+.stats-completion-row .pct {
+  color: var(--dim);
+  text-align: right;
+}
+.stats-completion-row .pct { color: var(--green); }
+.stats-backlog-bar { background: var(--amber) !important; }
+
+.stats-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.stats-fact-grid > div {
+  min-width: 0;
+  padding-right: 10px;
+  border-right: 1px solid var(--border);
+}
+.stats-fact-grid > div + div { padding-left: 10px; }
+.stats-fact-grid > div:last-child { border-right: none; padding-right: 0; }
+.stats-fact-value {
+  display: block;
+  color: var(--bright);
+  font-size: 18px;
+  font-weight: 500;
+}
+.stats-fact-label {
+  display: block;
+  color: var(--dim);
+  font-size: 9px;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+.stats-rating-head,
+.stats-rating-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 58px 68px 54px;
+  gap: 8px;
+  align-items: center;
+}
+.stats-rating-head {
+  color: var(--dim);
+  font-size: 9px;
+  text-transform: uppercase;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border2);
+}
+.stats-rating-row {
+  min-height: 34px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+}
+.stats-rating-row:last-child { border-bottom: none; }
+.stats-rating-row > span:not(:first-child),
+.stats-rating-head > span:not(:first-child) { text-align: right; }
+.stats-rating-row small {
+  display: block;
+  color: var(--dim);
+  font-size: 9px;
+  margin-top: 2px;
+}
+.stats-rating-row .is-positive { color: var(--green); }
+.stats-rating-row .is-negative { color: var(--red); }
+.stats-empty {
+  color: var(--dim);
+  font-size: 11px;
+  padding: 18px 0;
+}
+
+.stats-pie-layout {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.stats-pie-legend {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.stats-pie-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  font-size: 11px;
+}
+.stats-pie-swatch {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+.stats-pie-leader {
+  flex: 1;
+  min-width: 14px;
+  border-bottom: 1px dotted var(--border2);
+  transform: translateY(1px);
+}
+.stats-pie-count {
+  min-width: 24px;
+  color: var(--dim);
+  text-align: right;
+}
 
 /* recharts overrides */
 .recharts-cartesian-axis-tick text    { fill: var(--dim) !important; font-size: 10px !important; }
@@ -1636,17 +1792,23 @@ a.explore-title:hover { color: var(--accent); }
   .stats-card { padding: 10px; }
   .stats-card-val { font-size: 22px; }
 
-  /* The full-width recharts panels (Consumed per Month, Entries by Release
-   * Year) ship a small fixed height tuned for desktop — too short once
+  /* The full-width recharts panels ship a small fixed height tuned for
+   * desktop — too short once
    * they're full-width on a phone and the bar-list / pie boxes grow to
    * fit their contents. Bump them so the column of stacked panels reads
    * with consistent visual weight. */
-  .chart-canvas-month { height: 280px; }
-  .chart-canvas-year  { height: 280px; }
-  /* Top Rated is a table — stretch the row height so its overall box
-   * height lines up with the others. */
-  .chart-section .chart-box .media-table td,
-  .chart-section .chart-box .media-table th { padding: 12px 6px; }
+  .chart-canvas-month,
+  .chart-canvas-year,
+  .chart-canvas-activity,
+  .chart-canvas-release-year { height: 280px; }
+  .stats-layout { padding: 14px 12px; }
+  .stats-range-controls { width: 100%; margin-left: 0; margin-top: 6px; }
+  .stats-range-controls input { min-width: 0; flex: 1; }
+  .stats-completion-row { grid-template-columns: 78px minmax(0, 1fr) 42px 34px; gap: 6px; }
+  .stats-rating-head,
+  .stats-rating-row { grid-template-columns: minmax(84px, 1fr) 48px 58px 48px; gap: 5px; }
+  .stats-pie-layout { flex-direction: column; align-items: stretch; }
+  .stats-pie-layout .recharts-wrapper { align-self: center; }
 }
 
 /* ── Mode toggle (Explore: Discover / Add) ─────────────────────────────────── */

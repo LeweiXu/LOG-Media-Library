@@ -101,7 +101,8 @@ LEGACY_EXPORT_HEADERS = [h for h in EXPORT_HEADERS if h != "custom_list"]
 
 _COMPARE_FIELDS = [
     "title", "medium", "origin", "year", "cover_url", "notes",
-    "external_id", "source", "status", "rating", "progress", "total", "completed_at",
+    "external_id", "source", "status", "rating", "progress", "total",
+    "created_at", "completed_at",
     "external_url", "genres", "external_rating", "custom_list",
 ]
 
@@ -149,6 +150,7 @@ def _csv_to_typed(row: dict) -> dict:
         "rating":          _float(row.get("rating")),
         "progress":        _int(row.get("progress")),
         "total":           _int(row.get("total")),
+        "created_at":      _dt(row.get("created_at")),
         "completed_at":    _dt(row.get("completed_at")),
         "external_url":    _str(row.get("external_url")),
         "genres":          _str(row.get("genres")),
@@ -179,7 +181,7 @@ def _numeric_equal(a, b) -> bool:
 
 
 def _fields_equal(field: str, csv_val, db_val) -> bool:
-    if field == "completed_at":
+    if field in {"created_at", "completed_at"}:
         return _dt_equal(csv_val, db_val)
     if field in {"rating", "external_rating"}:
         return _numeric_equal(csv_val, db_val)
@@ -281,7 +283,7 @@ def confirm_import(
         if not typed.get("title"):
             skipped += 1
             continue
-        db.add(Entry(
+        entry_data = dict(
             title=typed["title"],
             medium=typed.get("medium"),
             origin=typed.get("origin"),
@@ -300,7 +302,10 @@ def confirm_import(
             external_rating=typed.get("external_rating"),
             custom_list=typed.get("custom_list"),
             username=username,
-        ))
+        )
+        if typed.get("created_at") is not None:
+            entry_data["created_at"] = typed["created_at"]
+        db.add(Entry(**entry_data))
         created += 1
 
     for item in to_update:
@@ -327,6 +332,8 @@ def confirm_import(
         entry.rating          = typed.get("rating")
         entry.progress        = typed.get("progress")
         entry.total           = typed.get("total")
+        if typed.get("created_at") is not None:
+            entry.created_at = typed["created_at"]
         entry.completed_at    = typed.get("completed_at")
         entry.external_url    = typed.get("external_url")
         entry.genres          = typed.get("genres")
@@ -341,8 +348,8 @@ def confirm_import(
 def import_csv_for_user(db: Session, csv_content: str, username: str) -> dict:
     """
     Import entries from a CSV exported by this app (all DB columns).
-    The `id`, `created_at`, and `updated_at` columns are ignored — new values
-    are assigned by the database.
+    The `id` and `updated_at` columns are ignored. A valid CSV `created_at`
+    value is preserved; otherwise the database assigns the current timestamp.
     Returns {"created": N, "skipped": N}.
     """
     def _int(val: str | None) -> Optional[int]:
@@ -390,7 +397,7 @@ def import_csv_for_user(db: Session, csv_content: str, username: str) -> dict:
         raw_status = _str(row.get("status")) or "planned"
         status = raw_status if raw_status in _VALID_STATUSES else "planned"
 
-        entry = Entry(
+        entry_data = dict(
             title=title,
             medium=normalise_medium(_str(row.get("medium"))),
             origin=normalise_origin(_str(row.get("origin"))),
@@ -407,7 +414,10 @@ def import_csv_for_user(db: Session, csv_content: str, username: str) -> dict:
             custom_list=_str(row.get("custom_list")),
             username=username,
         )
-        db.add(entry)
+        created_at = _dt(row.get("created_at"))
+        if created_at is not None:
+            entry_data["created_at"] = created_at
+        db.add(Entry(**entry_data))
         created += 1
 
     db.commit()
@@ -517,7 +527,7 @@ async def auto_import_rows(csv_content: str, db: Session, username: str):
         except Exception as exc:
             yield {"type": "log", "message": f"[{i}/{total}] ERROR  '{title}': {exc}"}
 
-        entry = Entry(
+        entry_data = dict(
             title=title,
             medium=typed.get("medium"),
             origin=origin,
@@ -537,7 +547,9 @@ async def auto_import_rows(csv_content: str, db: Session, username: str):
             completed_at=typed.get("completed_at"),
             username=username,
         )
-        db.add(entry)
+        if typed.get("created_at") is not None:
+            entry_data["created_at"] = typed["created_at"]
+        db.add(Entry(**entry_data))
         db.commit()
         created += 1
 
