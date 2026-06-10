@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getExplore, getSettings } from '../api.jsx';
+import { getExplore } from '../api.jsx';
 import { MEDIUMS, statusLabel, onCoverError } from '../utils.jsx';
 import { loadSavedSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import AddEntryPanel from './components/AddEntryPanel.jsx';
+import QuickAddModal from './components/QuickAddModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
 
@@ -17,16 +18,8 @@ const newSeed = () => Math.floor(Math.random() * 0xffffffff);
 const EXPLORE_FETCH_LIMIT = 120;
 const REC_PAGE_SIZE = 30;
 
-function mediumFromParam(raw) {
-  if (raw == null) return undefined;
-  const value = raw.trim();
-  if (!value || value.toLowerCase() === 'all') return '';
-  return MEDIUMS.find(m => m.toLowerCase() === value.toLowerCase()) ?? null;
-}
-
 export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialUrlMedium = useRef(mediumFromParam(searchParams.get('medium')));
   const [items,        setItems]        = useState([]);
   const [affinity,     setAffinity]     = useState(null);
   const [personalised, setPersonalised] = useState(false);
@@ -34,9 +27,9 @@ export default function Explore() {
   const [error,        setError]        = useState('');
   const exploreRequestSeq = useRef(0);
 
-  // Settings seed the default medium; bias dimension lives in Settings.
-  const [medium,       setMedium]       = useState(() => initialUrlMedium.current ?? '');
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  // Local medium filter — always starts unset ("All") and is never persisted to
+  // the URL or settings, so a reload always lands on the full mixed feed.
+  const [medium, setMedium] = useState('');
 
   // Per-card UI state — keyed by stable index because explore items have no DB id
   // until added. Tracks: 'idle' | 'adding' | 'added:<status>' | 'error:<msg>'
@@ -52,6 +45,8 @@ export default function Explore() {
   const [refreshFlag, setRefreshFlag] = useState(false);
   // Mobile drawer state — '', 'left', or 'right'.
   const [drawer, setDrawer] = useState('');
+  // Quick-add (backfill) modal toggle.
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   // Selected search sources — drive BOTH the top search box and the
   // recommendation filtering below. Empty set = all sources. Restored from the
   // URL (?src=) on load so a reload keeps the search; falls back to saved prefs.
@@ -67,38 +62,6 @@ export default function Explore() {
   const [searchActive, setSearchActive] = useState(false);
   // Client-side pagination over the (source-filtered) recommendations.
   const [recPage, setRecPage] = useState(1);
-
-  // ── Initial load: pull saved settings, seed filters from them ────────────
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const s = await getSettings();
-        if (cancelled) return;
-        if (initialUrlMedium.current === undefined) {
-          setMedium(s.explore_default_medium || '');
-        }
-      } catch {
-        /* fall back to defaults */
-      } finally {
-        if (!cancelled) setSettingsLoaded(true);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (!settingsLoaded) return;
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      if (medium) {
-        next.set('medium', medium);
-      } else {
-        next.delete('medium');
-      }
-      return next;
-    }, { replace: true });
-  }, [medium, settingsLoaded, setSearchParams]);
 
   // Keep the selected sources in the URL (?src=) so a reload restores them.
   useEffect(() => {
@@ -118,21 +81,6 @@ export default function Explore() {
       return next;
     }, { replace: true });
   }, [setSearchParams]);
-
-  useEffect(() => {
-    const urlMedium = mediumFromParam(searchParams.get('medium'));
-    if (urlMedium === null) {
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        next.delete('medium');
-        return next;
-      }, { replace: true });
-      setMedium(prev => prev === '' ? prev : '');
-      return;
-    }
-    const nextMedium = urlMedium ?? '';
-    setMedium(prev => prev === nextMedium ? prev : nextMedium);
-  }, [searchParams, setSearchParams]);
 
   // ── Fetch explore data whenever filters or seed change ──────────────────
   const fetchExplore = useCallback(async () => {
@@ -158,9 +106,8 @@ export default function Explore() {
   }, [medium, seed, refreshFlag]);
 
   useEffect(() => {
-    if (!settingsLoaded) return;
     fetchExplore();
-  }, [fetchExplore, settingsLoaded]);
+  }, [fetchExplore]);
 
   // Reroll = bypass the server-side per-medium cache AND pick a new shuffle
   // seed, so the page surfaces a different set of suggestions.
@@ -486,6 +433,9 @@ export default function Explore() {
       {/* ── Right sidebar: affinity snapshot ───────────────────────────────── */}
       <aside className="sidebar-right">
         <ExtensionInstallButton />
+        <button type="button" className="quickadd-open-btn" onClick={() => setQuickAddOpen(true)}>
+          Quick Add
+        </button>
         <div className="panel-title">Your library</div>
         {!affinity || affinity.sample_size === 0 ? (
           <p className="explore-affinity-empty">
@@ -545,6 +495,14 @@ export default function Explore() {
           hideTabs
           onClose={() => setPendingAdd(null)}
           onCreated={handleEntryCreated}
+        />
+      )}
+
+      {quickAddOpen && (
+        <QuickAddModal
+          medium={medium}
+          onClose={() => setQuickAddOpen(false)}
+          onCreated={handleAddPanelCreated}
         />
       )}
 

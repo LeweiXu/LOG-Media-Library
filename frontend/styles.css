@@ -1971,3 +1971,153 @@ input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
   padding: 6px 10px;
   margin-bottom: 14px;
 }
+
+/* ── Quick Add (backfill) ─────────────────────────────────────────────────── */
+/* Right-sidebar entry button — blue text + outline, emphasising on hover
+   (mirrors the table edit button). */
+.quickadd-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 18px;
+  background: transparent;
+  border: 1px solid rgba(74, 158, 255, 0.5);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, font-weight 0.12s;
+}
+.quickadd-open-btn:hover {
+  border-color: var(--accent);
+  background: rgba(74, 158, 255, 0.08);
+  font-weight: 500;
+}
+
+.quickadd-head-right { display: flex; align-items: center; gap: 12px; }
+.quickadd-tally {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+/* The medium selector governs everything below it — a heavier rule makes that
+   relationship explicit. */
+.quickadd-mediums {
+  padding-bottom: 18px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border2);
+}
+
+/* Mediums: 4 per row in the wide modal. */
+.quickadd-medium-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) {
+  .quickadd-medium-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Card: the info column is capped to the cover height and clips its synopsis,
+   so the title→synopsis block always spans exactly the height of the cover. */
+.quickadd-card {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.quickadd-cover {
+  width: 150px;
+  height: 214px;
+  background: var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.quickadd-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.quickadd-cover-empty {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--dim);
+}
+.quickadd-info {
+  flex: 1;
+  min-width: 0;
+  height: 214px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.quickadd-title {
+  display: block;
+  font-size: 15px;
+  color: var(--bright);
+  text-decoration: none;
+  margin-bottom: 5px;
+}
+a.quickadd-title:hover { color: var(--accent); }
+.quickadd-meta { font-size: 11px; color: var(--dim); margin-bottom: 6px; }
+.quickadd-rating { color: var(--amber); }
+.quickadd-genres { font-size: 10px; color: var(--dim); margin-bottom: 8px; overflow-wrap: anywhere; }
+/* Synopsis clamps to a line count with an ellipsis — same treatment as the
+   Explore cards. */
+.quickadd-desc {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.55;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Segmented control — connected buttons spanning the full width, shared by the
+   status and rating pickers. Active colour is set per-variant below. */
+.quickadd-seg { display: flex; border: 1px solid var(--border2); }
+.quickadd-seg-btn {
+  flex: 1;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border2);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 9px 4px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.quickadd-seg-btn:last-child { border-right: none; }
+.quickadd-seg-btn:hover { color: var(--text); background: var(--surface2); }
+
+/* Rating lights up amber. Narrower padding since there are 11 cells. */
+.quickadd-rating-seg .quickadd-seg-btn { padding: 9px 2px; }
+.quickadd-rating-seg .quickadd-seg-btn.is-on {
+  color: var(--amber);
+  background: rgba(245, 166, 35, 0.15);
+}
+
+/* Status follows the canonical per-status colours (matching the badges). */
+.quickadd-seg-btn.is-on.status-current   { color: var(--accent); background: rgba(74, 158, 255, 0.15); }
+.quickadd-seg-btn.is-on.status-planned   { color: var(--dim);    background: rgba(90, 93, 98, 0.30);   }
+.quickadd-seg-btn.is-on.status-completed { color: var(--green);  background: rgba(62, 207, 106, 0.14); }
+.quickadd-seg-btn.is-on.status-on_hold   { color: var(--amber);  background: rgba(245, 166, 35, 0.15); }
+.quickadd-seg-btn.is-on.status-dropped   { color: var(--red);    background: rgba(224, 86, 86, 0.15);  }
+
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.quickadd-err { color: var(--red); font-size: 11px; margin-top: 10px; }
+
+.quickadd-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
