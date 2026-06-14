@@ -2567,3 +2567,248 @@ a.quickadd-title:hover { color: var(--accent); }
   gap: 8px;
   margin-top: 18px;
 }
+
+/* ── Light terminal component treatment ───────────────────────────────────
+   Dark mode relies on luminous foregrounds and translucent black overlays.
+   Light mode instead uses crisp ink, solid pale state fills, and stronger
+   dividers so every control remains readable without losing the console feel. */
+html.light body {
+  font-weight: 400;
+}
+
+html.light ::selection {
+  background: #b9d9f1;
+  color: var(--bright);
+}
+
+html.light ::-webkit-scrollbar-track {
+  background: #e5ebe6;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #87998d;
+}
+
+html.light .topbar,
+html.light .landing-footer-note {
+  background: #e8eee9;
+  border-color: var(--border2);
+}
+
+html.light .topbar-right .topbar-user-btn,
+html.light .topbar-right .btn-logout {
+  background: #f7faf7;
+  border-color: var(--border2);
+}
+
+html.light .sidebar-item:hover,
+html.light .sidebar-item.active {
+  background: #e2e9e4;
+}
+
+html.light .sidebar-count,
+html.light .list-chip-count {
+  background: #dce5de;
+  color: #394b40;
+}
+
+html.light .btn,
+html.light .btn-primary {
+  color: #ffffff;
+}
+
+html.light .btn-success {
+  color: #ffffff;
+}
+
+html.light .btn-outline {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border2);
+}
+
+html.light .icon-btn,
+html.light .theme-toggle,
+html.light .drawer-toggle,
+html.light .topbar-right .topbar-login-btn {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border2);
+}
+
+html.light .form-input,
+html.light .filter-bar input,
+html.light .filter-select,
+html.light .inline-select,
+html.light input[type="radio"],
+html.light .quickadd-segments,
+html.light .source-chip,
+html.light .list-chip,
+html.light .mode-toggle {
+  background: var(--surface);
+}
+
+html.light .form-input::placeholder,
+html.light .filter-bar input::placeholder {
+  color: #62736a;
+  opacity: 1;
+}
+
+html.light .custom-select-menu {
+  background: #ffffff;
+  border-color: var(--border2);
+}
+
+html.light .custom-select-option:hover,
+html.light .custom-select-option.is-active,
+html.light .custom-select-option.is-selected {
+  background: #e3ece6;
+}
+
+html.light .media-table th {
+  color: #45584d;
+  border-bottom-color: var(--border2);
+}
+
+html.light .media-table td {
+  border-bottom-color: #d3ddd6;
+}
+
+html.light .media-table tr:hover td {
+  background: #e8eee9;
+}
+
+html.light .media-table tr.row-selected td {
+  background: #deedf8;
+}
+
+html.light .cover-thumb img,
+html.light .explore-cover img {
+  opacity: 1;
+}
+
+html.light .badge-current {
+  background: #dcecf8;
+  color: #07558f;
+}
+
+html.light .badge-planned {
+  background: #e1e7e3;
+  color: #42564a;
+}
+
+html.light .badge-completed {
+  background: #dceee2;
+  color: #145d33;
+}
+
+html.light .badge-on_hold {
+  background: #f3e8c8;
+  color: #714e00;
+}
+
+html.light .badge-dropped {
+  background: #f5dfdc;
+  color: #9d2018;
+}
+
+html.light .stat-box,
+html.light .stats-card,
+html.light .chart-box,
+html.light .explore-card,
+html.light .settings-section,
+html.light .add-preview,
+html.light .dedup-group {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+html.light .explore-card:hover,
+html.light .explore-card:focus-visible,
+html.light .explore-card.is-owned:not(.not-interactive):hover {
+  background: #e8eee9;
+  filter: none;
+}
+
+html.light .explore-desc {
+  color: #34483c;
+  opacity: 1;
+}
+
+html.light .explore-match,
+html.light .add-preview-source {
+  opacity: 1;
+}
+
+html.light .modal-overlay {
+  background: rgba(25, 38, 29, 0.48);
+}
+
+html.light .modal {
+  background: #ffffff;
+  border-color: #718479;
+}
+
+html.light .drawer-backdrop {
+  background: rgba(25, 38, 29, 0.34);
+}
+
+html.light .explore-card-overlay {
+  background: rgba(232, 238, 233, 0.82);
+}
+
+html.light .explore-card-overlay span {
+  background: #ffffff;
+}
+
+html.light .explore-card-added-overlay span {
+  background: #edf4ef;
+}
+
+html.light .settings-msg-error,
+html.light .auth-error {
+  background: #f7e4e1;
+}
+
+html.light .settings-msg-success {
+  background: #e0efe5;
+}
+
+html.light .btn-danger-outline:hover,
+html.light .icon-btn.danger:hover {
+  background: #f7e4e1;
+}
+
+html.light .icon-btn.accent:hover,
+html.light .icon-btn.edit:hover,
+html.light .quickadd-open-btn:hover,
+html.light .source-chip.is-on,
+html.light .list-chip.is-on {
+  background: #e1eef8;
+}
+
+html.light .ext-update-note {
+  background: #f4ebd1;
+}
+
+html.light .skeleton-line,
+html.light .skeleton-pie {
+  background: #d9e2dc;
+}
+
+html.light .skeleton-line::after,
+html.light .skeleton-pie::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+}
+
+html.light .recharts-cartesian-axis-line,
+html.light .recharts-cartesian-axis-tick-line,
+html.light .recharts-cartesian-grid-horizontal line,
+html.light .recharts-cartesian-grid-vertical line {
+  stroke: #b7c4bb !important;
+}
+
+html.light .custom-tooltip {
+  background: #ffffff;
+  border-color: var(--border2);
+}
