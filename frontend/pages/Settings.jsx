@@ -27,7 +27,8 @@ const LIBRARY_VIEW_COLS = [
 ];
 const LIBRARY_MANAGE_COLS = [
   ['medium', 'Medium'], ['year', 'Year'], ['progress', 'Progress'],
-  ['status', 'Status'], ['rating', 'Rating'], ['updated', 'Updated'], ['custom_list', 'Custom List'],
+  ['status', 'Status'], ['rating', 'Rating'], ['updated', 'Updated'],
+  ['completed', 'Completed'], ['custom_list', 'Custom List'],
 ];
 // Every dashboard table can pick from the same full catalogue (order mirrors
 // DASH_COL_ORDER in Dashboard.jsx).

@@ -748,6 +748,7 @@ export default function Library({ initialFilters = {} }) {
                   {showCol('rating') && <SortTh field="rating" className="col-rating">Rating</SortTh>}
                   {showCol('progress') && <th className="col-progress">Progress</th>}
                   {showCol('updated') && <SortTh field="updated_at" className="col-updated">Updated</SortTh>}
+                  {showCol('completed') && <SortTh field="completed_at" className="col-completed">Completed</SortTh>}
                   {showCol('custom_list') && <th className="col-custom-list">Custom List</th>}
                   {showActions && <th className="action-cell">Actions</th>}
                 </tr>
@@ -780,6 +781,7 @@ export default function Library({ initialFilters = {} }) {
                     {showCol('rating') && <td className="col-rating"><span className="rating-cell">{entry.rating != null ? entry.rating : '—'}<span>/10</span></span></td>}
                     {showCol('progress') && <td className="col-progress"><span style={{ color: 'var(--dim)' }}>{progressLabel(entry)}</span></td>}
                     {showCol('updated') && <td className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(entry.updated_at)}</span></td>}
+                    {showCol('completed') && <td className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(entry.completed_at)}</span></td>}
                     {showCol('custom_list') && (
                     <td className="col-custom-list" onClick={ev => ev.stopPropagation()}>
                       <CustomSelect

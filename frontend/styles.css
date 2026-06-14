@@ -17,16 +17,27 @@
   --purple:  #a78bfa;
 }
 
-/* ── Light theme overrides ───────────────────────────────────────────────── */
+/* ── Light terminal theme ────────────────────────────────────────────────── */
 html.light {
-  --bg:      #f4f4f2;
-  --surface: #eaeae8;
-  --surface2:#e0e0de;
-  --border:  #d0d0ce;
-  --border2: #bcbcba;
-  --text:    #2e2e2c;
-  --dim:     #585856;
-  --bright:  #111110;
+  color-scheme: light;
+
+  /* Cool paper and phosphor-inspired ink retain the terminal hierarchy
+     without carrying dark-theme foreground colours onto white surfaces. */
+  --bg:       #f3f6f3;
+  --surface:  #ffffff;
+  --surface2: #e7ede8;
+  --border:   #c5d0c8;
+  --border2:  #98a89d;
+  --text:     #26352c;
+  --dim:      #52645a;
+  --bright:   #101a14;
+
+  /* Darker semantic colours meet contrast requirements on light surfaces. */
+  --accent:   #075ea8;
+  --green:    #176b3a;
+  --amber:    #805900;
+  --red:      #b42318;
+  --purple:   #6842a3;
 }
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
