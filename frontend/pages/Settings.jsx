@@ -19,14 +19,15 @@ const EXPLORE_BY_OPTIONS = [
   { key: 'medium', label: 'Medium' }, { key: 'origin', label: 'Origin' },
 ];
 
-// Column catalogues (key → display label) per table/mode.
+// Column catalogues (key → display label) per table/mode. View and Manage share
+// a single canonical ordering so the chips line up across both rows.
 const LIBRARY_VIEW_COLS = [
   ['medium', 'Medium'], ['year', 'Year'], ['progress', 'Progress'],
   ['status', 'Status'], ['rating', 'Rating'], ['updated', 'Updated'], ['completed', 'Completed'],
 ];
 const LIBRARY_MANAGE_COLS = [
-  ['status', 'Status'], ['medium', 'Medium'], ['rating', 'Rating'],
-  ['progress', 'Progress'], ['updated', 'Updated'], ['custom_list', 'Custom List'],
+  ['medium', 'Medium'], ['year', 'Year'], ['progress', 'Progress'],
+  ['status', 'Status'], ['rating', 'Rating'], ['updated', 'Updated'], ['custom_list', 'Custom List'],
 ];
 // Every dashboard table can pick from the same full catalogue (order mirrors
 // DASH_COL_ORDER in Dashboard.jsx).

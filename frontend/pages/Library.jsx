@@ -744,6 +744,7 @@ export default function Library({ initialFilters = {} }) {
                   <SortTh field="title" style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>Title</SortTh>
                   {showCol('status') && <SortTh field="status" className="col-status">Status</SortTh>}
                   {showCol('medium') && <SortTh field="medium" className="col-medium">Medium</SortTh>}
+                  {showCol('year') && <SortTh field="year" className="col-year">Year</SortTh>}
                   {showCol('rating') && <SortTh field="rating" className="col-rating">Rating</SortTh>}
                   {showCol('progress') && <th className="col-progress">Progress</th>}
                   {showCol('updated') && <SortTh field="updated_at" className="col-updated">Updated</SortTh>}
@@ -775,6 +776,7 @@ export default function Library({ initialFilters = {} }) {
                     </td>
                     {showCol('status') && <td className="col-status"><span className={`badge badge-${entry.status}`}>{statusLabel(entry.status)}</span></td>}
                     {showCol('medium') && <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{entry.medium || '—'}</span></td>}
+                    {showCol('year') && <td className="col-year"><span style={{ color: 'var(--dim)' }}>{entry.year || '—'}</span></td>}
                     {showCol('rating') && <td className="col-rating"><span className="rating-cell">{entry.rating != null ? entry.rating : '—'}<span>/10</span></span></td>}
                     {showCol('progress') && <td className="col-progress"><span style={{ color: 'var(--dim)' }}>{progressLabel(entry)}</span></td>}
                     {showCol('updated') && <td className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(entry.updated_at)}</span></td>}
@@ -790,6 +792,7 @@ export default function Library({ initialFilters = {} }) {
                         ]}
                         onChange={value => saveEntryList(entry, value)}
                         containerClassName="manage-list-select"
+                        maxVisible={listNames.length + 1}
                         ariaLabel={`Custom list for ${entry.title}`}
                       />
                     </td>

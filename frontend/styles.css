@@ -103,55 +103,45 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 .topbar-right .online  { color: var(--green); }
 .topbar-right .offline { color: var(--red); }
 
+/* Settings + logout read as a matched pair of flat terminal buttons. */
 .topbar-right .topbar-user-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: transparent;
-  border: 1px solid var(--border2);
-  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--dim);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
   letter-spacing: 0.05em;
-  padding: 2px 9px;
+  padding: 3px 9px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 .topbar-right .topbar-user-btn .topbar-user-icon {
-  color: var(--accent);
+  color: var(--dim);
   font-size: 12px;
   line-height: 1;
   display: inline-block;
-  transition: transform 0.4s ease;
+  transition: color 0.15s;
 }
 
-.topbar-right .topbar-user-btn .topbar-user-name {
-  color: var(--bright);
-  font-weight: 400;
-}
+.topbar-right .topbar-user-btn .topbar-user-name { color: var(--text); }
 
-.topbar-right .topbar-user-btn:hover {
-  border-color: var(--accent);
-  background: rgba(74, 158, 255, 0.08);
-}
-
-.topbar-right .topbar-user-btn:hover .topbar-user-icon {
-  transform: rotate(60deg);
-}
-
-.topbar-right .topbar-user-btn:hover .topbar-user-name {
-  color: var(--accent);
-}
+.topbar-right .topbar-user-btn:hover { color: var(--accent); border-color: var(--accent); }
+.topbar-right .topbar-user-btn:hover .topbar-user-icon { color: var(--accent); }
+.topbar-right .topbar-user-btn:hover .topbar-user-name { color: var(--accent); }
 
 .topbar-right .btn-logout {
-  background: transparent;
-  border: 1px solid var(--border2);
+  background: var(--surface);
+  border: 1px solid var(--border);
   color: var(--dim);
-  font-size: 11px;
-  padding: 2px 8px;
-  cursor: pointer;
   font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 3px 9px;
+  cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
 
@@ -1112,6 +1102,9 @@ html.light .skeleton-pie::after {
 .list-chip.is-skeleton { cursor: default; border-color: var(--border); }
 
 /* ── Library mode toggle (View · Edit / Manage) ────────────────────────────── */
+/* Segmented terminal toggle — shared by Library (View/Manage) and Explore
+   (Discover/Add). Square box, 1px divider between segments, active segment is
+   accent text on the raised surface. */
 .mode-toggle {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -1122,16 +1115,17 @@ html.light .skeleton-pie::after {
   color: var(--dim);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 4px 10px;
+  padding: 4px 12px;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
 .mode-toggle-btn + .mode-toggle-btn { border-left: 1px solid var(--border); }
-.mode-toggle-btn:hover { color: var(--text); }
-.mode-toggle-btn.is-on {
-  background: rgba(74, 158, 255, 0.08);
+.mode-toggle-btn:hover:not(.is-on):not(.is-active) { color: var(--text); }
+.mode-toggle-btn.is-on,
+.mode-toggle-btn.is-active {
+  background: var(--surface);
   color: var(--accent);
 }
 
@@ -1998,25 +1992,7 @@ a.explore-title:hover { color: var(--accent); }
   .stats-pie-layout .recharts-wrapper { align-self: center; }
 }
 
-/* ── Mode toggle (Explore: Discover / Add) ─────────────────────────────────── */
-.mode-toggle {
-  display: inline-flex;
-  gap: 2px;
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-.mode-toggle-btn {
-  background: none;
-  border: none;
-  color: var(--dim);
-  font-family: inherit;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  padding: 4px 12px;
-  cursor: pointer;
-}
-.mode-toggle-btn:hover { color: var(--text); }
-.mode-toggle-btn.is-active { background: var(--surface); color: var(--accent); }
+/* Explore's Discover/Add toggle reuses the shared .mode-toggle rules above. */
 
 /* ── Batch edit panel (Manage right sidebar) ───────────────────────────────── */
 .batch-panel {
