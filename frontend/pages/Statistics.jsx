@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getStats } from '../api.jsx';
+import { usePreferences } from '../preferences.jsx';
 import { SkeletonChartBox, SkeletonLine } from './components/Skeletons.jsx';
 import {
   Bar,
@@ -163,6 +164,12 @@ function StatisticsSkeleton() {
 }
 
 export default function Statistics() {
+  const { prefs } = usePreferences();
+  const statPrefs = prefs.statistics || {};
+  const sec = statPrefs.sections || {};
+  const show = (key) => sec[key] !== false;   // default visible
+  const consumedMonths = statPrefs.consumed_range || 12;
+  const addedMonths = statPrefs.added_range || 5;
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -201,8 +208,8 @@ export default function Statistics() {
   const activity = stats?.activity_per_month ?? [];
   const activityStart = activity[0]?.key ?? '';
   const activityEnd = activity[activity.length - 1]?.key ?? '';
-  const defaultConsumedStart = activity.length > 12 ? activity[activity.length - 12].key : activityStart;
-  const defaultAddedStart = activity.length > 5 ? activity[activity.length - 5].key : activityStart;
+  const defaultConsumedStart = activity.length > consumedMonths ? activity[activity.length - consumedMonths].key : activityStart;
+  const defaultAddedStart = activity.length > addedMonths ? activity[activity.length - addedMonths].key : activityStart;
   const { start: consumedStart, end: consumedEnd } = resolveRange(
     consumedRange,
     defaultConsumedStart,
@@ -281,6 +288,7 @@ export default function Statistics() {
 
         {!loading && !error && stats && (
           <>
+            {show('summary') && (
             <div className="stats-grid">
               <StatCard value={stats.total} label="Total Entries" />
               <StatCard value={stats.completed} label="Completed" />
@@ -303,8 +311,9 @@ export default function Statistics() {
                 sub="all entries"
               />
             </div>
+            )}
 
-            {activity.length > 0 && (
+            {activity.length > 0 && show('consumed') && (
               <>
                 <div className="chart-section">
                   <div className="chart-section-title">
@@ -349,7 +358,10 @@ export default function Statistics() {
                     </div>
                   </div>
                 </div>
+              </>
+            )}
 
+            {activity.length > 0 && show('added') && (
                 <div className="chart-section">
                   <div className="chart-section-title">
                     Added per Month
@@ -393,10 +405,10 @@ export default function Statistics() {
                     </div>
                   </div>
                 </div>
-              </>
             )}
 
             <div className="charts-2col stats-section-gap">
+              {show('by_medium') && (
               <div className="chart-box">
                 <div className="chart-box-title">By Medium</div>
                 {(stats.by_medium || []).map((item, index) => (
@@ -415,7 +427,9 @@ export default function Statistics() {
                   </div>
                 ))}
               </div>
+              )}
 
+              {show('completion') && (
               <div className="chart-box">
                 <div className="chart-box-title">Completion by Medium</div>
                 {(stats.completion_by_medium || []).map(item => (
@@ -435,10 +449,12 @@ export default function Statistics() {
                   </div>
                 ))}
               </div>
+              )}
 
             </div>
 
             <div className="charts-2col stats-section-gap">
+              {show('backlog') && (
               <div className="chart-box">
                 <div className="chart-box-title">Backlog Health</div>
                 {(stats.backlog_age || []).map(item => (
@@ -470,7 +486,9 @@ export default function Statistics() {
                   </div>
                 </div>
               </div>
+              )}
 
+              {show('rating_distribution') && (
               <div className="chart-box">
                 <div className="chart-box-title">Rating Distribution</div>
                 {(stats.rating_distribution || []).map(item => (
@@ -486,8 +504,10 @@ export default function Statistics() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
 
+            {show('rating_comparison') && (
             <div className="chart-section">
               <div className="chart-section-title">Rating Comparison</div>
               <div className="chart-box">
@@ -510,9 +530,10 @@ export default function Statistics() {
                 )}
               </div>
             </div>
+            )}
 
             <div className="charts-2col stats-section-gap">
-              {statusPieData.length > 0 && (
+              {show('by_status') && statusPieData.length > 0 && (
                 <div className="chart-box">
                   <div className="chart-box-title">By Status</div>
                   <div className="stats-pie-layout">
@@ -538,7 +559,7 @@ export default function Statistics() {
                 </div>
               )}
 
-              {originPieData.length > 0 && (
+              {show('by_origin') && originPieData.length > 0 && (
                 <div className="chart-box">
                   <div className="chart-box-title">By Origin</div>
                   <div className="stats-pie-layout">
@@ -567,7 +588,7 @@ export default function Statistics() {
               )}
             </div>
 
-            {stats.release_years?.length > 0 && (
+            {show('release_years') && stats.release_years?.length > 0 && (
               <div className="chart-section">
                 <div className="chart-section-title">Release Year Profile</div>
                 <div className="chart-box">

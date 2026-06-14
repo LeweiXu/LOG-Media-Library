@@ -737,10 +737,20 @@ html.light .skeleton-pie::after {
 
 .settings-section-label {
   font-size: 10px;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--dim);
-  margin: 0 0 12px;
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* Trailing rule so each section reads like a terminal section header. */
+.settings-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 .settings-divider {
@@ -835,6 +845,99 @@ html.light .skeleton-pie::after {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+/* ── Settings as a full page (full-width terminal layout) ───────────────────── */
+.settings-page { max-width: 880px; margin: 0 auto; padding-bottom: 48px; }
+.settings-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Each settings group is a bordered block with a header rule. */
+.settings-section {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: 16px;
+}
+.settings-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 18px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.settings-section-head .sh-title {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--bright);
+}
+.settings-section-head .sh-desc { font-size: 11px; color: var(--dim); }
+.settings-section-body { padding: 2px 18px; }
+
+/* One setting line — label/description left, control right, full panel width. */
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.set-row:last-child { border-bottom: none; }
+/* `stack` variant: control drops to its own full-width line under the label. */
+.set-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.set-row-label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.set-row-label .l-title { font-size: 13px; color: var(--text); }
+.set-row-label .l-desc  { font-size: 11px; color: var(--dim); line-height: 1.45; }
+.set-row-control { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.set-row-stack > .set-row-control { width: 100%; }
+
+/* Password form stretches to fill the stacked row. */
+.settings-form { width: 100%; }
+
+/* Terminal-styled range slider (square thumb, 1px track). */
+.set-slider { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 460px; }
+.set-slider input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  cursor: pointer;
+  outline: none;
+}
+.set-slider input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 16px;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+.set-slider input[type=range]::-moz-range-thumb {
+  width: 12px;
+  height: 16px;
+  background: var(--accent);
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+}
+.set-slider-val {
+  font-size: 12px;
+  color: var(--accent);
+  min-width: 96px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .set-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .set-row-control { width: 100%; }
 }
 
 @media (max-width: 640px) {
@@ -962,6 +1065,74 @@ html.light .skeleton-pie::after {
 
 @media (max-width: 720px) {
   .source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── Custom-list chips bar (Library, both modes) ───────────────────────────── */
+.list-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.list-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+
+.list-chip:hover { border-color: var(--border2); color: var(--text); }
+
+.list-chip .list-chip-count {
+  font-size: 9px;
+  color: var(--dim);
+  background: var(--border);
+  padding: 1px 5px;
+}
+
+.list-chip.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(74, 158, 255, 0.08);
+}
+.list-chip.is-on .list-chip-count { color: var(--accent); }
+
+.list-chip-new { color: var(--dim); border-style: dashed; }
+.list-chip-new:hover { border-color: var(--accent); color: var(--accent); }
+.list-chip.is-skeleton { cursor: default; border-color: var(--border); }
+
+/* ── Library mode toggle (View · Edit / Manage) ────────────────────────────── */
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+}
+.mode-toggle-btn {
+  background: var(--bg);
+  border: none;
+  color: var(--dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.mode-toggle-btn + .mode-toggle-btn { border-left: 1px solid var(--border); }
+.mode-toggle-btn:hover { color: var(--text); }
+.mode-toggle-btn.is-on {
+  background: rgba(74, 158, 255, 0.08);
+  color: var(--accent);
 }
 
 /* Wide variant — the Explore page's main column is far wider than the
@@ -2330,14 +2501,24 @@ a.quickadd-title:hover { color: var(--accent); }
   opacity: 0.55;
 }
 .custom-select-placeholder { color: var(--dim); }
-.custom-select-arrow { flex-shrink: 0; color: var(--dim); }
+.custom-select-arrow {
+  flex-shrink: 0;
+  color: var(--dim);
+  font-size: 10px;
+  transition: color 0.12s;
+}
+/* Open / focused trigger: accent the edge and the caret — terminal-style
+   active state, no shadows. */
+.custom-select-trigger:focus-visible { outline: none; border-color: var(--accent); }
+.custom-select-trigger[aria-expanded="true"] { border-color: var(--accent); }
+.custom-select-trigger[aria-expanded="true"] .custom-select-arrow { color: var(--accent); }
 .custom-select-menu {
   position: fixed;
   z-index: 10000;
   overflow-y: auto;
   border: 1px solid var(--border2);
+  border-top: 2px solid var(--accent);
   background: var(--surface);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 .custom-select-option {
   display: block;

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, func, ForeignKey, UniqueConstraint
+from typing import Any
+from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, JSON, func, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from db import Base
 
@@ -11,21 +12,21 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
-    # ── Settings (added 2026-04-25) ──────────────────────────────────────────
-    # Library/backup settings — UI for these lands in a later change.
+    # ── Settings ─────────────────────────────────────────────────────────────
+    # backup_freq stays a real column: it is a backend concern, read by the
+    # background backup scheduler. Everything else (library/explore/dashboard/
+    # statistics prefs) lives in the single ui_preferences JSON document below.
     backup_freq:              Mapped[str] = mapped_column(String(20), nullable=False, server_default="never")
-    default_sort:             Mapped[str] = mapped_column(String(30), nullable=False, server_default="updated_at")
-    default_entries_per_page: Mapped[int] = mapped_column(Integer,    nullable=False, server_default="40")
-    # Explore-page preferences.
-    explore_default_medium:   Mapped[str | None] = mapped_column(String(50), nullable=True)
-    explore_personalize:      Mapped[bool]       = mapped_column(Boolean,    nullable=False, server_default="true")
-    explore_hide_in_library:  Mapped[bool]       = mapped_column(Boolean,    nullable=False, server_default="true")
-    # Which dimension the Explore page biases toward — "all" / "genre" / "medium" / "origin".
-    explore_by:               Mapped[str]        = mapped_column(String(20), nullable=False, server_default="all")
     # Timestamp of the last successful email backup (NULL = never run).
     last_backup_at:           Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
+    # Single JSON document holding ALL customizable UI preferences — library
+    # (default mode/sort/per-page, columns, view toggles), dashboard (table
+    # sizes/columns), statistics (sections + ranges), and explore (medium/bias/
+    # personalize/hide-in-library). NULL is treated as "{}"; the app deep-merges
+    # it over DEFAULT_UI. See schemas.DEFAULT_UI for the canonical shape.
+    ui_preferences:           Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     def __repr__(self) -> str:
         return f"<User username={self.username!r} email={self.email!r}>"
 

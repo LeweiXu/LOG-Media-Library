@@ -18,6 +18,7 @@ from schemas import (
     UserSettings, UserSettingsUpdate,
     DuplicateCheckRequest, DuplicateCheckResponse,
     ExploreResponse,
+    deep_merge, deep_merge_ui,
 )
 from services import entry_service
 from services.entry_service import delete_all_entries
@@ -149,11 +150,17 @@ def change_password(
 
 # ── Settings routes ───────────────────────────────────────────────────────────
 
+def _settings_payload(user: User) -> UserSettings:
+    out = UserSettings.model_validate(user)
+    # `ui` maps to the ui_preferences column; serve a complete (default-merged) doc.
+    out.ui = deep_merge_ui(user.ui_preferences)
+    return out
+
 @router.get("/auth/me/settings", response_model=UserSettings)
 def get_settings(
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    return current_user
+    return _settings_payload(current_user)
 
 @router.put("/auth/me/settings", response_model=UserSettings)
 def update_settings(
@@ -161,11 +168,19 @@ def update_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    ui_patch = data.pop("ui", None)
+    # Scalar settings → authoritative columns (server consumers read these).
+    for field, value in data.items():
         setattr(current_user, field, value)
+    # UI document → deep-merge the partial patch into the stored (full) JSON doc.
+    if ui_patch is not None:
+        current_user.ui_preferences = deep_merge(
+            deep_merge_ui(current_user.ui_preferences), ui_patch
+        )
     db.commit()
     db.refresh(current_user)
-    return current_user
+    return _settings_payload(current_user)
 
 # ── Entries endpoints ─────────────────────────────────────────────────────────
 
@@ -453,11 +468,12 @@ async def explore(
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
+    ui = deep_merge_ui(current_user.ui_preferences)
     return await explore_media(
         db,
         username=current_user.username,
         medium=medium or None,
-        explore_by=current_user.explore_by or "all",
+        explore_by=ui["explore"].get("by") or "all",
         limit=limit,
         seed=seed or None,
         refresh=refresh,

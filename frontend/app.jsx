@@ -4,17 +4,16 @@ import Dashboard   from './pages/Dashboard.jsx';
 import Library     from './pages/Library.jsx';
 import Statistics  from './pages/Statistics.jsx';
 import Explore     from './pages/Explore.jsx';
-import Manage      from './pages/Manage.jsx';
+import Settings    from './pages/Settings.jsx';
 import LandingPage from './pages/LandingPage.jsx';
 import AuthModal      from './pages/components/AuthModal.jsx';
-import SettingsModal  from './pages/components/SettingsModal.jsx';
+import { PreferencesProvider } from './preferences.jsx';
 import { BASE } from './api.jsx';
 
 export default function App() {
   const navigate = useNavigate();
   const [online,         setOnline]         = useState(null);
   const [libraryFilters, setLibraryFilters] = useState({});
-  const [showSettings,   setShowSettings]   = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ── Theme ──────────────────────────────────────────────────────────────────
@@ -46,7 +45,6 @@ export default function App() {
 
   function handleLogout() {
     setShowLogoutConfirm(false);
-    setShowSettings(false);
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_username');
     setToken('');
@@ -86,6 +84,7 @@ export default function App() {
   }
 
   return (
+    <PreferencesProvider authKey={isAuthenticated ? username : ''}>
     <div className="app-shell">
       {/* ── Topbar ── */}
       <div className="topbar">
@@ -100,9 +99,6 @@ export default function App() {
             <NavLink to="/library" className={({ isActive }) => isActive ? 'active' : undefined}
               onClick={() => setLibraryFilters({})}>
               Library
-            </NavLink>
-            <NavLink to="/manage" className={({ isActive }) => isActive ? 'active' : undefined}>
-              Manage
             </NavLink>
             <NavLink to="/explore" className={({ isActive }) => isActive ? 'active' : undefined}>
               Explore
@@ -123,7 +119,7 @@ export default function App() {
               <button
                 type="button"
                 className="topbar-user-btn"
-                onClick={() => setShowSettings(true)}
+                onClick={() => navigate('/settings')}
                 title="Settings"
               >
                 <span className="topbar-user-icon" aria-hidden="true">⚙</span>
@@ -172,28 +168,26 @@ export default function App() {
             ? <Explore key={username} />
             : <Navigate to="/" replace />}
         />
-        <Route path="/manage"
-          element={isAuthenticated
-            ? <Manage key={username} />
-            : <Navigate to="/" replace />}
-        />
+        {/* Manage merged into Library — keep the old path working for bookmarks. */}
+        <Route path="/manage" element={<Navigate to="/library?mode=manage" replace />} />
         <Route path="/statistics"
           element={isAuthenticated
             ? <Statistics key={username} />
             : <Navigate to="/" replace />}
         />
+        <Route path="/settings"
+          element={isAuthenticated
+            ? <Settings
+                key={username}
+                theme={theme}
+                onThemeChange={t => setTheme(t === 'light' ? 'light' : 'dark')}
+                onLogout={handleLogout}
+                onDataDeleted={() => navigate('/library')}
+              />
+            : <Navigate to="/" replace />}
+        />
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
       </Routes>
-
-      {showSettings && (
-        <SettingsModal
-          onClose={() => setShowSettings(false)}
-          onDataDeleted={() => { setShowSettings(false); navigate('/library'); }}
-          theme={theme}
-          onThemeChange={t => setTheme(t === 'light' ? 'light' : 'dark')}
-          onLogout={handleLogout}
-        />
-      )}
 
       {showLogoutConfirm && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowLogoutConfirm(false); }}>
@@ -236,5 +230,6 @@ export default function App() {
         </a>
       </footer>}
     </div>
+    </PreferencesProvider>
   );
 }

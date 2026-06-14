@@ -1,14 +1,24 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getEntries, updateEntry, deleteEntry, exportEntries, getSettings } from '../api.jsx';
+import {
+  getEntries, updateEntry, deleteEntry, exportEntries,
+  getCustomLists, batchUpdateEntries, batchDeleteEntries,
+} from '../api.jsx';
 import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ImportModal from './components/ImportModal.jsx';
 import ImportAutoModal from './components/ImportAutoModal.jsx';
 import ImportMalModal from './components/ImportMalModal.jsx';
+import ListsModal from './components/ListsModal.jsx';
+import DedupModal from './components/DedupModal.jsx';
+import CacheCoversModal from './components/CacheCoversModal.jsx';
+import ResyncModal from './components/ResyncModal.jsx';
+import ListChips, { ALL_LISTS, UNLISTED_LIST } from './components/ListChips.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
+import { useExtensionPresent } from '../extensionBridge.js';
+import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
 
 const SORT_FIELDS = [
@@ -21,14 +31,22 @@ const SORT_FIELDS = [
   { key: 'completed_at', label: 'Completed' },
 ];
 
+// Fields offered by the Manage-mode "bulk edit field" tool, with input kind.
+const BULK_FIELDS = [
+  { key: 'rating', label: 'Rating',  kind: 'number', min: 0, max: 10 },
+  { key: 'medium', label: 'Medium',  kind: 'medium' },
+  { key: 'origin', label: 'Origin',  kind: 'origin' },
+  { key: 'year',   label: 'Year',    kind: 'number', min: 1800, max: 2100 },
+  { key: 'total',  label: 'Total',   kind: 'number', min: 0 },
+];
+
 const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
 const DEFAULT_SORT = 'updated_at';
 const DEFAULT_ORDER = 'desc';
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 40;
 
-const LS_QUICK_ACTIONS = 'library_quick_actions';
-const LS_FIX_TITLE = 'library_fix_title';
+const TITLE_COL_WIDTH = 750;
 
 function validParam(value, allowed, fallback = '') {
   return allowed.includes(value) ? value : fallback;
@@ -44,48 +62,108 @@ export default function Library({ initialFilters = {} }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const hasUrlParams = searchParams.toString() !== '';
   const sortKeys = SORT_FIELDS.map(f => f.key);
-  // Whether the URL explicitly supplied sort/limit at mount. Saved settings
-  // are only applied if the URL did *not* — URL > settings > hard default.
   const urlHadSortRef  = useRef(searchParams.has('sort'));
   const urlHadLimitRef = useRef(searchParams.has('limit'));
-  // Gate the first fetch on user settings being read so we don't load
-  // 40-default rows then immediately re-load with the user's preference.
+  const urlHadModeRef  = useRef(
+    searchParams.has('mode') || (!hasUrlParams && (initialFilters.mode === 'view' || initialFilters.mode === 'manage')),
+  );
   const [settingsApplied, setSettingsApplied] = useState(false);
+
+  const { prefs, loaded: prefsLoaded, updateUi } = usePreferences();
+  const libPrefs = prefs.library || DEFAULT_UI.library;
+
+  // ── Mode: 'view' (everyday edit) | 'manage' (bulk). URL/nav > saved default. ──
+  const initialMode = (() => {
+    const fromUrl = searchParams.get('mode');
+    if (fromUrl === 'view' || fromUrl === 'manage') return fromUrl;
+    if (!hasUrlParams && (initialFilters.mode === 'view' || initialFilters.mode === 'manage')) return initialFilters.mode;
+    return 'view';
+  })();
+  const [mode, setMode] = useState(initialMode);
+  const isManage = mode === 'manage';
+  function changeMode(next) {
+    setMode(next);
+    updateUi({ library: { default_mode: next } });   // remember as the default
+    if (next !== 'manage') clearSelection();
+  }
+
   const [entries,      setEntries]      = useState([]);
   const [total,        setTotal]        = useState(0);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState('');
   const [counts,       setCounts]       = useState({});
+
+  // ── Custom lists ──
+  const [lists,         setLists]         = useState([]);
+  const [unlistedCount, setUnlistedCount] = useState(0);
+  const [loadingLists,  setLoadingLists]  = useState(true);
+  const listNames = useMemo(() => lists.map(l => l.name), [lists]);
+  const [listFilter, setListFilter] = useState(() =>
+    searchParams.get('list') || (!hasUrlParams ? initialFilters.list : '') || ALL_LISTS);
+
+  // ── View-mode editing ──
   const [showAdd,        setShowAdd]        = useState(false);
   const [detailEntry,    setDetailEntry]    = useState(null);
   const [startEditing,   setStartEditing]   = useState(false);
   const [confirmDeleteId,setConfirmDeleteId] = useState(null);
   const [editingProgress,setEditingProgress] = useState(null); // { id, value }
   const [editingRating,  setEditingRating]   = useState(null); // { id, value }
+  const [saving,         setSaving]          = useState('');
 
-  // Mobile drawer state — '', 'left', or 'right'. CSS reveals the matching
-  // sidebar based on the layout's `data-drawer` attribute.
+  // ── Manage-mode: bulk selection + tools ──
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const lastSelectedId = useRef(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkListValue, setBulkListValue] = useState('');
+  const [bulkStatusValue, setBulkStatusValue] = useState('');
+  const [bulkField, setBulkField] = useState('');
+  const [bulkFieldValue, setBulkFieldValue] = useState('');
+  const [showLists, setShowLists] = useState(false);
+  const [listModalTab, setListModalTab] = useState('add');
+  const [lastEntryWarning, setLastEntryWarning] = useState(null);
+  const [showDedup, setShowDedup] = useState(false);
+  const [showCacheCovers, setShowCacheCovers] = useState(false);
+  const [showResync, setShowResync] = useState(false);
+  const extPresent = useExtensionPresent();
+
   const [drawer, setDrawer] = useState('');
-  // Quick Actions toolbar (per-row status select + delete) — off by default,
-  // toggled from the right sidebar and remembered in localStorage.
-  const [showActions, setShowActions] = useState(() => {
-    try { return localStorage.getItem(LS_QUICK_ACTIONS) === '1'; } catch { return false; }
-  });
+  // View toggles + per-mode columns come from the saved UI preferences.
+  const [showActions, setShowActions] = useState(false);
+  const [fixTitle, setFixTitle] = useState(false);
   const toggleQuickActions = () => setShowActions(prev => {
     const next = !prev;
-    try { localStorage.setItem(LS_QUICK_ACTIONS, next ? '1' : '0'); } catch { /* ignore */ }
+    updateUi({ library: { quick_actions: next } });
     return next;
-  });
-  // Pin the Title column to a fixed width so the other columns don't shift when
-  // the sort/search changes which (and how long) titles are shown.
-  const [fixTitle, setFixTitle] = useState(() => {
-    try { return localStorage.getItem(LS_FIX_TITLE) === '1'; } catch { return false; }
   });
   const toggleFixTitle = () => setFixTitle(prev => {
     const next = !prev;
-    try { localStorage.setItem(LS_FIX_TITLE, next ? '1' : '0'); } catch { /* ignore */ }
+    updateUi({ library: { fix_title: next } });
     return next;
   });
+  // Apply saved preferences once they load (first time only); URL params win.
+  const prefsSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!prefsLoaded || prefsSyncedRef.current) return;
+    prefsSyncedRef.current = true;
+    setShowActions(!!libPrefs.quick_actions);
+    setFixTitle(!!libPrefs.fix_title);
+    if (!urlHadModeRef.current && (libPrefs.default_mode === 'view' || libPrefs.default_mode === 'manage')) {
+      setMode(libPrefs.default_mode);
+    }
+    if (!urlHadSortRef.current && libPrefs.default_sort && sortKeys.includes(libPrefs.default_sort)) {
+      setSort(libPrefs.default_sort);
+    }
+    if (!urlHadLimitRef.current && PAGE_SIZE_OPTIONS.includes(libPrefs.entries_per_page)) {
+      setLimit(libPrefs.entries_per_page);
+    }
+    setSettingsApplied(true);
+  }, [prefsLoaded, libPrefs]);
+
+  const viewCols   = libPrefs.columns?.view   || DEFAULT_UI.library.columns.view;
+  const manageCols = libPrefs.columns?.manage || DEFAULT_UI.library.columns.manage;
+  const showCol = (col) => (isManage ? manageCols : viewCols).includes(col);
 
   const [search,       setSearch]       = useState(() => searchParams.get('q') || (!hasUrlParams ? initialFilters.title : '') || '');
   const [statusFilter, setStatusFilter] = useState(() => validParam(searchParams.get('status'), STATUSES, !hasUrlParams ? initialFilters.status || '' : ''));
@@ -96,6 +174,12 @@ export default function Library({ initialFilters = {} }) {
   const [page,         setPage]         = useState(() => positiveIntParam(searchParams.get('page'), DEFAULT_PAGE));
   const [limit,        setLimit]        = useState(() => validParam(Number(searchParams.get('limit')), PAGE_SIZE_OPTIONS, DEFAULT_LIMIT));
 
+  const listParams = useCallback(() => (
+    listFilter === UNLISTED_LIST ? { custom_list_empty: true }
+      : listFilter ? { custom_list: listFilter }
+      : {}
+  ), [listFilter]);
+
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(''); }
     try {
@@ -104,6 +188,7 @@ export default function Library({ initialFilters = {} }) {
         ...(statusFilter && { status: statusFilter }),
         ...(mediumFilter && { medium: mediumFilter }),
         ...(originFilter && { origin: originFilter }),
+        ...listParams(),
         sort, order, limit, offset: (page - 1) * limit,
       };
 
@@ -112,7 +197,7 @@ export default function Library({ initialFilters = {} }) {
       setEntries(items);
       setTotal(data?.total ?? items.length);
 
-      // build sidebar counts on first unfiltered load
+      // build sidebar counts on first unfiltered load (global, across all lists)
       if (page === 1 && !search) {
         const allData = await getEntries({ limit: 2000 }).catch(() => data);
         const all     = extractItems(allData);
@@ -120,7 +205,6 @@ export default function Library({ initialFilters = {} }) {
         all.forEach(e => {
           c[e.status] = (c[e.status] || 0) + 1;
           if (e.medium) c[e.medium] = (c[e.medium] || 0) + 1;
-          // Only the canonical origins are tallied; null/blank/unknown are ignored.
           if (ORIGINS.includes(e.origin)) c[e.origin] = (c[e.origin] || 0) + 1;
         });
         setCounts(c);
@@ -130,37 +214,40 @@ export default function Library({ initialFilters = {} }) {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [search, statusFilter, mediumFilter, originFilter, sort, order, page, limit]);
+  }, [search, statusFilter, mediumFilter, originFilter, listParams, sort, order, page, limit]);
 
-  // reset to page 1 when filters/sort/limit change
+  const loadLists = useCallback(async () => {
+    setLoadingLists(true);
+    let nextLists = [];
+    try {
+      const [listData, unlistedData] = await Promise.all([
+        getCustomLists(),
+        getEntries({ custom_list_empty: true, limit: 1 }),
+      ]);
+      nextLists = Array.isArray(listData) ? listData : [];
+      setLists(nextLists);
+      setUnlistedCount(unlistedData?.total ?? extractItems(unlistedData).length);
+    } catch { /* lists are best-effort */ }
+    finally { setLoadingLists(false); }
+    return nextLists;
+  }, []);
+
+  // reset to page 1 when filters/sort/limit/list change
   useEffect(() => {
-    if (!didMountRef.current) {
-      didMountRef.current = true;
-      return;
-    }
+    if (!didMountRef.current) { didMountRef.current = true; return; }
     setPage(1);
-  }, [search, statusFilter, mediumFilter, originFilter, sort, order, limit]);
+  }, [search, statusFilter, mediumFilter, originFilter, listFilter, sort, order, limit]);
 
-  // Apply saved user settings on mount (only when not overridden by URL).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const s = await getSettings();
-        if (cancelled) return;
-        if (!urlHadSortRef.current && s.default_sort && sortKeys.includes(s.default_sort)) {
-          setSort(s.default_sort);
-        }
-        if (!urlHadLimitRef.current && PAGE_SIZE_OPTIONS.includes(s.default_entries_per_page)) {
-          setLimit(s.default_entries_per_page);
-        }
-      } catch { /* fall back to current state */ }
-      finally { if (!cancelled) setSettingsApplied(true); }
-    })();
-    return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { loadLists(); }, [loadLists]);
   useEffect(() => { if (settingsApplied) load(); }, [load, settingsApplied]);
+
+  // If the active list no longer exists (deleted/emptied elsewhere), fall back to All.
+  useEffect(() => {
+    if (loadingLists) return;
+    if (listFilter && listFilter !== UNLISTED_LIST && !listNames.includes(listFilter)) {
+      setListFilter(ALL_LISTS);
+    }
+  }, [loadingLists, listNames, listFilter]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -168,12 +255,19 @@ export default function Library({ initialFilters = {} }) {
     if (statusFilter) params.set('status', statusFilter);
     if (mediumFilter) params.set('medium', mediumFilter);
     if (originFilter) params.set('origin', originFilter);
+    if (listFilter) params.set('list', listFilter);
+    if (mode !== 'view') params.set('mode', mode);
     if (sort !== DEFAULT_SORT) params.set('sort', sort);
     if (order !== DEFAULT_ORDER) params.set('order', order);
     if (page !== DEFAULT_PAGE) params.set('page', String(page));
     if (limit !== DEFAULT_LIMIT) params.set('limit', String(limit));
     setSearchParams(params, { replace: true });
-  }, [search, statusFilter, mediumFilter, originFilter, sort, order, page, limit, setSearchParams]);
+  }, [search, statusFilter, mediumFilter, originFilter, listFilter, mode, sort, order, page, limit, setSearchParams]);
+
+  function refreshView() {
+    loadLists();
+    load(true);
+  }
 
   function handleSort(field) {
     if (sort === field) setOrder(o => o === 'asc' ? 'desc' : 'asc');
@@ -202,9 +296,7 @@ export default function Library({ initialFilters = {} }) {
       try {
         const updated = await updateEntry(id, { progress: num });
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
-      } catch (e) {
-        alert('Update failed: ' + e.message);
-      }
+      } catch (e) { alert('Update failed: ' + e.message); }
     }
   }
 
@@ -215,9 +307,7 @@ export default function Library({ initialFilters = {} }) {
     try {
       const updated = await updateEntry(id, { rating: num ?? undefined });
       setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
-    } catch (e) {
-      alert('Update failed: ' + e.message);
-    }
+    } catch (e) { alert('Update failed: ' + e.message); }
   }
 
   async function handleDeleteEntry(id) {
@@ -226,10 +316,8 @@ export default function Library({ initialFilters = {} }) {
       setConfirmDeleteId(null);
       setEntries(prev => prev.filter(e => e.id !== id));
       setTotal(t => t - 1);
-      load(true);
-    } catch (e) {
-      alert('Delete failed: ' + e.message);
-    }
+      refreshView();
+    } catch (e) { alert('Delete failed: ' + e.message); }
   }
 
   const handleUpdated = (updated) => {
@@ -240,12 +328,146 @@ export default function Library({ initialFilters = {} }) {
     setDetailEntry(null);
     setEntries(prev => prev.filter(e => e.id !== id));
     setTotal(t => t - 1);
-    load(true);
+    refreshView();
   };
+
+  // ── Custom-list assignment (manage-mode per-row column) ──
+  function isRemovingLastEntryFromList(entry, nextValue) {
+    const currentList = entry.custom_list || '';
+    if (!currentList || currentList === nextValue) return false;
+    return lists.find(l => l.name === currentList)?.count === 1;
+  }
+
+  async function saveEntryList(entry, nextValue, { skipWarning = false } = {}) {
+    nextValue = nextValue || '';
+    if (!skipWarning && isRemovingLastEntryFromList(entry, nextValue)) {
+      setLastEntryWarning({ entry, nextValue });
+      return;
+    }
+    setSaving(`entry:${entry.id}`);
+    setLastEntryWarning(null);
+    try {
+      const updated = await updateEntry(entry.id, { custom_list: nextValue || null });
+      await loadLists();
+      const movedAway =
+        listFilter === UNLISTED_LIST ? (nextValue || '') !== ''
+          : listFilter ? nextValue !== listFilter
+          : false;
+      setEntries(prev => {
+        const mapped = prev.map(e => e.id === entry.id ? { ...e, ...updated } : e);
+        return movedAway ? mapped.filter(e => e.id !== entry.id) : mapped;
+      });
+      if (movedAway) setTotal(t => Math.max(0, t - 1));
+    } catch (err) {
+      alert('Update failed: ' + err.message);
+    } finally {
+      setSaving('');
+    }
+  }
+
+  // ── Bulk selection ──
+  const pageIds = useMemo(() => entries.map(e => e.id), [entries]);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+
+  function toggleSelect(id, shiftKey = false) {
+    setConfirmBulkDelete(false);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      const index = entries.findIndex(e => e.id === id);
+      const anchorIndex = entries.findIndex(e => e.id === lastSelectedId.current);
+      if (shiftKey && anchorIndex !== -1 && index !== -1) {
+        const shouldSelect = !prev.has(id);
+        const lo = Math.min(anchorIndex, index);
+        const hi = Math.max(anchorIndex, index);
+        for (let i = lo; i <= hi; i++) {
+          const rangeId = entries[i]?.id;
+          if (rangeId == null) continue;
+          if (shouldSelect) next.add(rangeId); else next.delete(rangeId);
+        }
+      } else {
+        next.has(id) ? next.delete(id) : next.add(id);
+      }
+      return next;
+    });
+    lastSelectedId.current = id;
+  }
+
+  function handleSelectClick(ev, id) {
+    if (ev.shiftKey) ev.preventDefault();
+    toggleSelect(id, ev.shiftKey);
+  }
+
+  function toggleSelectAll() {
+    setConfirmBulkDelete(false);
+    lastSelectedId.current = null;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allPageSelected) pageIds.forEach(id => next.delete(id));
+      else pageIds.forEach(id => next.add(id));
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+    lastSelectedId.current = null;
+    setConfirmBulkDelete(false);
+    setBulkListValue('');
+    setBulkStatusValue('');
+    setBulkField('');
+    setBulkFieldValue('');
+    setBulkError('');
+  }
+
+  async function runBulk(patch) {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkBusy(true); setBulkError('');
+    try {
+      await batchUpdateEntries(ids, patch);
+      clearSelection();
+      refreshView();
+    } catch (err) { setBulkError(err.message); }
+    finally { setBulkBusy(false); }
+  }
+
+  function bulkAssignList(value) {
+    setBulkListValue(value); setBulkStatusValue(''); setBulkField(''); setBulkFieldValue('');
+  }
+  function bulkSetStatus(value) {
+    setBulkStatusValue(value); setBulkListValue(''); setBulkField(''); setBulkFieldValue('');
+  }
+  function buildBulkPatch() {
+    if (bulkListValue) return { custom_list: bulkListValue === '__none__' ? null : bulkListValue };
+    if (bulkStatusValue) return { status: bulkStatusValue };
+    if (!bulkField) return null;
+    const meta = BULK_FIELDS.find(f => f.key === bulkField);
+    if (!meta || bulkFieldValue === '') return null;
+    let value = bulkFieldValue;
+    if (meta.kind === 'number') value = value === '' ? null : Number(value);
+    else value = value || null;
+    return { [bulkField]: value };
+  }
+  function applyBulkChange() {
+    const patch = buildBulkPatch();
+    if (patch) runBulk(patch);
+  }
+  async function doBulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkBusy(true); setBulkError('');
+    try {
+      await batchDeleteEntries(ids);
+      clearSelection();
+      refreshView();
+    } catch (err) { setBulkError(err.message); }
+    finally { setBulkBusy(false); }
+  }
 
   const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); setOriginFilter(''); };
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;
   const totalPages   = Math.ceil(total / limit);
+
   const SortTh = ({ field, className, children, style }) => (
     <th className={`sortable${className ? ' ' + className : ''}`}
       onClick={() => handleSort(field)}
@@ -255,10 +477,6 @@ export default function Library({ initialFilters = {} }) {
     </th>
   );
 
-  // Fixed width for the Title column so the other columns don't shift around
-  // when the sort/search changes the set (and therefore the longest title).
-  const TITLE_COL_WIDTH = 750;
-
   const [showImport,     setShowImport]     = useState(false);
   const [showImportAuto, setShowImportAuto] = useState(false);
   const [showImportMal,  setShowImportMal]  = useState(false);
@@ -267,35 +485,111 @@ export default function Library({ initialFilters = {} }) {
     try {
       const blob = await exportEntries();
       const a = Object.assign(document.createElement('a'), {
-        href: URL.createObjectURL(blob),
-        download: 'library.csv',
+        href: URL.createObjectURL(blob), download: 'library.csv',
       });
       a.click();
-    } catch (err) {
-      alert(`Export failed: ${err.message}`);
-    }
+    } catch (err) { alert(`Export failed: ${err.message}`); }
   }
 
-  // On mobile we always show cover/title + rating + the sort-derived
-  // column, and the actions column is hidden. When the user is sorting
-  // by rating (which is therefore already visible) we use the slot for
-  // completed-date so the row still says something extra.
+  function openListsModal(tab = 'add') { setListModalTab(tab); setShowLists(true); }
+
   const mobileShow = ({
-    title:        'status',
-    medium:       'medium',
-    rating:       'completed',
-    status:       'status',
-    year:         'year',
-    updated_at:   'updated',
-    completed_at: 'completed',
+    title: 'status', medium: 'medium', rating: 'completed',
+    status: 'status', year: 'year', updated_at: 'updated', completed_at: 'completed',
   })[sort] || 'status';
+
+  // ── Batch-edit panel (manage mode): right sidebar on desktop, inline on mobile ──
+  const batchPanel = (
+    <>
+      <p className="panel-title">Batch Edit</p>
+      <div className="batch-panel">
+        <div className={`batch-hint${selectedIds.size ? ' is-active' : ''}`}>
+          {selectedIds.size ? `${selectedIds.size} selected` : 'Select entries to edit in bulk'}
+        </div>
+        <CustomSelect
+          className="inline-select batch-select"
+          value={bulkListValue}
+          options={[
+            ...listNames.map(name => ({ value: name, label: name })),
+            { value: '__none__', label: '— Remove from list —' },
+          ]}
+          onChange={bulkAssignList}
+          placeholder="Assign to list…"
+          disabled={bulkBusy || selectedIds.size === 0}
+          style={{ width: '100%' }}
+          ariaLabel="Assign selected entries to list"
+        />
+        <CustomSelect
+          className="inline-select batch-select"
+          value={bulkStatusValue}
+          options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
+          onChange={bulkSetStatus}
+          placeholder="Set status…"
+          disabled={bulkBusy || selectedIds.size === 0}
+          style={{ width: '100%' }}
+          ariaLabel="Set status for selected entries"
+        />
+        <CustomSelect
+          className="inline-select batch-select"
+          value={bulkField}
+          options={BULK_FIELDS.map(field => ({ value: field.key, label: field.label }))}
+          onChange={value => { setBulkField(value); setBulkFieldValue(''); setBulkListValue(''); setBulkStatusValue(''); }}
+          placeholder="Edit field…"
+          disabled={bulkBusy || selectedIds.size === 0}
+          style={{ width: '100%' }}
+          ariaLabel="Choose field to edit"
+        />
+        {bulkField && (
+          <div className="batch-field-row">
+            {(() => {
+              const meta = BULK_FIELDS.find(f => f.key === bulkField);
+              if (meta.kind === 'medium' || meta.kind === 'origin') {
+                const opts = meta.kind === 'medium' ? MEDIUMS : ORIGINS;
+                return (
+                  <CustomSelect
+                    className="inline-select batch-select"
+                    value={bulkFieldValue}
+                    options={opts.map(option => ({ value: option, label: option }))}
+                    onChange={setBulkFieldValue}
+                    placeholder={`Choose ${meta.label.toLowerCase()}…`}
+                    disabled={bulkBusy}
+                    style={{ flex: 1 }}
+                    maxVisible={opts.length}
+                    ariaLabel={`Choose ${meta.label.toLowerCase()}`}
+                  />
+                );
+              }
+              return (
+                <input className="inline-select batch-select" type="number" placeholder={meta.label}
+                  min={meta.min} max={meta.max} value={bulkFieldValue} disabled={bulkBusy}
+                  style={{ flex: 1 }}
+                  onChange={e => setBulkFieldValue(e.target.value)} />
+              );
+            })()}
+          </div>
+        )}
+        <div className="batch-actions">
+          <button className="icon-btn danger" disabled={bulkBusy || selectedIds.size === 0}
+            onClick={() => confirmBulkDelete ? doBulkDelete() : setConfirmBulkDelete(true)}>
+            {bulkBusy ? 'Working…' : confirmBulkDelete ? 'Confirm delete' : 'Delete'}
+          </button>
+          <button className="icon-btn accent" disabled={bulkBusy || selectedIds.size === 0 || !buildBulkPatch()} onClick={applyBulkChange}>
+            Apply
+          </button>
+          <button className="icon-btn" disabled={bulkBusy} onClick={clearSelection}>Clear</button>
+        </div>
+        {bulkError && <div style={{ color: 'var(--red)', fontSize: 11 }}>{bulkError}</div>}
+      </div>
+    </>
+  );
+
+  const skeletonHeaders = isManage
+    ? ['Sel', 'Title', 'Status', 'Medium', 'Rating', 'Progress', 'Updated', 'Custom List', ...(showActions ? ['Actions'] : [])]
+    : ['Title', 'Medium', 'Year', 'Progress', 'Status', 'Rating', 'Updated', 'Completed', ...(showActions ? ['Actions'] : [])];
 
   return (
     <div className="layout-3col" data-drawer={drawer}>
-      {/* ── Mobile drawer backdrop ── */}
-      {drawer && (
-        <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
-      )}
+      {drawer && <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />}
 
       {/* ── Left sidebar ── */}
       <div className="sidebar-left">
@@ -350,27 +644,29 @@ export default function Library({ initialFilters = {} }) {
       <div className="main-content">
         <div className="page-head">
           <div className="page-head-left">
-            <button
-              type="button"
-              className="drawer-toggle"
+            <button type="button" className="drawer-toggle"
               onClick={() => setDrawer(d => d === 'left' ? '' : 'left')}
-              aria-label="Toggle filters"
-              title="Filters"
-            >☰ Filters</button>
+              aria-label="Toggle filters" title="Filters">☰ Filters</button>
             <span className="page-title">Library</span>
+            <div className="mode-toggle" role="tablist" aria-label="Library mode">
+              <button type="button" role="tab" aria-selected={!isManage}
+                className={`mode-toggle-btn${!isManage ? ' is-on' : ''}`}
+                onClick={() => changeMode('view')}>View</button>
+              <button type="button" role="tab" aria-selected={isManage}
+                className={`mode-toggle-btn${isManage ? ' is-on' : ''}`}
+                onClick={() => changeMode('manage')}>Manage</button>
+            </div>
             <span className="page-desc">
               {loading ? <SkeletonLine width={74} height={11} /> : `${total} entries`}
             </span>
           </div>
           <div className="page-head-mobile">
-            <button
-              type="button"
-              className="drawer-toggle"
+            <button type="button" className="drawer-toggle"
               onClick={() => setDrawer(d => d === 'right' ? '' : 'right')}
-              aria-label="Toggle sort and tools"
-              title="Sort & tools"
-            >⋯</button>
-            <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>
+              aria-label="Toggle sort and tools" title="Sort & tools">⋯</button>
+            {isManage
+              ? <button className="btn" onClick={() => openListsModal('add')}>+ Add List</button>
+              : <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>}
           </div>
         </div>
 
@@ -379,10 +675,7 @@ export default function Library({ initialFilters = {} }) {
             onChange={e => setSearch(e.target.value)} />
           <CustomSelect
             value={sort}
-            options={SORT_FIELDS.map(field => ({
-              value: field.key,
-              label: `Sort: ${field.label}`,
-            }))}
+            options={SORT_FIELDS.map(field => ({ value: field.key, label: `Sort: ${field.label}` }))}
             onChange={setSort}
             className="filter-select"
             containerClassName="library-manage-sort"
@@ -392,39 +685,41 @@ export default function Library({ initialFilters = {} }) {
             onClick={() => setOrder(o => o === 'asc' ? 'desc' : 'asc')}>
             {order === 'asc' ? '↑ Asc' : '↓ Desc'}
           </button>
-          {hasFilters && (
-            <button className="icon-btn" onClick={clearFilters}>✕ Clear</button>
-          )}
+          {hasFilters && <button className="icon-btn" onClick={clearFilters}>✕ Clear</button>}
           <CustomSelect
             value={limit}
-            options={PAGE_SIZE_OPTIONS.map(size => ({
-              value: size,
-              label: `${size} / page`,
-            }))}
+            options={PAGE_SIZE_OPTIONS.map(size => ({ value: size, label: `${size} / page` }))}
             onChange={value => setLimit(Number(value))}
             className="filter-select"
             style={{ width: 110, marginLeft: 'auto' }}
             ariaLabel="Entries per page"
           />
-          <button className="icon-btn" onClick={() => load()} title="Refresh" style={{ padding: '5px 10px' }}>Refresh</button>
+          <button className="icon-btn" onClick={() => refreshView()} title="Refresh" style={{ padding: '5px 10px' }}>Refresh</button>
         </div>
+
+        <ListChips
+          lists={lists}
+          value={listFilter}
+          unlistedCount={unlistedCount}
+          onChange={setListFilter}
+          onNew={() => openListsModal('add')}
+          loading={loadingLists}
+        />
+
+        {/* Mobile-only: batch edit lives inline above the table in manage mode. */}
+        {isManage && <div className="batch-mobile">{batchPanel}</div>}
 
         {error && (
           <div className="state-block">
             <div className="state-title">Error</div>
             <div className="state-detail">{error}</div>
-            <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={load}>Retry</button>
+            <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={() => load()}>Retry</button>
           </div>
         )}
 
         {!error && loading && (
           <div className="skeleton-page" aria-label="Loading library">
-            <SkeletonTable
-              headers={['Title', 'Medium', 'Year', 'Progress', 'Status', 'Rating', 'Updated', 'Completed', ...(showActions ? ['Actions'] : [])]}
-              rows={12}
-              cover
-              widths={['78%', '64%', '42%', '70%', '68%', '44%', '58%', '58%', ...(showActions ? ['76%'] : [])]}
-            />
+            <SkeletonTable headers={skeletonHeaders} rows={12} cover />
           </div>
         )}
 
@@ -435,19 +730,110 @@ export default function Library({ initialFilters = {} }) {
           </div>
         )}
 
-        {!error && !loading && entries.length > 0 && (
+        {!error && !loading && entries.length > 0 && isManage && (
           <div>
-              <table className="media-table" data-mobile-show={mobileShow}>
+            <table className="media-table manage-entry-table" data-mobile-show="status">
+              <thead>
+                <tr>
+                  <th className="col-select">
+                    <button type="button" className={`box-toggle${allPageSelected ? ' is-on' : ''}`}
+                      onClick={toggleSelectAll} aria-pressed={allPageSelected} aria-label="Select all on page">
+                      {allPageSelected ? '[X]' : '[ ]'}
+                    </button>
+                  </th>
+                  <SortTh field="title" style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>Title</SortTh>
+                  {showCol('status') && <SortTh field="status" className="col-status">Status</SortTh>}
+                  {showCol('medium') && <SortTh field="medium" className="col-medium">Medium</SortTh>}
+                  {showCol('rating') && <SortTh field="rating" className="col-rating">Rating</SortTh>}
+                  {showCol('progress') && <th className="col-progress">Progress</th>}
+                  {showCol('updated') && <SortTh field="updated_at" className="col-updated">Updated</SortTh>}
+                  {showCol('custom_list') && <th className="col-custom-list">Custom List</th>}
+                  {showActions && <th className="action-cell">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map(entry => (
+                  <tr key={entry.id} style={{ cursor: 'pointer', userSelect: 'none' }}
+                    className={selectedIds.has(entry.id) ? 'row-selected' : undefined}
+                    onMouseDown={ev => { if (ev.shiftKey) ev.preventDefault(); }}
+                    onClick={ev => handleSelectClick(ev, entry.id)}>
+                    <td className="col-select">
+                      <button type="button" className={`box-toggle${selectedIds.has(entry.id) ? ' is-on' : ''}`}
+                        onMouseDown={ev => { if (ev.shiftKey) ev.preventDefault(); }}
+                        onClick={ev => { ev.stopPropagation(); handleSelectClick(ev, entry.id); }}
+                        aria-pressed={selectedIds.has(entry.id)} aria-label={`Select ${entry.title}`}>
+                        {selectedIds.has(entry.id) ? '[X]' : '[ ]'}
+                      </button>
+                    </td>
+                    <td style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>
+                      <div className="cover-cell">
+                        <div className="cover-thumb">
+                          {entry.cover_url && <img src={entry.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />}
+                        </div>
+                        <span className="media-name">{entry.title}</span>
+                      </div>
+                    </td>
+                    {showCol('status') && <td className="col-status"><span className={`badge badge-${entry.status}`}>{statusLabel(entry.status)}</span></td>}
+                    {showCol('medium') && <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{entry.medium || '—'}</span></td>}
+                    {showCol('rating') && <td className="col-rating"><span className="rating-cell">{entry.rating != null ? entry.rating : '—'}<span>/10</span></span></td>}
+                    {showCol('progress') && <td className="col-progress"><span style={{ color: 'var(--dim)' }}>{progressLabel(entry)}</span></td>}
+                    {showCol('updated') && <td className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(entry.updated_at)}</span></td>}
+                    {showCol('custom_list') && (
+                    <td className="col-custom-list" onClick={ev => ev.stopPropagation()}>
+                      <CustomSelect
+                        className="inline-select"
+                        value={entry.custom_list || ''}
+                        disabled={saving === `entry:${entry.id}`}
+                        options={[
+                          { value: '', label: 'No List' },
+                          ...listNames.map(name => ({ value: name, label: name })),
+                        ]}
+                        onChange={value => saveEntryList(entry, value)}
+                        containerClassName="manage-list-select"
+                        ariaLabel={`Custom list for ${entry.title}`}
+                      />
+                    </td>
+                    )}
+                    {showActions && (
+                      <td className="action-cell" onClick={ev => ev.stopPropagation()}>
+                        <div className="action-cell-inner">
+                          <button className="icon-btn" style={{ padding: '2px 8px', fontSize: 11 }}
+                            onClick={() => { setDetailEntry(entry); setStartEditing(false); }}>view</button>
+                          <button className="icon-btn edit" style={{ padding: '2px 8px', fontSize: 11 }}
+                            onClick={() => { setDetailEntry(entry); setStartEditing(true); }}>edit</button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', paddingBottom: 16 }}>
+                {page > 1 && <button className="icon-btn" onClick={() => setPage(1)}>« First</button>}
+                <button className="icon-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                <span style={{ fontSize: 11, color: 'var(--dim)' }}>Page {page} of {totalPages}</span>
+                <button className="icon-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
+                {page < totalPages && <button className="icon-btn" onClick={() => setPage(totalPages)}>Last »</button>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!error && !loading && entries.length > 0 && !isManage && (
+          <div>
+            <table className="media-table" data-mobile-show={mobileShow}>
               <thead>
                 <tr>
                   <SortTh field="title" style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>Title</SortTh>
-                  <SortTh field="medium" className="col-medium">Medium</SortTh>
-                  <SortTh field="year"   className="col-year">Year</SortTh>
-                  <th className="col-progress">Progress</th>
-                  <SortTh field="status" className="col-status">Status</SortTh>
-                  <SortTh field="rating" className="col-rating">Rating</SortTh>
-                  <SortTh field="updated_at"   className="col-updated">Updated</SortTh>
-                  <SortTh field="completed_at" className="col-completed">Completed</SortTh>
+                  {showCol('medium') && <SortTh field="medium" className="col-medium">Medium</SortTh>}
+                  {showCol('year') && <SortTh field="year" className="col-year">Year</SortTh>}
+                  {showCol('progress') && <th className="col-progress">Progress</th>}
+                  {showCol('status') && <SortTh field="status" className="col-status">Status</SortTh>}
+                  {showCol('rating') && <SortTh field="rating" className="col-rating">Rating</SortTh>}
+                  {showCol('updated') && <SortTh field="updated_at" className="col-updated">Updated</SortTh>}
+                  {showCol('completed') && <SortTh field="completed_at" className="col-completed">Completed</SortTh>}
                   {showActions && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
@@ -461,116 +847,86 @@ export default function Library({ initialFilters = {} }) {
                       <td style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>
                         <div className="cover-cell">
                           <div className="cover-thumb">
-                            {e.cover_url && (
-                              <img src={e.cover_url} alt=""
-                                referrerPolicy="no-referrer"
-                                onError={onCoverError} />
-                            )}
+                            {e.cover_url && <img src={e.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />}
                           </div>
                           <span className="media-name">{e.title}</span>
                         </div>
                       </td>
-                      <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium}</span></td>
-                      <td className="col-year"><span style={{ color: 'var(--dim)' }}>{e.year || '—'}</span></td>
+                      {showCol('medium') && <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium}</span></td>}
+                      {showCol('year') && <td className="col-year"><span style={{ color: 'var(--dim)' }}>{e.year || '—'}</span></td>}
+                      {showCol('progress') && (
                       <td className="col-progress" onClick={ev => ev.stopPropagation()}>
                         {isEditingProg ? (
-                          <input
-                            className="inline-select"
-                            type="number" min="0"
-                            style={{ width: 64 }}
-                            value={editingProgress.value}
-                            autoFocus
+                          <input className="inline-select" type="number" min="0" style={{ width: 64 }}
+                            value={editingProgress.value} autoFocus
                             onChange={ev => setEditingProgress({ id: e.id, value: ev.target.value })}
                             onKeyDown={ev => {
                               if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value);
                               if (ev.key === 'Escape') setEditingProgress(null);
                             }}
-                            onBlur={() => handleProgressSave(e.id, editingProgress.value)}
-                          />
+                            onBlur={() => handleProgressSave(e.id, editingProgress.value)} />
                         ) : (
-                          <div className="progress-cell"
-                            title="Click to edit progress"
-                            style={{ cursor: 'text' }}
+                          <div className="progress-cell" title="Click to edit progress" style={{ cursor: 'text' }}
                             onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
                             {progressLabel(e)}
-                            {pct > 0 && (
-                              <div className="progress-mini">
-                                <div className="progress-mini-fill" style={{ width: `${pct}%` }} />
-                              </div>
-                            )}
+                            {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ width: `${pct}%` }} /></div>}
                           </div>
                         )}
                       </td>
+                      )}
+                      {showCol('status') && (
                       <td className="col-status" onClick={ev => ev.stopPropagation()}>
                         <CustomSelect
                           className="inline-select"
                           value={e.status}
-                          options={STATUSES.map(status => ({
-                            value: status,
-                            label: statusLabel(status),
-                          }))}
+                          options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
                           onChange={value => handleStatusChange(e.id, value)}
                           ariaLabel={`Status for ${e.title}`}
                         />
                       </td>
+                      )}
+                      {showCol('rating') && (
                       <td className="col-rating" onClick={ev => ev.stopPropagation()}>
                         {editingRating?.id === e.id ? (
-                          <input
-                            className="inline-select"
-                            type="number" min="0" max="10" step="0.5"
-                            style={{ width: 64 }}
-                            value={editingRating.value}
-                            autoFocus
+                          <input className="inline-select" type="number" min="0" max="10" step="0.5" style={{ width: 64 }}
+                            value={editingRating.value} autoFocus
                             onChange={ev => setEditingRating({ id: e.id, value: ev.target.value })}
                             onKeyDown={ev => {
                               if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value);
                               if (ev.key === 'Escape') setEditingRating(null);
                             }}
-                            onBlur={() => handleRatingSave(e.id, editingRating.value)}
-                          />
+                            onBlur={() => handleRatingSave(e.id, editingRating.value)} />
                         ) : (
-                          <span className="rating-cell" title="Click to edit rating"
-                            style={{ cursor: 'text' }}
+                          <span className="rating-cell" title="Click to edit rating" style={{ cursor: 'text' }}
                             onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
                             {e.rating != null ? e.rating : '—'}<span>/10</span>
                           </span>
                         )}
                       </td>
-                      <td className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>
-                      <td className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at)}</span></td>
+                      )}
+                      {showCol('updated') && <td className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>}
+                      {showCol('completed') && <td className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at)}</span></td>}
                       {showActions && (
-                      <td className="action-cell" onClick={ev => ev.stopPropagation()}>
-                        <div className="action-cell-inner">
-                        {isConfirmDel ? (
-                          <>
-                            <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
-                            <button className="btn btn-danger"
-                              style={{ padding: '2px 8px', fontSize: 11 }}
-                              onClick={() => handleDeleteEntry(e.id)}>
-                              yes
-                            </button>
-                            <button className="icon-btn"
-                              style={{ padding: '2px 8px', fontSize: 11 }}
-                              onClick={() => setConfirmDeleteId(null)}>
-                              no
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button className="icon-btn edit"
-                              style={{ padding: '2px 8px', fontSize: 11 }}
-                              onClick={() => { setDetailEntry(e); setStartEditing(true); }}>
-                              edit
-                            </button>
-                            <button className="icon-btn danger"
-                              style={{ padding: '2px 8px', fontSize: 11 }}
-                              onClick={() => setConfirmDeleteId(e.id)}>
-                              delete
-                            </button>
-                          </>
-                        )}
-                        </div>
-                      </td>
+                        <td className="action-cell" onClick={ev => ev.stopPropagation()}>
+                          <div className="action-cell-inner">
+                            {isConfirmDel ? (
+                              <>
+                                <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
+                                <button className="btn btn-danger" style={{ padding: '2px 8px', fontSize: 11 }}
+                                  onClick={() => handleDeleteEntry(e.id)}>yes</button>
+                                <button className="icon-btn" style={{ padding: '2px 8px', fontSize: 11 }}
+                                  onClick={() => setConfirmDeleteId(null)}>no</button>
+                              </>
+                            ) : (
+                              <>
+                                <button className="icon-btn edit" style={{ padding: '2px 8px', fontSize: 11 }}
+                                  onClick={() => { setDetailEntry(e); setStartEditing(true); }}>edit</button>
+                                <button className="icon-btn danger" style={{ padding: '2px 8px', fontSize: 11 }}
+                                  onClick={() => setConfirmDeleteId(e.id)}>delete</button>
+                              </>
+                            )}
+                          </div>
+                        </td>
                       )}
                     </tr>
                   );
@@ -594,56 +950,56 @@ export default function Library({ initialFilters = {} }) {
       {/* ── Right sidebar ── */}
       <div className="sidebar-right">
         <ExtensionInstallButton />
-        <p className="panel-title">Sort</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
-          {SORT_FIELDS.map(f => (
-            <div key={f.key} className="sidebar-item"
-              style={{ padding: '4px 0', fontSize: 11 }}
-              onClick={() => handleSort(f.key)}>
-              {f.label}
-              {sort === f.key && (
-                <span style={{ color: 'var(--accent)' }}>{order === 'asc' ? ' ↑' : ' ↓'}</span>
-              )}
+
+        {isManage && <div className="batch-desktop">{batchPanel}</div>}
+
+        {!isManage && (
+          <>
+            <p className="panel-title">Sort</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
+              {SORT_FIELDS.map(f => (
+                <div key={f.key} className="sidebar-item" style={{ padding: '4px 0', fontSize: 11 }}
+                  onClick={() => handleSort(f.key)}>
+                  {f.label}
+                  {sort === f.key && <span style={{ color: 'var(--accent)' }}>{order === 'asc' ? ' ↑' : ' ↓'}</span>}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
+
+        <p className="panel-title">Tools</p>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
+          onClick={() => openListsModal('manage')}>Manage Lists</button>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
+          onClick={() => setShowDedup(true)}>Find Duplicates</button>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
+          onClick={() => setShowCacheCovers(true)}>Cache Covers (server)</button>
+        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: 18 }}
+          disabled={!extPresent}
+          title={extPresent ? 'Resync covers via the browser extension' : 'Requires the Logarium browser extension'}
+          onClick={() => setShowResync(true)}>Cache Covers (extension)</button>
 
         <p className="panel-title">Export / Import</p>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
-          onClick={exportCSV}>
-          Export CSV
-        </button>
+          onClick={exportCSV}>Export CSV</button>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
-          onClick={() => setShowImport(true)}>
-          Import CSV
-        </button>
+          onClick={() => setShowImport(true)}>Import CSV</button>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
-          onClick={() => setShowImportAuto(true)}>
-          Import (auto-search)
-        </button>
+          onClick={() => setShowImportAuto(true)}>Import (auto-search)</button>
         <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
-          onClick={() => setShowImportMal(true)}>
-          Import (MAL XML)
-        </button>
+          onClick={() => setShowImportMal(true)}>Import (MAL XML)</button>
 
         <p className="panel-title" style={{ marginTop: 20 }}>View</p>
-        <button
-          type="button"
-          className={`source-chip${showActions ? ' is-on' : ''}`}
-          onClick={toggleQuickActions}
-          style={{ width: '100%' }}
-          title="Show a per-row status dropdown and delete button in the table"
-        >
+        <button type="button" className={`source-chip${showActions ? ' is-on' : ''}`}
+          onClick={toggleQuickActions} style={{ width: '100%' }}
+          title="Show per-row action buttons in the table">
           <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
           Quick Actions
         </button>
-        <button
-          type="button"
-          className={`source-chip${fixTitle ? ' is-on' : ''}`}
-          onClick={toggleFixTitle}
-          style={{ width: '100%', marginTop: 4 }}
-          title="Pin the Title column to a fixed width so other columns don't shift when sorting or searching"
-        >
+        <button type="button" className={`source-chip${fixTitle ? ' is-on' : ''}`}
+          onClick={toggleFixTitle} style={{ width: '100%', marginTop: 4 }}
+          title="Pin the Title column to a fixed width so other columns don't shift when sorting or searching">
           <span className="source-box">{fixTitle ? '[x]' : '[ ]'}</span>
           Fixed Table
         </button>
@@ -651,9 +1007,7 @@ export default function Library({ initialFilters = {} }) {
         <div style={{ marginTop: 20 }}>
           <p className="panel-title">Showing</p>
           <div className="stat-box" style={{ marginBottom: 8 }}>
-            <span className="stat-val">
-              {loading ? <SkeletonLine width={44} height={22} /> : entries.length}
-            </span>
+            <span className="stat-val">{loading ? <SkeletonLine width={44} height={22} /> : entries.length}</span>
             <span className="stat-lbl">Entries</span>
           </div>
           {statusFilter && (
@@ -666,46 +1020,68 @@ export default function Library({ initialFilters = {} }) {
               Medium: <span style={{ color: 'var(--accent)' }}>{mediumFilter}</span>
             </div>
           )}
+          {listFilter && (
+            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4 }}>
+              List: <span style={{ color: 'var(--accent)' }}>{listFilter === UNLISTED_LIST ? 'Unlisted' : listFilter}</span>
+            </div>
+          )}
         </div>
       </div>
 
       {showAdd && (
-        <AddEntryModal
-          onClose={() => setShowAdd(false)}
-          onCreated={() => { load(); setShowAdd(false); }}
-        />
+        <AddEntryModal onClose={() => setShowAdd(false)} onCreated={() => { refreshView(); setShowAdd(false); }} />
       )}
 
       {detailEntry && (
         <EntryDetailModal
           entry={detailEntry}
           onClose={() => { setDetailEntry(null); setStartEditing(false); }}
-          onUpdated={handleUpdated}
+          onUpdated={(updated) => { handleUpdated(updated); if (isManage) setDetailEntry(updated); }}
           onDeleted={handleDeleted}
           initialEditing={startEditing}
         />
       )}
 
-      {showImport && (
-        <ImportModal
-          onClose={() => setShowImport(false)}
-          onImported={() => { load(); }}
+      {showLists && (
+        <ListsModal
+          initialTab={listModalTab}
+          onClose={() => setShowLists(false)}
+          existingLists={lists}
+          onCreated={(name) => { setShowLists(false); setListFilter(name); setPage(1); loadLists(); }}
+          onRenamed={(oldName, newName) => { if (listFilter === oldName) { setListFilter(newName); setPage(1); } loadLists(); }}
+          onDeleted={(name) => { if (listFilter === name) { setListFilter(ALL_LISTS); setPage(1); } loadLists(); }}
         />
       )}
 
-      {showImportAuto && (
-        <ImportAutoModal
-          onClose={() => setShowImportAuto(false)}
-          onImported={() => { load(); }}
-        />
+      {lastEntryWarning && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setLastEntryWarning(null)}>
+          <div className="modal confirm-modal">
+            <div className="modal-header">
+              <span className="modal-title">Custom List Will Be Removed</span>
+              <button className="icon-btn" onClick={() => setLastEntryWarning(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: '0 0 16px', color: 'var(--dim)', fontSize: 13 }}>
+                "{lastEntryWarning.entry.custom_list}" only contains this entry. Saving will remove the entry from that list, so the custom list will disappear.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button className="btn btn-outline" type="button" onClick={() => setLastEntryWarning(null)}>Cancel</button>
+                <button className="btn btn-danger" type="button"
+                  onClick={() => saveEntryList(lastEntryWarning.entry, lastEntryWarning.nextValue, { skipWarning: true })}>
+                  Save Anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
-      {showImportMal && (
-        <ImportMalModal
-          onClose={() => setShowImportMal(false)}
-          onImported={() => { load(); }}
-        />
-      )}
+      {showImport && <ImportModal onClose={() => setShowImport(false)} onImported={refreshView} />}
+      {showImportAuto && <ImportAutoModal onClose={() => setShowImportAuto(false)} onImported={refreshView} />}
+      {showImportMal && <ImportMalModal onClose={() => setShowImportMal(false)} onImported={refreshView} />}
+      {showDedup && <DedupModal onClose={() => setShowDedup(false)} onResolved={refreshView} />}
+      {showCacheCovers && <CacheCoversModal onClose={() => setShowCacheCovers(false)} />}
+      {showResync && <ResyncModal onClose={() => setShowResync(false)} />}
     </div>
   );
 }

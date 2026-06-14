@@ -146,7 +146,7 @@ export default function CustomSelect({
         <span className={!selected ? 'custom-select-placeholder' : ''}>
           {selected?.label ?? placeholder}
         </span>
-        <span className="custom-select-arrow" aria-hidden="true">▾</span>
+        <span className="custom-select-arrow" aria-hidden="true">{open ? '▴' : '▾'}</span>
       </button>
 
       {open && menuPosition && createPortal(

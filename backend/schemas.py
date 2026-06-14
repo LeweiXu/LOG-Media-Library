@@ -1,7 +1,7 @@
 # --- Entry Schemas ---
 from __future__ import annotations
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from constants import (
@@ -203,15 +203,82 @@ _VALID_DEFAULT_SORT = {
 }
 _VALID_EXPLORE_BY = {"all", "genre", "medium", "origin"}
 
+# Canonical defaults for the single UI-preferences document. The frontend reads
+# a complete document (defaults deep-merged with the user's stored overrides).
+DEFAULT_UI: dict[str, Any] = {
+    "library": {
+        "default_mode": "view",          # "view" | "manage"
+        "default_sort": "updated_at",
+        "entries_per_page": 40,
+        "fix_title": False,
+        "quick_actions": False,
+        "columns": {
+            "view":   ["medium", "year", "progress", "status", "rating", "updated", "completed"],
+            "manage": ["status", "medium", "rating", "progress", "updated", "custom_list"],
+        },
+    },
+    "dashboard": {
+        "current_rows": 10,
+        "planned_rows": 10,
+        "completed_rows": 20,
+        "split": 60,                      # % width of the "currently consuming" column vs "planned"
+        "columns": {
+            "current":   ["medium", "progress", "status", "rating"],
+            "planned":   ["medium", "status"],
+            "completed": ["medium", "progress", "completed", "status", "rating"],
+        },
+    },
+    "statistics": {
+        "consumed_range": 12,
+        "added_range": 5,
+        "sections": {
+            "summary": True,
+            "consumed": True,
+            "added": True,
+            "by_medium": True,
+            "completion": True,
+            "backlog": True,
+            "rating_distribution": True,
+            "rating_comparison": True,
+            "by_status": True,
+            "by_origin": True,
+            "release_years": True,
+        },
+    },
+    "explore": {
+        "default_medium": None,
+        "personalize": True,
+        "hide_in_library": True,
+        "by": "all",                     # "all" | "genre" | "medium" | "origin"
+    },
+}
+
+
+def deep_merge(base: dict, over: Optional[dict]) -> dict[str, Any]:
+    """Recursively merge ``over`` into ``base`` (returns a new dict)."""
+    out = dict(base)
+    for key, value in (over or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def deep_merge_ui(overrides: Optional[dict]) -> dict[str, Any]:
+    """Deep-merge a stored (partial) UI document over DEFAULT_UI."""
+    return deep_merge(DEFAULT_UI, overrides)
+
+
 class UserSettings(BaseModel):
-    """Read & write shape for /auth/me/settings."""
+    """Read & write shape for /auth/me/settings.
+
+    Only ``backup_freq`` remains a real column (a backend concern). Everything
+    else lives inside the single ``ui`` document (see DEFAULT_UI).
+    """
     backup_freq:              str = "never"
-    default_sort:             str = "updated_at"
-    default_entries_per_page: int = Field(40, ge=10, le=200)
-    explore_default_medium:   Optional[str] = None
-    explore_personalize:      bool = True
-    explore_hide_in_library:  bool = True
-    explore_by:               str  = "all"
+    # Single document of all customizable UI preferences (see DEFAULT_UI).
+    ui:                       dict[str, Any] = Field(default_factory=dict)
     model_config = {"from_attributes": True}
 
     @field_validator("backup_freq")
@@ -221,69 +288,17 @@ class UserSettings(BaseModel):
             raise ValueError(f"backup_freq must be one of {sorted(_VALID_BACKUP_FREQ)}")
         return v
 
-    @field_validator("default_sort")
-    @classmethod
-    def _v_sort(cls, v: str) -> str:
-        if v not in _VALID_DEFAULT_SORT:
-            raise ValueError(f"default_sort must be one of {sorted(_VALID_DEFAULT_SORT)}")
-        return v
-
-    @field_validator("explore_default_medium")
-    @classmethod
-    def _v_explore_medium(cls, v: str | None) -> str | None:
-        if v is None or v == "":
-            return None
-        normalised = normalise_medium(v)
-        if normalised not in VALID_MEDIUMS:
-            raise ValueError(f"medium must be one of {sorted(VALID_MEDIUMS)}")
-        return normalised
-
-    @field_validator("explore_by")
-    @classmethod
-    def _v_explore_by(cls, v: str) -> str:
-        if v not in _VALID_EXPLORE_BY:
-            raise ValueError(f"explore_by must be one of {sorted(_VALID_EXPLORE_BY)}")
-        return v
-
 class UserSettingsUpdate(BaseModel):
     """Partial update — every field optional."""
     backup_freq:              Optional[str]  = None
-    default_sort:             Optional[str]  = None
-    default_entries_per_page: Optional[int]  = Field(None, ge=10, le=200)
-    explore_default_medium:   Optional[str]  = None
-    explore_personalize:      Optional[bool] = None
-    explore_hide_in_library:  Optional[bool] = None
-    explore_by:               Optional[str]  = None
+    # Partial UI document — deep-merged into the stored ui_preferences on save.
+    ui:                       Optional[dict[str, Any]] = None
 
     @field_validator("backup_freq")
     @classmethod
     def _v_backup(cls, v: str | None) -> str | None:
         if v is not None and v not in _VALID_BACKUP_FREQ:
             raise ValueError(f"backup_freq must be one of {sorted(_VALID_BACKUP_FREQ)}")
-        return v
-
-    @field_validator("default_sort")
-    @classmethod
-    def _v_sort(cls, v: str | None) -> str | None:
-        if v is not None and v not in _VALID_DEFAULT_SORT:
-            raise ValueError(f"default_sort must be one of {sorted(_VALID_DEFAULT_SORT)}")
-        return v
-
-    @field_validator("explore_default_medium")
-    @classmethod
-    def _v_explore_medium(cls, v: str | None) -> str | None:
-        if v is None or v == "":
-            return None
-        normalised = normalise_medium(v)
-        if normalised not in VALID_MEDIUMS:
-            raise ValueError(f"medium must be one of {sorted(VALID_MEDIUMS)}")
-        return normalised
-
-    @field_validator("explore_by")
-    @classmethod
-    def _v_explore_by(cls, v: str | None) -> str | None:
-        if v is not None and v not in _VALID_EXPLORE_BY:
-            raise ValueError(f"explore_by must be one of {sorted(_VALID_EXPLORE_BY)}")
         return v
 
 # --- Backup Schemas ---

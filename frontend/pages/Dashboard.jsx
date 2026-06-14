@@ -5,7 +5,21 @@ import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
 import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
+import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
+
+// Canonical column order + labels shared by every dashboard table. Which of
+// these actually render is decided per-table by the saved column preference.
+const DASH_COL_ORDER = ['medium', 'year', 'progress', 'completed', 'updated', 'status', 'rating'];
+const DASH_COL_META = {
+  medium:    { label: 'Type',      cls: 'col-medium' },
+  year:      { label: 'Year',      cls: 'col-year' },
+  progress:  { label: 'Progress',  cls: 'col-progress' },
+  completed: { label: 'Completed', cls: 'col-completed' },
+  updated:   { label: 'Updated',   cls: 'col-updated' },
+  status:    { label: 'Status',    cls: 'col-status' },
+  rating:    { label: 'Rating',    cls: 'col-rating' },
+};
 
 function CoverThumb({ url, title }) {
   return (
@@ -20,6 +34,9 @@ function CoverThumb({ url, title }) {
 }
 
 export default function DashboardAlt({ onFilterChange }) {
+  const { prefs } = usePreferences();
+  const dash = prefs.dashboard || DEFAULT_UI.dashboard;
+  const showC = (table, col) => (dash.columns?.[table] || DEFAULT_UI.dashboard.columns[table]).includes(col);
   const [stats,           setStats]           = useState(null);
   const [current,         setCurrent]         = useState([]);
   const [planned,         setPlanned]         = useState([]);
@@ -155,6 +172,101 @@ export default function DashboardAlt({ onFilterChange }) {
 
   const s       = stats || {};
   const maxBar  = monthBarsData.length ? Math.max(...monthBarsData.map(m => m.count), 1) : 1;
+  const split   = Math.min(85, Math.max(15, dash.split ?? DEFAULT_UI.dashboard.split ?? 60));
+
+  // ── Shared table rendering: every dashboard table supports the same column
+  // catalogue; visibility is driven by the saved per-table column preference. ──
+  const dashCols = table => DASH_COL_ORDER.filter(c => showC(table, c));
+
+  function renderHead(table) {
+    return (
+      <tr>
+        <th>Title</th>
+        {dashCols(table).map(c => <th key={c} className={DASH_COL_META[c].cls}>{DASH_COL_META[c].label}</th>)}
+      </tr>
+    );
+  }
+
+  function renderCell(e, col, statusMode) {
+    const pct = progressPercent(e);
+    switch (col) {
+      case 'medium':
+        return <td key={col} className="col-medium"><span style={{ color: 'var(--dim)' }}>{statusMode === 'badge' ? [e.medium, e.origin].filter(Boolean).join(' / ') : (e.medium ?? '—')}</span></td>;
+      case 'year':
+        return <td key={col} className="col-year"><span style={{ color: 'var(--dim)' }}>{e.year ?? '—'}</span></td>;
+      case 'updated':
+        return <td key={col} className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>;
+      case 'completed':
+        return <td key={col} className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at || e.updated_at)}</span></td>;
+      case 'progress': {
+        const isEditingProg = editingProgress?.id === e.id;
+        return (
+          <td key={col} className="col-progress" onClick={ev => ev.stopPropagation()}>
+            {isEditingProg ? (
+              <input className="inline-select" type="number" min="0" style={{ width: 64 }}
+                value={editingProgress.value} autoFocus
+                onChange={ev => setEditingProgress({ id: e.id, value: ev.target.value })}
+                onKeyDown={ev => { if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value); if (ev.key === 'Escape') setEditingProgress(null); }}
+                onBlur={() => handleProgressSave(e.id, editingProgress.value)} />
+            ) : (
+              <div className="progress-cell" title="Click to edit progress" style={{ cursor: 'text' }}
+                onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
+                {progressLabel(e)}
+                {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ width: `${pct}%` }} /></div>}
+              </div>
+            )}
+          </td>
+        );
+      }
+      case 'rating': {
+        const isEditingRating = editingRating?.id === e.id;
+        return (
+          <td key={col} className="col-rating" onClick={ev => ev.stopPropagation()}>
+            {isEditingRating ? (
+              <input className="inline-select" type="number" min="0" max="10" step="0.5" style={{ width: 64 }}
+                value={editingRating.value} autoFocus
+                onChange={ev => setEditingRating({ id: e.id, value: ev.target.value })}
+                onKeyDown={ev => { if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value); if (ev.key === 'Escape') setEditingRating(null); }}
+                onBlur={() => handleRatingSave(e.id, editingRating.value)} />
+            ) : (
+              <span className="rating-cell" title="Click to edit rating" style={{ cursor: 'text' }}
+                onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
+                {e.rating != null ? e.rating : '—'}<span>/10</span>
+              </span>
+            )}
+          </td>
+        );
+      }
+      case 'status':
+        if (statusMode === 'badge') {
+          return <td key={col} className="col-status"><span className={badgeClass(e.status)}>{statusLabel(e.status)}</span></td>;
+        }
+        return (
+          <td key={col} className="col-status" onClick={ev => ev.stopPropagation()}>
+            <CustomSelect className="inline-select" value={e.status}
+              options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
+              onChange={value => handleStatusChange(e.id, value)} ariaLabel={`Status for ${e.title}`} />
+          </td>
+        );
+      default:
+        return null;
+    }
+  }
+
+  function renderRow(e, table, statusMode) {
+    return (
+      <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setDetailEntry(e)}>
+        <td>
+          <div className="cover-cell">
+            <CoverThumb url={e.cover_url} title={e.title} />
+            <span className="media-name">{e.title}</span>
+          </div>
+        </td>
+        {dashCols(table).map(c => renderCell(e, c, statusMode))}
+      </tr>
+    );
+  }
+
   return (
     <div className="layout-3col" data-drawer={drawer}>
       {drawer && (
@@ -253,7 +365,7 @@ export default function DashboardAlt({ onFilterChange }) {
               className="dash-pair-skeleton"
               style={{
                 display: 'grid',
-                gridTemplateColumns: '3fr 2fr',
+                gridTemplateColumns: `${split}fr ${100 - split}fr`,
                 gap: '0 24px',
                 alignItems: 'start',
               }}>
@@ -294,7 +406,7 @@ export default function DashboardAlt({ onFilterChange }) {
           {/* Side-by-side layout for the two tables */}
             <div
               className="dash-pair"
-              style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '0 24px', alignItems: 'start' }}>
+              style={{ display: 'grid', gridTemplateColumns: `${split}fr ${100 - split}fr`, gap: '0 24px', alignItems: 'start' }}>
 
             {/* Currently Consuming */}
             <div>
@@ -302,107 +414,12 @@ export default function DashboardAlt({ onFilterChange }) {
                 {current.length === 0
                 ? <div style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 24 }}>No active entries.</div>
                 : (
-                    <>
                     <table className="media-table" data-mobile-show="progress">
-                    <thead>
-                        <tr>
-                        <th>Title</th>
-                        <th className="col-medium">Type</th>
-                        <th className="col-progress">Progress</th>
-                        <th className="col-status">Status</th>
-                        <th className="col-rating">Rating</th>
-                        </tr>
-                    </thead>
+                    <thead>{renderHead('current')}</thead>
                     <tbody>
-                        {current.slice(0, 10).map(e => {
-                        const pct = progressPercent(e);
-                        const isEditingProg   = editingProgress?.id === e.id;
-                        const isEditingRating = editingRating?.id === e.id;
-                        return (
-                            <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setDetailEntry(e)}>
-                            <td>
-                                <div className="cover-cell">
-                                <CoverThumb url={e.cover_url} title={e.title} />
-                                <span className="media-name">{e.title}</span>
-                                </div>
-                            </td>
-                            <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium ?? '—'}</span></td>
-                            <td className="col-progress" onClick={ev => ev.stopPropagation()}>
-                                {isEditingProg ? (
-                                <input
-                                    className="inline-select"
-                                    type="number" min="0"
-                                    style={{ width: 64 }}
-                                    value={editingProgress.value}
-                                    autoFocus
-                                    onChange={ev => setEditingProgress({ id: e.id, value: ev.target.value })}
-                                    onKeyDown={ev => {
-                                    if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value);
-                                    if (ev.key === 'Escape') setEditingProgress(null);
-                                    }}
-                                    onBlur={() => handleProgressSave(e.id, editingProgress.value)}
-                                />
-                                ) : (
-                                <div className="progress-cell"
-                                    title="Click to edit progress"
-                                    style={{ cursor: 'text' }}
-                                    onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
-                                    {progressLabel(e)}
-                                    {pct > 0 && (
-                                    <div className="progress-mini">
-                                        <div className="progress-mini-fill" style={{ width: `${pct}%` }} />
-                                    </div>
-                                    )}
-                                </div>
-                                )}
-                            </td>
-                            <td className="col-status" onClick={ev => ev.stopPropagation()}>
-                                <CustomSelect
-                                  className="inline-select"
-                                  value={e.status}
-                                  options={STATUSES.map(status => ({
-                                    value: status,
-                                    label: statusLabel(status),
-                                  }))}
-                                  onChange={value => handleStatusChange(e.id, value)}
-                                  ariaLabel={`Status for ${e.title}`}
-                                />
-                            </td>
-                            <td className="col-rating" onClick={ev => ev.stopPropagation()}>
-                                {isEditingRating ? (
-                                <input
-                                    className="inline-select"
-                                    type="number" min="0" max="10" step="0.5"
-                                    style={{ width: 64 }}
-                                    value={editingRating.value}
-                                    autoFocus
-                                    onChange={ev => setEditingRating({ id: e.id, value: ev.target.value })}
-                                    onKeyDown={ev => {
-                                    if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value);
-                                    if (ev.key === 'Escape') setEditingRating(null);
-                                    }}
-                                    onBlur={() => handleRatingSave(e.id, editingRating.value)}
-                                />
-                                ) : (
-                                <span className="rating-cell" title="Click to edit rating"
-                                    style={{ cursor: 'text' }}
-                                    onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
-                                    {e.rating != null ? e.rating : '—'}<span>/10</span>
-                                </span>
-                                )}
-                            </td>
-                            </tr>
-                        );
-                        })}
+                        {current.slice(0, dash.current_rows).map(e => renderRow(e, 'current', 'select'))}
                     </tbody>
                     </table>
-                    {/* {current.length > 10 && (
-                        <button className="icon-btn" style={{ marginTop: -20, marginBottom: 24, fontSize: 11 }}
-                        onClick={() => onFilterChange({ status: 'current' })}>
-                        Show all ({current.length}+)
-                        </button>
-                    )} */}
-                    </>
                 )
                 }
             </div>
@@ -413,48 +430,12 @@ export default function DashboardAlt({ onFilterChange }) {
                 {planned.length === 0
                 ? <div style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 24 }}>No planned entries.</div>
                 : (
-                    <>
                     <table className="media-table">
-                    <thead>
-                        <tr>
-                        <th>Title</th>
-                        <th className="col-medium">Type</th>
-                        <th className="col-status">Status</th>
-                        </tr>
-                    </thead>
+                    <thead>{renderHead('planned')}</thead>
                     <tbody>
-                        {planned.slice(0, 10).map(e => (
-                        <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setDetailEntry(e)}>
-                            <td>
-                            <div className="cover-cell">
-                                <CoverThumb url={e.cover_url} title={e.title} />
-                                <span className="media-name">{e.title}</span>
-                            </div>
-                            </td>
-                            <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium ?? '—'}</span></td>
-                            <td className="col-status" onClick={ev => ev.stopPropagation()}>
-                            <CustomSelect
-                              className="inline-select"
-                              value={e.status}
-                              options={STATUSES.map(status => ({
-                                value: status,
-                                label: statusLabel(status),
-                              }))}
-                              onChange={value => handleStatusChange(e.id, value)}
-                              ariaLabel={`Status for ${e.title}`}
-                            />
-                            </td>
-                        </tr>
-                        ))}
+                        {planned.slice(0, dash.planned_rows).map(e => renderRow(e, 'planned', 'select'))}
                     </tbody>
                     </table>
-                    {/* {planned.length > 10 && (
-                        <button className="icon-btn" style={{ marginTop: -20, marginBottom: 24, fontSize: 11 }}
-                        onClick={() => onFilterChange({ status: 'planned' })}>
-                        Show all ({planned.length}+)
-                        </button>
-                    )} */}
-                    </>
                 )
                 }
             </div>
@@ -467,87 +448,9 @@ export default function DashboardAlt({ onFilterChange }) {
       ? <div style={{ color: 'var(--dim)', fontSize: 12 }}>No completed entries yet.</div>
       : (
         <table className="media-table" data-mobile-show="completed">
-                <thead>
-                    <tr>
-                    <th>Title</th>
-                    <th className="col-medium">Type</th>
-                    <th className="col-progress">Progress</th>
-                    <th className="col-completed">Completed</th>
-                    <th className="col-status">Status</th>
-                    <th className="col-rating">Rating</th>
-                    </tr>
-                </thead>
+                <thead>{renderHead('completed')}</thead>
                 <tbody>
-                    {recent.map(e => {
-                    const pct = progressPercent(e);
-                    const isEditingProg   = editingProgress?.id === e.id;
-                    const isEditingRating = editingRating?.id === e.id;
-                    return (
-                    <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setDetailEntry(e)}>
-                        <td>
-                        <div className="cover-cell">
-                            <CoverThumb url={e.cover_url} title={e.title} />
-                            <span className="media-name">{e.title}</span>
-                        </div>
-                        </td>
-                        <td className="col-medium"><span style={{ color: 'var(--dim)' }}>{[e.medium, e.origin].filter(Boolean).join(' / ')}</span></td>
-                        <td className="col-progress" onClick={ev => ev.stopPropagation()}>
-                        {isEditingProg ? (
-                            <input
-                            className="inline-select"
-                            type="number" min="0"
-                            style={{ width: 64 }}
-                            value={editingProgress.value}
-                            autoFocus
-                            onChange={ev => setEditingProgress({ id: e.id, value: ev.target.value })}
-                            onKeyDown={ev => {
-                                if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value);
-                                if (ev.key === 'Escape') setEditingProgress(null);
-                            }}
-                            onBlur={() => handleProgressSave(e.id, editingProgress.value)}
-                            />
-                        ) : (
-                            <div className="progress-cell"
-                            title="Click to edit progress"
-                            style={{ cursor: 'text' }}
-                            onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
-                            {progressLabel(e)}
-                            {pct > 0 && (
-                                <div className="progress-mini">
-                                <div className="progress-mini-fill" style={{ width: `${pct}%` }} />
-                                </div>
-                            )}
-                            </div>
-                        )}
-                        </td>
-                        <td className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at || e.updated_at)}</span></td>
-                        <td className="col-status"><span className={badgeClass(e.status)}>{statusLabel(e.status)}</span></td>
-                        <td className="col-rating" onClick={ev => ev.stopPropagation()}>
-                        {isEditingRating ? (
-                            <input
-                            className="inline-select"
-                            type="number" min="0" max="10" step="0.5"
-                            style={{ width: 64 }}
-                            value={editingRating.value}
-                            autoFocus
-                            onChange={ev => setEditingRating({ id: e.id, value: ev.target.value })}
-                            onKeyDown={ev => {
-                                if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value);
-                                if (ev.key === 'Escape') setEditingRating(null);
-                            }}
-                            onBlur={() => handleRatingSave(e.id, editingRating.value)}
-                            />
-                        ) : (
-                            <span className="rating-cell" title="Click to edit rating"
-                            style={{ cursor: 'text' }}
-                            onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
-                            {e.rating != null ? e.rating : '—'}<span>/10</span>
-                            </span>
-                        )}
-                        </td>
-                    </tr>
-                    );
-                    })}
+                    {recent.slice(0, dash.completed_rows).map(e => renderRow(e, 'completed', 'badge'))}
                 </tbody>
                 </table>
             )
