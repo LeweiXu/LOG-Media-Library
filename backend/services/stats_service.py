@@ -154,17 +154,24 @@ def get_stats(db: Session, username: str) -> StatsResponse:
         if item.completed
     ][-12:]
 
+    resolved_by_medium = Counter(
+        entry.medium
+        for entry in entries
+        if entry.medium and entry.status in {"completed", "dropped"}
+    )
+    completed_by_medium = Counter(
+        entry.medium
+        for entry in entries
+        if entry.medium and entry.status == "completed"
+    )
     completion_by_medium = []
-    for medium, total in medium_counts.most_common():
-        completed_count = sum(
-            1 for entry in entries
-            if entry.medium == medium and entry.status == "completed"
-        )
+    for medium, resolved_count in resolved_by_medium.most_common():
+        completed_count = completed_by_medium[medium]
         completion_by_medium.append(MediumCompletion(
             medium=medium,
-            total=total,
+            total=resolved_count,
             completed=completed_count,
-            rate=round(completed_count / total * 100, 1) if total else 0,
+            rate=round(completed_count / resolved_count * 100, 1),
         ))
 
     planned = [entry for entry in entries if entry.status == "planned"]
