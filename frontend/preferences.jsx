@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getSettings, updateSettings } from './api.jsx';
 
 // Mirror of backend schemas.DEFAULT_UI — the canonical shape of the single
@@ -58,34 +58,74 @@ const FALLBACK = {
   settings: null,
   prefs: DEFAULT_UI,
   loaded: false,
+  error: false,
+  reload: async () => {},
   updateSettings: async () => {},
   updateUi: async () => {},
 };
 
+// Backoff schedule (ms) for retrying the initial settings fetch. A cold start
+// (PC just booted, self-hosted backend not reachable yet) must not be mistaken
+// for "no saved settings" — we retry before giving up.
+const RETRY_DELAYS = [400, 800, 1600, 3200];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export function PreferencesProvider({ authKey, children }) {
   const [settings, setSettings] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+  // Generation counter so a slow/late load for a previous authKey can't clobber
+  // the current user's state once it finally resolves.
+  const genRef = useRef(0);
 
-  useEffect(() => {
-    if (!authKey) { setSettings(null); setLoaded(false); return undefined; }
-    let cancelled = false;
-    setLoaded(false);
-    (async () => {
+  const loadSettings = useCallback(async ({ retry = true } = {}) => {
+    if (!authKey) return false;
+    const gen = ++genRef.current;
+    const attempts = retry ? RETRY_DELAYS.length + 1 : 1;
+    for (let i = 0; i < attempts; i++) {
       try {
         const s = await getSettings();
-        if (!cancelled) setSettings(s);
+        if (genRef.current !== gen) return false;   // superseded by a newer load
+        setSettings(s);
+        setError(false);
+        setLoaded(true);
+        return true;
       } catch {
-        if (!cancelled) setSettings(null);
-      } finally {
-        if (!cancelled) setLoaded(true);
+        if (genRef.current !== gen) return false;
+        if (i < attempts - 1) await sleep(RETRY_DELAYS[i]);
       }
-    })();
-    return () => { cancelled = true; };
+    }
+    // Every attempt failed. Surface the error but DON'T null out a doc we may
+    // already hold — a failed fetch must never masquerade as a settings reset.
+    if (genRef.current === gen) { setError(true); setLoaded(true); }
+    return false;
   }, [authKey]);
+
+  // Initial load (and reset) whenever the signed-in user changes.
+  useEffect(() => {
+    genRef.current++;   // cancel any in-flight load
+    if (!authKey) { setSettings(null); setLoaded(false); setError(false); return; }
+    setSettings(null); setLoaded(false); setError(false);
+    loadSettings();
+  }, [authKey, loadSettings]);
+
+  // Self-heal: if the session started without good settings (backend was down),
+  // re-pull when the tab regains focus or the network comes back.
+  useEffect(() => {
+    if (!authKey) return undefined;
+    const onWake = () => { if (error || !settings) loadSettings({ retry: false }); };
+    window.addEventListener('focus', onWake);
+    window.addEventListener('online', onWake);
+    return () => {
+      window.removeEventListener('focus', onWake);
+      window.removeEventListener('online', onWake);
+    };
+  }, [authKey, error, settings, loadSettings]);
 
   const update = useCallback(async (patch) => {
     const saved = await updateSettings(patch);
     setSettings(saved);
+    setError(false);
     return saved;
   }, []);
 
@@ -95,6 +135,8 @@ export function PreferencesProvider({ authKey, children }) {
     settings,
     prefs: settings?.ui || DEFAULT_UI,
     loaded,
+    error,
+    reload: () => loadSettings({ retry: false }),
     updateSettings: update,
     updateUi,
   };

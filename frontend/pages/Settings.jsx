@@ -109,14 +109,17 @@ function RowSelect(props) {
 }
 
 export default function Settings({ theme, onThemeChange, onLogout, onDataDeleted }) {
-  const { prefs, loaded: prefsLoaded, updateUi } = usePreferences();
+  const { prefs, loaded: prefsLoaded, error: prefsError, reload: reloadPrefs, updateUi } = usePreferences();
+  const [reloading, setReloading] = useState(false);
 
   // ── Local mirror of the UI document for instant feedback; persisted on change. ──
+  // Capture only after a *successful* load — never lock onto the defaults shown
+  // during a failed fetch, so a later retry/self-heal seeds the real settings.
   const [ui, setUi] = useState(prefs);
   const uiReadyRef = useRef(false);
   useEffect(() => {
-    if (prefsLoaded && !uiReadyRef.current) { setUi(prefs); uiReadyRef.current = true; }
-  }, [prefsLoaded, prefs]);
+    if (prefsLoaded && !prefsError && !uiReadyRef.current) { setUi(prefs); uiReadyRef.current = true; }
+  }, [prefsLoaded, prefsError, prefs]);
 
   function saveUi(patch) {
     // patch is a partial UI doc; merge into local state and persist.
@@ -269,6 +272,19 @@ export default function Settings({ theme, onThemeChange, onLogout, onDataDeleted
             <span className="page-desc">customize your Logarium</span>
           </div>
         </div>
+
+        {prefsError && (
+          <div className="settings-load-error">
+            <span>
+              Couldn't load your saved settings — the server may be unreachable.
+              The values below are defaults; editing now may not reflect your real preferences.
+            </span>
+            <button type="button" className="btn btn-outline" disabled={reloading}
+              onClick={async () => { setReloading(true); await reloadPrefs(); setReloading(false); }}>
+              {reloading ? 'Retrying…' : 'Retry'}
+            </button>
+          </div>
+        )}
 
         {/* ── Display ── */}
         <Section title="Display">
