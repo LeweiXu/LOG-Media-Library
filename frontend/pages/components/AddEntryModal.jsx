@@ -5,6 +5,7 @@ import { SEARCH_SOURCES, SOURCE_LABEL, loadSavedSources, saveSources, resultToEn
 import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
+import { Tabs, SelectRow } from './terminal.jsx';
 import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
 
 export default function AddEntryModal({ onClose, onCreated, initialEntry = null, initialTab = 'search', hideTabs = false }) {
@@ -121,18 +122,6 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
     onClose();
   }
 
-  const tabStyle = (t) => ({
-    background: 'none',
-    border: 'none',
-    borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
-    color: tab === t ? 'var(--accent)' : 'var(--dim)',
-    padding: '8px 18px',
-    fontSize: '11px',
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase',
-    cursor: 'pointer',
-  });
-
   const urlMode = isUrl(query);
   const detectedSource = urlMode ? inferSourceFromUrl(query.trim()) : '';
 
@@ -155,21 +144,21 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
         </div>
 
         {!hideTabs && (
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-            <button style={tabStyle('search')} onClick={() => setTab('search')}>Auto Search</button>
-            <button style={tabStyle('manual')} onClick={() => setTab('manual')}>Manual Entry</button>
-          </div>
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            tabs={[{ key: 'search', label: 'Auto Search' }, { key: 'manual', label: 'Manual Entry' }]}
+          />
         )}
 
         <div className="modal-body">
           {/* ── Auto-search tab ── */}
           {tab === 'search' && (
             <>
-              <form onSubmit={handleSearch} style={{ marginBottom: 10 }}>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <form onSubmit={handleSearch} className="add-search-form">
+                <div className="add-search-bar">
                   <input
                     className="form-input"
-                    style={{ flex: 1 }}
                     placeholder="Title or paste a URL…"
                     value={query}
                     onChange={e => setQuery(e.target.value)}
@@ -181,13 +170,8 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                   {!urlMode && (
                     <button
                       type="button"
-                      className="icon-btn"
+                      className={`icon-btn${extended ? ' is-on' : ''}`}
                       onClick={() => setExtended(x => !x)}
-                      style={{
-                        borderColor: extended ? 'var(--accent)' : undefined,
-                        color: extended ? 'var(--accent)' : undefined,
-                        padding: '5px 10px',
-                      }}
                       title="Return all results instead of top 10"
                     >
                       Extended
@@ -195,7 +179,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                   )}
                 </div>
                 {urlMode ? (
-                  <div style={{ fontSize: 10, color: 'var(--dim)', letterSpacing: '0.03em', padding: '2px 0' }}>
+                  <div className="add-url-hint">
                     {URL_SCRAPE_SOURCES.has(detectedSource)
                       ? `Detected ${SOURCE_LABEL[detectedSource] ?? detectedSource} link — source toggles ignored`
                       : 'Paste a NovelUpdates, JJWXC, Qidian, or IMDb URL'}
@@ -234,71 +218,53 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                 )}
               </form>
 
-              {searchErr && (
-                <div style={{ color: 'var(--red)', fontSize: 11, marginBottom: 10 }}>{searchErr}</div>
-              )}
+              {searchErr && <div className="modal-error">{searchErr}</div>}
 
               {results !== null && (
                 results.length === 0
-                  ? <div style={{ color: 'var(--dim)', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>
+                  ? <div className="add-no-results">
                       {nuSearching ? <span className="loading-dots">Searching NovelUpdates</span> : 'No results — try manual entry.'}
                       {!nuSearching && nuRequested && !extPresent && (
-                        <div style={{ marginTop: 10 }}><ExtensionInstallHint context="search" /></div>
+                        <div className="add-no-results-hint"><ExtensionInstallHint context="search" /></div>
                       )}
                     </div>
                   : <>
-                      <div className="search-results">
+                      <div className="picker-list">
                         {results.map((r, i) => {
                           const isSelected  = selected.has(i);
                           const isInLibrary = inLibrary[i];
-                          const shadow = isSelected
-                            ? 'inset 0 0 0 2px var(--accent)'
-                            : isInLibrary
-                            ? 'inset 0 0 0 2px var(--green)'
-                            : undefined;
                           return (
-                            <div
+                            <SelectRow
                               key={i}
-                              className="search-result-item"
-                              style={{ boxShadow: shadow }}
+                              on={isSelected}
+                              tone={!isSelected && isInLibrary ? 'muted' : undefined}
+                              title={isInLibrary ? 'Already in your library' : undefined}
                               onClick={() => toggleSelect(i)}
                             >
-                              <div className="sr-cover">
-                                {(r.cover_url || r.cover) && (
-                                  <img src={r.cover_url || r.cover} alt="" referrerPolicy="no-referrer" onError={onCoverError} />
-                                )}
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <div className="sr-title">{r.title}</div>
-                                <div className="sr-meta">
-                                  {[r.medium, r.year, r.origin].filter(Boolean).join(' · ')}
-                                </div>
-                                {r.source && (
-                                  <div style={{ fontSize: 10, color: 'var(--accent)', opacity: 0.7, marginTop: 1 }}>
-                                    {SOURCE_LABEL[r.source] ?? r.source}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
+                              <span className="add-result">
+                                <span className="sr-cover">
+                                  {(r.cover_url || r.cover) && (
+                                    <img src={r.cover_url || r.cover} alt="" referrerPolicy="no-referrer" onError={onCoverError} />
+                                  )}
+                                </span>
+                                <span className="add-result-info">
+                                  <span className="sr-title">{r.title}</span>
+                                  <span className="sr-meta">
+                                    {[r.medium, r.year, r.origin].filter(Boolean).join(' · ')}
+                                    {isInLibrary ? ' · in library' : ''}
+                                  </span>
+                                  {r.source && <span className="add-result-source">{SOURCE_LABEL[r.source] ?? r.source}</span>}
+                                </span>
+                              </span>
+                            </SelectRow>
                           );
                         })}
                       </div>
                       {nuSearching && (
-                        <div style={{ fontSize: 11, color: 'var(--dim)', textAlign: 'center', padding: '6px 0' }}>
-                          <span className="loading-dots">Searching NovelUpdates</span>
-                        </div>
+                        <div className="add-nu-note"><span className="loading-dots">Searching NovelUpdates</span></div>
                       )}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                        <div style={{ display: 'flex', gap: 14, fontSize: 11, color: 'var(--dim)' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ width: 10, height: 10, borderRadius: 2, boxShadow: 'inset 0 0 0 2px var(--accent)', display: 'inline-block' }} />
-                            Selected
-                          </span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ width: 10, height: 10, borderRadius: 2, boxShadow: 'inset 0 0 0 2px var(--green)', display: 'inline-block' }} />
-                            Already in library
-                          </span>
-                        </div>
+                      <div className="add-results-foot">
+                        <span className="add-legend">[X] selected · <span className="add-legend-lib">[ ]</span> already in library</span>
                         <button className="btn" onClick={addSelected} disabled={selected.size === 0}>
                           Add Selected ({selected.size})
                         </button>

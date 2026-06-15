@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { startMalImport, confirmMalImport } from '../../api.jsx';
 import { fmtDate, onCoverError } from '../../utils.jsx';
+import { Box } from './terminal.jsx';
 
 // ── ImportMalModal ────────────────────────────────────────────────────────────
 // Stages:
@@ -172,7 +173,7 @@ export default function ImportMalModal({ onClose, onImported }) {
               src={data.cover_url}
               alt=""
               referrerPolicy="no-referrer"
-              style={{ width: 44, height: 62, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }}
+              style={{ width: 44, height: 62, objectFit: 'cover', flexShrink: 0 }}
               onError={onCoverError}
             />
           )}
@@ -214,7 +215,6 @@ export default function ImportMalModal({ onClose, onImported }) {
         style={{
           background: 'var(--surface)',
           border: '1px solid var(--border)',
-          borderRadius: 6,
           padding: '10px 12px',
           fontFamily: 'monospace',
           fontSize: 12,
@@ -336,19 +336,17 @@ export default function ImportMalModal({ onClose, onImported }) {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="mal-conflicts">
                 {conflicts.map((c, idx) => (
                   <div
                     key={idx}
-                    style={{
-                      border: `1px solid ${selected[idx] ? 'var(--accent)' : 'var(--border)'}`,
-                      cursor: 'pointer',
-                    }}
+                    className={`term-row mal-conflict-row${selected[idx] ? ' is-on' : ''}`}
                     onClick={() => toggleOne(idx)}
                   >
-                    <div style={{ display: 'flex' }}>
+                    <Box on={selected[idx]} />
+                    <div className="mal-conflict">
                       <EntryCard data={c.existing} />
-                      <div style={{ width: 1, background: 'var(--border)', flexShrink: 0 }} />
+                      <div className="mal-conflict-div" />
                       <EntryCard data={c.imported} />
                     </div>
                   </div>

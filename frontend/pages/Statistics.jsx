@@ -17,7 +17,13 @@ import {
   YAxis,
 } from 'recharts';
 
-const COLORS = ['#4a9eff', '#3ecf6a', '#f5a623', '#e05656', '#a78bfa', '#38bdf8', '#fb923c'];
+// Theme-driven categorical palette (see --chart-* in styles.css). recharts and
+// CSS backgrounds both resolve these var() references, so charts re-colour with
+// the active theme instead of carrying dark-mode brights onto a white page.
+const COLORS = [
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)',
+  'var(--chart-5)', 'var(--chart-6)', 'var(--chart-7)',
+];
 
 const STATUS_LABELS = {
   current: 'Current',
@@ -29,20 +35,6 @@ const STATUS_LABELS = {
 
 const CONSUMED_RANGE_KEY = 'statistics_consumed_range';
 const ADDED_RANGE_KEY = 'statistics_added_range';
-
-const MONTH_INPUT_STYLE = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  color: 'var(--text)',
-  fontSize: 10,
-  padding: '2px 6px',
-  outline: 'none',
-  fontFamily: 'inherit',
-  textTransform: 'none',
-  letterSpacing: 'normal',
-  colorScheme: 'dark',
-  cursor: 'pointer',
-};
 
 function monthParam(value) {
   return /^\d{4}-\d{2}$/.test(value || '') ? value : '';
@@ -328,7 +320,7 @@ export default function Statistics() {
                           ...range,
                           start: event.target.value,
                         }))}
-                        style={MONTH_INPUT_STYLE}
+                        className="stats-month-input"
                       />
                       <span>to</span>
                       <input
@@ -340,7 +332,7 @@ export default function Statistics() {
                           ...range,
                           end: event.target.value,
                         }))}
-                        style={MONTH_INPUT_STYLE}
+                        className="stats-month-input"
                       />
                     </span>
                   </div>
@@ -375,7 +367,7 @@ export default function Statistics() {
                           ...range,
                           start: event.target.value,
                         }))}
-                        style={MONTH_INPUT_STYLE}
+                        className="stats-month-input"
                       />
                       <span>to</span>
                       <input
@@ -387,7 +379,7 @@ export default function Statistics() {
                           ...range,
                           end: event.target.value,
                         }))}
-                        style={MONTH_INPUT_STYLE}
+                        className="stats-month-input"
                       />
                     </span>
                   </div>

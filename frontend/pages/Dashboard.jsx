@@ -412,7 +412,7 @@ export default function DashboardAlt({ onFilterChange }) {
             <div>
                 <div className="section-header">Currently Consuming</div>
                 {current.length === 0
-                ? <div style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 24 }}>No active entries.</div>
+                ? <div className="dash-empty">No active entries.</div>
                 : (
                     <table className="media-table" data-mobile-show="progress">
                     <thead>{renderHead('current')}</thead>
@@ -428,7 +428,7 @@ export default function DashboardAlt({ onFilterChange }) {
             <div>
                 <div className="section-header">Planned</div>
                 {planned.length === 0
-                ? <div style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 24 }}>No planned entries.</div>
+                ? <div className="dash-empty">No planned entries.</div>
                 : (
                     <table className="media-table">
                     <thead>{renderHead('planned')}</thead>
@@ -445,7 +445,7 @@ export default function DashboardAlt({ onFilterChange }) {
             <div>
       <div className="section-header">Recently Completed</div>
       {recent.length === 0
-      ? <div style={{ color: 'var(--dim)', fontSize: 12 }}>No completed entries yet.</div>
+      ? <div className="dash-empty dash-empty-flush">No completed entries yet.</div>
       : (
         <table className="media-table" data-mobile-show="completed">
                 <thead>{renderHead('completed')}</thead>
@@ -521,7 +521,7 @@ export default function DashboardAlt({ onFilterChange }) {
         {loading
           ? <SkeletonActivity rows={8} />
           : activity.length === 0
-          ? <div style={{ color: 'var(--dim)', fontSize: 11 }}>No recent activity.</div>
+          ? <div className="dash-empty-log">No recent activity.</div>
           : activity.map((a, i) => (
               <div key={i} className="log-entry">
                 <div className={logDotClass(a.type)} />

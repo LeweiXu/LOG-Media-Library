@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { clearCustomList, getEntries, renameCustomList, updateEntry } from '../../api.jsx';
 import { extractItems, statusLabel } from '../../utils.jsx';
 import { SkeletonLine } from './Skeletons.jsx';
+import { Tabs, SelectRow } from './terminal.jsx';
 
 const PAGE_SIZE = 10;
 
@@ -134,18 +135,6 @@ export default function ListsModal({
     }
   }
 
-  const tabStyle = (t) => ({
-    background: 'none',
-    border: 'none',
-    borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
-    color: tab === t ? 'var(--accent)' : 'var(--dim)',
-    padding: '8px 18px',
-    fontSize: '11px',
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase',
-    cursor: 'pointer',
-  });
-
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
@@ -154,10 +143,11 @@ export default function ListsModal({
           <button className="icon-btn" onClick={onClose}>✕</button>
         </div>
 
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-          <button style={tabStyle('add')} onClick={() => setTab('add')}>Add List</button>
-          <button style={tabStyle('manage')} onClick={() => setTab('manage')}>Manage Lists</button>
-        </div>
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          tabs={[{ key: 'add', label: 'Add List' }, { key: 'manage', label: 'Manage Lists' }]}
+        />
 
         <div className="modal-body">
           {/* ── Add tab ── */}
@@ -185,77 +175,62 @@ export default function ListsModal({
                 />
               </div>
 
-              <div style={{ border: '1px solid var(--border)', maxHeight: 300, overflow: 'auto', marginBottom: 10 }}>
+              <div className="picker-list">
                 {loading && (
-                  <div style={{ padding: 12 }}>
+                  <div className="picker-loading">
                     <SkeletonLine width="70%" />
-                    <SkeletonLine width="55%" style={{ marginTop: 8 }} />
+                    <SkeletonLine width="55%" />
                   </div>
                 )}
 
                 {!loading && entries.length === 0 && (
-                  <div style={{ padding: 18, color: 'var(--dim)', fontSize: 12, textAlign: 'center' }}>
-                    No entries found
-                  </div>
+                  <div className="picker-empty">No entries found</div>
                 )}
 
-                {!loading && entries.map(entry => {
-                  const isSelected = Boolean(selected[entry.id]);
-                  return (
-                    <div
-                      key={entry.id}
-                      className="search-result-item"
-                      style={{
-                        boxShadow: isSelected ? 'inset 0 0 0 2px var(--accent)' : undefined,
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                      onClick={() => toggle(entry)}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div className="sr-title">{entry.title}</div>
-                        <div className="sr-meta">
-                          {entry.medium || '-'} · {statusLabel(entry.status)}
-                          {entry.custom_list ? ` · currently in ${entry.custom_list}` : ''}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {!loading && entries.map(entry => (
+                  <SelectRow key={entry.id} on={Boolean(selected[entry.id])} onClick={() => toggle(entry)}>
+                    <span className="sr-title">{entry.title}</span>
+                    <span className="sr-meta">
+                      {entry.medium || '-'} · {statusLabel(entry.status)}
+                      {entry.custom_list ? ` · currently in ${entry.custom_list}` : ''}
+                    </span>
+                  </SelectRow>
+                ))}
               </div>
 
               {totalPages > 1 && (
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 10 }}>
+                <div className="picker-pager">
                   <button className="icon-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                  <span style={{ color: 'var(--dim)', fontSize: 11 }}>Page {page} of {totalPages}</span>
+                  <span className="picker-pager-info">Page {page} of {totalPages}</span>
                   <button className="icon-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
                 </div>
               )}
 
-              <div style={{ color: selectedEntries.length ? 'var(--dim)' : 'var(--red)', fontSize: 11, marginBottom: 8 }}>
+              <div className={`picker-count${selectedEntries.length ? '' : ' is-empty'}`}>
                 {selectedEntries.length} selected
               </div>
 
               {overwrites.length > 0 && (
-                <div className="settings-msg settings-msg-error" style={{ marginBottom: 8 }}>
+                <div className="settings-msg settings-msg-error">
                   {overwrites.length} selected entr{overwrites.length === 1 ? 'y is' : 'ies are'} already in a custom list and will be moved.
                 </div>
               )}
 
               {emptiedLists.length > 0 && (
-                <div className="settings-msg settings-msg-error" style={{ marginBottom: 8 }}>
+                <div className="settings-msg settings-msg-error">
                   Moving the selected entries will remove {emptiedLists.map(list => `"${list.name}"`).join(', ')} because no entries will remain.
                 </div>
               )}
 
               {nameExists && (
-                <div className="settings-msg settings-msg-error" style={{ marginBottom: 8 }}>
+                <div className="settings-msg settings-msg-error">
                   A custom list with this name already exists.
                 </div>
               )}
 
-              {addError && <div style={{ color: 'var(--red)', fontSize: 11, marginBottom: 8 }}>{addError}</div>}
+              {addError && <div className="modal-error">{addError}</div>}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <div className="modal-actions">
                 <button className="btn btn-outline" type="button" onClick={onClose} disabled={creating}>
                   Cancel
                 </button>
@@ -272,15 +247,13 @@ export default function ListsModal({
           {tab === 'manage' && (
             <>
               {existingLists.length === 0 && (
-                <div style={{ padding: 18, color: 'var(--dim)', fontSize: 12, textAlign: 'center' }}>
-                  No custom lists yet
-                </div>
+                <div className="picker-empty">No custom lists yet</div>
               )}
 
               {existingLists.length > 0 && (
                 <div className="form-row">
                   <label className="form-label">Existing Lists</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="lists-manage-rows">
                     {existingLists.map(list => {
                       const nextName = (editNames[list.name] || '').trim();
                       const duplicate = existingLists.some(other =>
@@ -288,13 +261,12 @@ export default function ListsModal({
                       );
                       const renameDisabled = saving || !nextName || nextName === list.name || duplicate;
                       return (
-                        <div key={list.name} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <div key={list.name} className="lists-manage-row">
                           <input
                             className="form-input"
                             value={editNames[list.name] || ''}
                             onChange={e => setEditNames(prev => ({ ...prev, [list.name]: e.target.value }))}
                             onKeyDown={e => { if (e.key === 'Enter') handleRename(list); }}
-                            style={{ flex: '1 1 auto', minWidth: 0 }}
                           />
                           <button
                             className="btn btn-outline"
@@ -316,11 +288,7 @@ export default function ListsModal({
                                 ? 'Confirm Delete'
                                 : 'Delete'}
                           </button>
-                          {duplicate && (
-                            <span style={{ color: 'var(--red)', fontSize: 11 }}>
-                              Name already exists.
-                            </span>
-                          )}
+                          {duplicate && <span className="lists-manage-dupe">Name already exists.</span>}
                         </div>
                       );
                     })}
@@ -328,9 +296,9 @@ export default function ListsModal({
                 </div>
               )}
 
-              {manageError && <div style={{ color: 'var(--red)', fontSize: 11, marginBottom: 8 }}>{manageError}</div>}
+              {manageError && <div className="modal-error">{manageError}</div>}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <div className="modal-actions">
                 <button className="btn btn-outline" type="button" onClick={onClose} disabled={Boolean(saving)}>
                   Close
                 </button>

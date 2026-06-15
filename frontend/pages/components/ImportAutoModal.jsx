@@ -170,7 +170,6 @@ export default function ImportAutoModal({ onClose, onImported }) {
                 style={{
                   background: 'var(--surface)',
                   border: '1px solid var(--border)',
-                  borderRadius: 6,
                   padding: '10px 12px',
                   fontFamily: 'monospace',
                   fontSize: 12,
@@ -215,7 +214,6 @@ export default function ImportAutoModal({ onClose, onImported }) {
                   style={{
                     background: 'var(--surface)',
                     border: '1px solid var(--border)',
-                    borderRadius: 6,
                     padding: '10px 12px',
                     fontFamily: 'monospace',
                     fontSize: 12,
