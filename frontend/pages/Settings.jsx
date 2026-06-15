@@ -46,6 +46,38 @@ const ROW_OPTIONS = [5, 10, 15, 20, 30];
 const CONSUMED_RANGE_OPTIONS = [3, 6, 12, 18, 24];
 const ADDED_RANGE_OPTIONS = [3, 5, 12, 18];
 
+// Accent presets — value drives the [data-accent] attribute on <html>; swatch
+// is the dark-theme ink so the picker reads consistently regardless of theme.
+const ACCENT_OPTIONS = [
+  { value: 'blue',   label: 'Blue',   swatch: '#4a9eff' },
+  { value: 'green',  label: 'Green',  swatch: '#3ecf6a' },
+  { value: 'amber',  label: 'Amber',  swatch: '#f5a623' },
+  { value: 'cyan',   label: 'Cyan',   swatch: '#38bdf8' },
+  { value: 'purple', label: 'Purple', swatch: '#a78bfa' },
+  { value: 'red',    label: 'Red',    swatch: '#e05656' },
+];
+
+function AccentSwatches({ value, onChange }) {
+  return (
+    <div className="accent-swatches">
+      {ACCENT_OPTIONS.map(({ value: v, label, swatch }) => (
+        <button
+          key={v}
+          type="button"
+          className={`accent-swatch${v === value ? ' is-on' : ''}`}
+          onClick={() => onChange(v)}
+          title={label}
+          aria-label={label}
+          aria-pressed={v === value}
+        >
+          <span className="accent-swatch-dot" style={{ background: swatch }} />
+          <span className="accent-swatch-label">{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ChipToggle({ on, label, onClick, title }) {
   return (
     <button type="button" className={`source-chip${on ? ' is-on' : ''}`} onClick={onClick} title={title}>
@@ -108,7 +140,7 @@ function RowSelect(props) {
   return <CustomSelect {...props} style={{ width: 200, ...(props.style || {}) }} />;
 }
 
-export default function Settings({ theme, onThemeChange, onLogout, onDataDeleted }) {
+export default function Settings({ theme, onThemeChange, accent, onAccentChange, onLogout, onDataDeleted }) {
   const { prefs, loaded: prefsLoaded, error: prefsError, reload: reloadPrefs, updateUi } = usePreferences();
   const [reloading, setReloading] = useState(false);
 
@@ -295,6 +327,9 @@ export default function Settings({ theme, onThemeChange, onLogout, onDataDeleted
               onChange={value => onThemeChange?.(value)}
               ariaLabel="Theme"
             />
+          </Row>
+          <Row title="Accent colour" desc="Highlight for buttons, selections, progress bars and links." stack>
+            <AccentSwatches value={accent || 'blue'} onChange={a => onAccentChange?.(a)} />
           </Row>
         </Section>
 

@@ -12,7 +12,12 @@
   --text:    #c8cacc;
   --dim:     #848890;
   --bright:  #eceef0;
-  --accent:  #4a9eff;
+
+  /* Accent is stored as RGB components so translucent fills can reuse it via
+     rgba(var(--accent-rgb), a). The user picks the accent in Settings; presets
+     below override --accent-rgb per [data-accent] on <html>. */
+  --accent-rgb: 74, 158, 255;
+  --accent:  rgb(var(--accent-rgb));
   --green:   #3ecf6a;
   --amber:   #f5a623;
   --red:     #e05656;
@@ -29,6 +34,15 @@
   --chart-7: #fb923c;
 }
 
+/* ── Accent presets (dark) ───────────────────────────────────────────────────
+   Terminal-flavoured inks. Applied via data-accent on <html>; default (no
+   attribute or "blue") keeps the terminal blue defined in :root above. */
+:root[data-accent="green"]  { --accent-rgb: 62, 207, 106; }
+:root[data-accent="amber"]  { --accent-rgb: 245, 166, 35; }
+:root[data-accent="cyan"]   { --accent-rgb: 56, 189, 248; }
+:root[data-accent="purple"] { --accent-rgb: 167, 139, 250; }
+:root[data-accent="red"]    { --accent-rgb: 224, 86, 86; }
+
 /* ── Light terminal theme ────────────────────────────────────────────────── */
 html.light {
   color-scheme: light;
@@ -44,21 +58,9 @@ html.light {
   --dim:      #52645a;
   --bright:   #101a14;
 
-  /* Darker semantic colours meet contrast requirements on light surfaces. */
-  --accent:   #075ea8;
-  --green:    #176b3a;
-  --amber:    #805900;
-  --red:      #b42318;
-  --purple:   #6842a3;
-
-  /* Deeper categorical inks so chart fills read clearly on white. */
-  --chart-1: #0b6bbd;
-  --chart-2: #1f7d44;
-  --chart-3: #b06f00;
-  --chart-4: #c0392b;
-  --chart-5: #7c4dcc;
-  --chart-6: #1f7a9c;
-  --chart-7: #c2570f;
+  /* Light mode swaps only the background/foreground palette — the accent,
+     semantic colours (--green/--amber/--red/--purple) and chart inks stay at
+     their vibrant dark-theme values so plots and highlights look identical. */
 }
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
@@ -507,7 +509,7 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
   white-space: nowrap;
 }
 
-.badge-current   { background: rgba(74,158,255,0.15); color: var(--accent); }
+.badge-current   { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
 .badge-planned   { background: rgba(90,93,98,0.25);   color: var(--dim); }
 .badge-completed { background: rgba(62,207,106,0.12); color: var(--green); }
 .badge-on_hold   { background: rgba(245,166,35,0.15); color: var(--amber); }
@@ -879,6 +881,33 @@ html.light .skeleton-pie::after {
 .settings-page { max-width: 880px; margin: 0 auto; padding-bottom: 48px; }
 .settings-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 
+/* ── Accent colour picker ── */
+.accent-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.accent-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.accent-swatch:hover { border-color: var(--border2); color: var(--text); }
+.accent-swatch-dot {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+.accent-swatch.is-on {
+  border-color: var(--accent);
+  color: var(--bright);
+}
+
 /* Shown when saved settings couldn't be fetched (backend unreachable). */
 .settings-load-error {
   display: flex;
@@ -1124,7 +1153,7 @@ html.light .skeleton-pie::after {
 .source-chip.is-on {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(74, 158, 255, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 .source-chip.is-on .source-box { color: var(--accent); }
 
@@ -1259,7 +1288,7 @@ html.light .skeleton-pie::after {
 .list-chip.is-on {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(74, 158, 255, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 .list-chip.is-on .list-chip-count { color: var(--accent); }
 
@@ -2198,14 +2227,14 @@ a.explore-title:hover { color: var(--accent); }
 @media (min-width: 721px) { .batch-mobile { display: none; } }
 
 /* Small Apply button — accent-coloured sibling to the small .icon-btn delete. */
-.icon-btn.accent { border-color: rgba(74, 158, 255, 0.5); color: var(--accent); }
-.icon-btn.accent:hover { border-color: var(--accent); background: rgba(74, 158, 255, 0.08); }
+.icon-btn.accent { border-color: rgba(var(--accent-rgb), 0.5); color: var(--accent); }
+.icon-btn.accent:hover { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
 .icon-btn.danger { color: var(--red); border-color: rgba(224, 86, 86, 0.5); }
 .icon-btn.danger:hover { border-color: var(--red); background: rgba(224, 86, 86, 0.08); }
 /* Edit buttons: accent-tinted, with the border darkening to full accent on
    hover — mirrors the danger button's hover emphasis. */
-.icon-btn.edit { color: var(--accent); border-color: rgba(74, 158, 255, 0.5); }
-.icon-btn.edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(74, 158, 255, 0.08); }
+.icon-btn.edit { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.5); }
+.icon-btn.edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
 
 .media-table .col-select { width: 34px; text-align: center; }
 @media (min-width: 721px) {
@@ -2213,7 +2242,7 @@ a.explore-title:hover { color: var(--accent); }
 }
 /* Selected row gets a blue tint plus a continuous accent outline around the
    whole entry. Inset box-shadows draw the border without nudging layout. */
-.media-table tr.row-selected td { background: rgba(74, 158, 255, 0.08); }
+.media-table tr.row-selected td { background: rgba(var(--accent-rgb), 0.08); }
 .media-table tr.row-selected td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
 .media-table tr.row-selected td:first-child { box-shadow: inset 1px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
 .media-table tr.row-selected td:last-child { box-shadow: inset -1px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
@@ -2481,7 +2510,7 @@ input[type="radio"]:hover { border-color: var(--border2); }
 input[type="checkbox"]:checked,
 input[type="radio"]:checked {
   border-color: var(--accent);
-  background: rgba(74, 158, 255, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 input[type="checkbox"]:checked::after {
   content: '\00d7';            /* × — matches the [x] source toggle */
@@ -2841,7 +2870,7 @@ html.light body {
 }
 
 html.light ::selection {
-  background: #b9d9f1;
+  background: rgba(var(--accent-rgb), 0.28);
   color: var(--bright);
 }
 
@@ -2943,7 +2972,7 @@ html.light .media-table tr:hover td {
 }
 
 html.light .media-table tr.row-selected td {
-  background: #deedf8;
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 html.light .cover-thumb img,
@@ -2951,29 +2980,11 @@ html.light .explore-cover img {
   opacity: 1;
 }
 
-html.light .badge-current {
-  background: #dcecf8;
-  color: #07558f;
-}
-
+/* Badges inherit their dark-mode definitions so the semantic colours stay the
+   same vibrant inks; only the neutral planned tint follows the light palette. */
 html.light .badge-planned {
-  background: #e1e7e3;
-  color: #42564a;
-}
-
-html.light .badge-completed {
-  background: #dceee2;
-  color: #145d33;
-}
-
-html.light .badge-on_hold {
-  background: #f3e8c8;
-  color: #714e00;
-}
-
-html.light .badge-dropped {
-  background: #f5dfdc;
-  color: #9d2018;
+  background: rgba(152, 168, 157, 0.25);
+  color: var(--dim);
 }
 
 html.light .stat-box,
@@ -3027,31 +3038,6 @@ html.light .explore-card-overlay span {
 
 html.light .explore-card-added-overlay span {
   background: #edf4ef;
-}
-
-html.light .settings-msg-error,
-html.light .auth-error {
-  background: #f7e4e1;
-}
-
-html.light .settings-msg-success {
-  background: #e0efe5;
-}
-
-html.light .btn-danger-outline:hover,
-html.light .icon-btn.danger:hover {
-  background: #f7e4e1;
-}
-
-html.light .icon-btn.accent:hover,
-html.light .icon-btn.edit:hover,
-html.light .source-chip.is-on,
-html.light .list-chip.is-on {
-  background: #e1eef8;
-}
-
-html.light .ext-update-note {
-  background: #f4ebd1;
 }
 
 html.light .skeleton-line,

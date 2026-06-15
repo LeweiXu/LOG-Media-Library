@@ -18,15 +18,7 @@ export default function App() {
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
-
-  useEffect(() => {
-    if (theme === 'light') {
-      document.documentElement.classList.add('light');
-    } else {
-      document.documentElement.classList.remove('light');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+  const [accent, setAccent] = useState(() => localStorage.getItem('accent') || 'blue');
 
   // ── Auth state ─────────────────────────────────────────────────────────────
   const [token,         setToken]         = useState(() => localStorage.getItem('auth_token')    || '');
@@ -35,6 +27,20 @@ export default function App() {
   const [authModalTab,   setAuthModalTab]   = useState('login');
 
   const isAuthenticated = Boolean(token);
+
+  // The landing page (logged-out) is always the static dark / blue terminal
+  // look — the user's saved theme & accent only apply once authenticated, and
+  // we never persist the forced override so their real choice survives logout.
+  useEffect(() => {
+    const light = isAuthenticated && theme === 'light';
+    document.documentElement.classList.toggle('light', light);
+    if (isAuthenticated) localStorage.setItem('theme', theme);
+  }, [theme, isAuthenticated]);
+
+  useEffect(() => {
+    document.documentElement.dataset.accent = isAuthenticated ? accent : 'blue';
+    if (isAuthenticated) localStorage.setItem('accent', accent);
+  }, [accent, isAuthenticated]);
 
   function handleAuth(newToken, newUsername) {
     setToken(newToken);
@@ -181,6 +187,8 @@ export default function App() {
                 key={username}
                 theme={theme}
                 onThemeChange={t => setTheme(t === 'light' ? 'light' : 'dark')}
+                accent={accent}
+                onAccentChange={a => setAccent(a)}
                 onLogout={handleLogout}
                 onDataDeleted={() => navigate('/library')}
               />
