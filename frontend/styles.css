@@ -1189,7 +1189,9 @@ html.light .skeleton-pie::after {
    still raise its full accent border over its neighbours via z-index. */
 .term-stack { display: flex; flex-direction: column; }
 .term-stack > .term-row + .term-row { margin-top: -1px; }
-.term-row:hover:not(:disabled) { border-color: var(--border2); }
+/* Don't apply the hover-brighten to a selected row — it would override the
+   accent border and make it look like the border vanishes on hover. */
+.term-row:hover:not(:disabled):not(.is-on) { border-color: var(--border2); }
 .term-row:disabled { opacity: 0.5; cursor: not-allowed; }
 .term-row.is-on {
   border-color: var(--accent);
