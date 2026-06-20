@@ -839,6 +839,7 @@ export default function Library({ initialFilters = {} }) {
                   {showCol('rating') && <SortTh field="rating" className="col-rating">Rating</SortTh>}
                   {showCol('updated') && <SortTh field="updated_at" className="col-updated">Updated</SortTh>}
                   {showCol('completed') && <SortTh field="completed_at" className="col-completed">Completed</SortTh>}
+                  {showCol('custom_list') && <th className="col-custom-list">Custom List</th>}
                   {showActions && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
@@ -911,6 +912,23 @@ export default function Library({ initialFilters = {} }) {
                       )}
                       {showCol('updated') && <td className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>}
                       {showCol('completed') && <td className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at)}</span></td>}
+                      {showCol('custom_list') && (
+                      <td className="col-custom-list" onClick={ev => ev.stopPropagation()}>
+                        <CustomSelect
+                          className="inline-select"
+                          value={e.custom_list || ''}
+                          disabled={saving === `entry:${e.id}`}
+                          options={[
+                            { value: '', label: 'No List' },
+                            ...listNames.map(name => ({ value: name, label: name })),
+                          ]}
+                          onChange={value => saveEntryList(e, value)}
+                          containerClassName="manage-list-select"
+                          maxVisible={listNames.length + 1}
+                          ariaLabel={`Custom list for ${e.title}`}
+                        />
+                      </td>
+                      )}
                       {showActions && (
                         <td className="action-cell" onClick={ev => ev.stopPropagation()}>
                           <div className="action-cell-inner">

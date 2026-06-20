@@ -23,7 +23,8 @@ const EXPLORE_BY_OPTIONS = [
 // a single canonical ordering so the chips line up across both rows.
 const LIBRARY_VIEW_COLS = [
   ['medium', 'Medium'], ['year', 'Year'], ['progress', 'Progress'],
-  ['status', 'Status'], ['rating', 'Rating'], ['updated', 'Updated'], ['completed', 'Completed'],
+  ['status', 'Status'], ['rating', 'Rating'], ['updated', 'Updated'],
+  ['completed', 'Completed'], ['custom_list', 'Custom List'],
 ];
 const LIBRARY_MANAGE_COLS = [
   ['medium', 'Medium'], ['year', 'Year'], ['progress', 'Progress'],
