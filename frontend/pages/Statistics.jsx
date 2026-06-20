@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getStats } from '../api.jsx';
 import { usePreferences } from '../preferences.jsx';
+import { useRevalidateOnFocus } from '../hooks.jsx';
 import { SkeletonChartBox, SkeletonLine } from './components/Skeletons.jsx';
 import {
   Bar,
@@ -170,22 +171,21 @@ export default function Statistics() {
   const [barsReady, setBarsReady] = useState(false);
   const [pieAnimId, setPieAnimId] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const data = await getStats();
-        if (!cancelled) setStats(data);
-      } catch (err) {
-        if (!cancelled) setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(''); }
+    try {
+      const data = await getStats();
+      setStats(data);
+    } catch (err) {
+      if (!silent) setError(err.message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
+  useRevalidateOnFocus(() => load(true));
 
   useEffect(() => {
     if (loading) return;

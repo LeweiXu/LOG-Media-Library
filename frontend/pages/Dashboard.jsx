@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getEntries, getStats, updateEntry } from '../api.jsx';
+import { useRevalidateOnFocus } from '../hooks.jsx';
 import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass, onCoverError } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
@@ -95,6 +96,8 @@ export default function DashboardAlt({ onFilterChange }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
+  useRevalidateOnFocus(() => load(true));
 
   const monthBarsData = stats?.entries_per_month ?? [];
   useEffect(() => {
@@ -370,7 +373,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 alignItems: 'start',
               }}>
               <div>
-                <div className="section-header">Currently Consuming</div>
+                <div className="section-header">Current</div>
                 <SkeletonTable
                   headers={['Title', 'Type', 'Progress', 'Status', 'Rating']}
                   rows={8}
@@ -408,9 +411,9 @@ export default function DashboardAlt({ onFilterChange }) {
               className="dash-pair"
               style={{ display: 'grid', gridTemplateColumns: `${split}fr ${100 - split}fr`, gap: '0 24px', alignItems: 'start' }}>
 
-            {/* Currently Consuming */}
+            {/* Current */}
             <div>
-                <div className="section-header">Currently Consuming</div>
+                <div className="section-header">Current</div>
                 {current.length === 0
                 ? <div className="dash-empty">No active entries.</div>
                 : (

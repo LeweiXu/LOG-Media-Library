@@ -336,10 +336,10 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
 
         {/* ── Dashboard (before Library) ── */}
         <Section title="Dashboard" desc="home page layout">
-          <Row title="Currently consuming — rows" desc="Maximum rows shown in the active table.">
+          <Row title="Current — rows" desc="Maximum rows shown in the active table.">
             <RowSelect value={dash.current_rows}
               options={ROW_OPTIONS.map(n => ({ value: n, label: String(n) }))}
-              onChange={v => saveUi({ dashboard: { current_rows: Number(v) } })} ariaLabel="Currently consuming rows" />
+              onChange={v => saveUi({ dashboard: { current_rows: Number(v) } })} ariaLabel="Current rows" />
           </Row>
           <Row title="Planned — rows" desc="Maximum rows shown in the planned table.">
             <RowSelect value={dash.planned_rows}
@@ -356,7 +356,7 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
               onChange={n => saveUi({ dashboard: { split: n } })}
               format={n => `${n}% / ${100 - n}%`} />
           </Row>
-          <Row title="Currently-consuming columns" stack>
+          <Row title="Current columns" stack>
             <ColumnToggles cols={DASH_COLS} selected={dashColSel('current')}
               onToggle={col => toggleColumn('dashboard', 'current', col)} />
           </Row>

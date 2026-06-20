@@ -5,6 +5,7 @@ import {
   getCustomLists, batchUpdateEntries, batchDeleteEntries,
 } from '../api.jsx';
 import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError } from '../utils.jsx';
+import { useRevalidateOnFocus } from '../hooks.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ImportModal from './components/ImportModal.jsx';
@@ -268,6 +269,9 @@ export default function Library({ initialFilters = {} }) {
     loadLists();
     load(true);
   }
+
+  // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
+  useRevalidateOnFocus(refreshView);
 
   function handleSort(field) {
     if (sort === field) setOrder(o => o === 'asc' ? 'desc' : 'asc');
