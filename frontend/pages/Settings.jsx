@@ -142,12 +142,18 @@ function ColumnOrderEditor({ cols, selected, onChange }) {
     <div className="settings-chip-row">
       {order.map(key => {
         const on = enabledSet.has(key);
+        // The drop lands after the target only when it's the last chip and we're
+        // dragging downward onto it — that's the one case the indicator shows on
+        // the right; every other target inserts before (indicator on the left).
+        const isOver = overKey === key;
+        const dropAfter = isOver && key === order[order.length - 1]
+          && dragKey && order.indexOf(dragKey) < order.indexOf(key);
         return (
           <button
             key={key}
             type="button"
             draggable
-            className={`source-chip col-chip${on ? ' is-on' : ''}${dragKey === key ? ' is-dragging' : ''}${overKey === key ? ' is-over' : ''}`}
+            className={`source-chip col-chip${on ? ' is-on' : ''}${dragKey === key ? ' is-dragging' : ''}${isOver && !dropAfter ? ' is-over' : ''}${dropAfter ? ' is-over-after' : ''}`}
             onDragStart={e => { setDragKey(key); e.dataTransfer.effectAllowed = 'move'; }}
             onDragEnter={e => { e.preventDefault(); if (dragKey) setOverKey(key); }}
             onDragOver={e => e.preventDefault()}
@@ -608,7 +614,7 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
                 <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
                 <button type="button" className="btn btn-danger" style={{ padding: '6px 10px' }}
                   disabled={resetting} onClick={handleResetDefaults}>
-                  {resetting ? 'Resetting…' : 'Yes, reset'}
+                  {resetting ? 'Resetting…' : 'Yes'}
                 </button>
                 <button type="button" className="icon-btn" style={{ padding: '6px 10px' }}
                   onClick={() => setConfirmReset(false)}>Cancel</button>
@@ -616,7 +622,7 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
             ) : (
               <button type="button" className="btn btn-danger-outline"
                 onClick={() => { setConfirmReset(true); setResetDone(false); }}>
-                Reset to Defaults
+                Reset
               </button>
             )}
           </Row>

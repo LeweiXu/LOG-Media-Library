@@ -1157,16 +1157,20 @@ html.light .skeleton-pie::after {
 }
 .source-chip.is-on .source-box { color: var(--accent); }
 
-/* ── Draggable column-order chips (Settings) ── */
-/* Slightly more compact than a plain source-chip so a full set of columns fits
-   on one row. */
-.col-chip { padding: 6px 8px; gap: 5px; }
+/* ── Settings chips ── */
+/* All Settings chips (toggles + draggable column chips) share one compact size
+   so the rows line up consistently and a full column set fits on one row. */
+.settings-chip-row .source-chip { padding: 6px 8px; }
+.col-chip { gap: 5px; }
 .col-chip[draggable="true"] { cursor: grab; }
 .col-chip[draggable="true"]:active { cursor: grabbing; }
 .col-chip .col-chip-grip { color: var(--dim); font-size: 11px; line-height: 1; flex-shrink: 0; }
 .col-chip.is-on .col-chip-grip { color: var(--accent); }
 .col-chip.is-dragging { opacity: 0.4; }
+/* Drop indicator: a bar on the side the dragged chip will land — left for an
+   insert-before, right when dropping past the last chip. */
 .col-chip.is-over { border-color: var(--accent); box-shadow: -2px 0 0 var(--accent); }
+.col-chip.is-over-after { border-color: var(--accent); box-shadow: 2px 0 0 var(--accent); }
 
 @media (max-width: 720px) {
   .source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
