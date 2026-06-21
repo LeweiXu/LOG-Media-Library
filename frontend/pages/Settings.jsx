@@ -88,12 +88,80 @@ function ChipToggle({ on, label, onClick, title }) {
   );
 }
 
-function ColumnToggles({ cols, selected, onToggle }) {
+// Drag-to-reorder column picker. Every column — selected or not — is a single
+// draggable chip in one row; the chip's [x]/[ ] shows whether it's enabled.
+// Dragging reorders; clicking toggles. Only the enabled columns (in their
+// dragged order) are persisted via `onChange` — that array drives the table.
+// Unselected columns keep their position locally so you can place one before
+// enabling it; an external change (e.g. Reset to Defaults) re-syncs the row.
+function ColumnOrderEditor({ cols, selected, onChange }) {
+  const labelOf = Object.fromEntries(cols);
+  const allKeys = cols.map(([key]) => key);
+  const validSel = selected.filter(key => labelOf[key] !== undefined);
+  const enabledSet = new Set(validSel);
+
+  const [order, setOrder] = useState(() => [...validSel, ...allKeys.filter(k => !enabledSet.has(k))]);
+  const [dragKey, setDragKey] = useState(null);
+  const [overKey, setOverKey] = useState(null);
+
+  // Keep the local row in sync with the saved selection. A change we made
+  // ourselves leaves the enabled subset of `order` already equal to `selected`,
+  // so we keep `order` (preserving unselected positions); anything else (reset)
+  // rebuilds the row from the saved order followed by the remaining columns.
+  useEffect(() => {
+    setOrder(prev => {
+      const merged = prev.filter(k => labelOf[k] !== undefined);
+      for (const k of allKeys) if (!merged.includes(k)) merged.push(k);
+      const enabledInPrev = merged.filter(k => enabledSet.has(k));
+      const same = enabledInPrev.length === validSel.length
+        && enabledInPrev.every((k, i) => k === validSel[i]);
+      return same ? merged : [...validSel, ...allKeys.filter(k => !enabledSet.has(k))];
+    });
+  }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggle(key) {
+    const next = new Set(enabledSet);
+    next.has(key) ? next.delete(key) : next.add(key);
+    onChange(order.filter(k => next.has(k)));
+  }
+  function drop(targetKey) {
+    if (dragKey && dragKey !== targetKey) {
+      const movingDown = order.indexOf(dragKey) < order.indexOf(targetKey);
+      const next = order.filter(k => k !== dragKey);
+      let idx = next.indexOf(targetKey);
+      if (idx < 0) idx = next.length;
+      else if (movingDown) idx += 1;   // dropping past the target → after it (reaches last)
+      next.splice(idx, 0, dragKey);
+      setOrder(next);
+      onChange(next.filter(k => enabledSet.has(k)));
+    }
+    setDragKey(null); setOverKey(null);
+  }
+
   return (
     <div className="settings-chip-row">
-      {cols.map(([key, label]) => (
-        <ChipToggle key={key} label={label} on={selected.includes(key)} onClick={() => onToggle(key)} />
-      ))}
+      {order.map(key => {
+        const on = enabledSet.has(key);
+        return (
+          <button
+            key={key}
+            type="button"
+            draggable
+            className={`source-chip col-chip${on ? ' is-on' : ''}${dragKey === key ? ' is-dragging' : ''}${overKey === key ? ' is-over' : ''}`}
+            onDragStart={e => { setDragKey(key); e.dataTransfer.effectAllowed = 'move'; }}
+            onDragEnter={e => { e.preventDefault(); if (dragKey) setOverKey(key); }}
+            onDragOver={e => e.preventDefault()}
+            onDragEnd={() => { setDragKey(null); setOverKey(null); }}
+            onDrop={e => { e.preventDefault(); drop(key); }}
+            onClick={() => toggle(key)}
+            title="Drag to reorder · click to toggle"
+          >
+            <span className="col-chip-grip" aria-hidden="true">⠿</span>
+            <span className="source-box">{on ? '[x]' : '[ ]'}</span>
+            {labelOf[key]}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -159,9 +227,7 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
     setUi(prev => mergeDeep(prev, patch));
     updateUi(patch).catch(() => {});
   }
-  function toggleColumn(section, table, col) {
-    const current = ui[section]?.columns?.[table] ?? DEFAULT_UI[section].columns[table];
-    const next = current.includes(col) ? current.filter(c => c !== col) : [...current, col];
+  function setColumns(section, table, next) {
     saveUi({ [section]: { columns: { [table]: next } } });
   }
   function toggleStatSection(key) {
@@ -231,6 +297,9 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
   const [screen, setScreen] = useState('settings');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
   async function handleChangePassword(e) {
     e.preventDefault();
@@ -253,6 +322,24 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
       setBackupNotice(`Backup sent to ${b.email}.`);
     } catch (err) { setBackupError(err.message || String(err)); }
     finally { setBackupRunning(false); }
+  }
+
+  async function handleResetDefaults() {
+    setResetting(true); setResetDone(false);
+    try {
+      // Overwrite the whole UI doc with defaults (the PUT deep-merges, and
+      // DEFAULT_UI covers every key, so this is a full reset). Reset backup
+      // cadence and the display theme/accent too.
+      await updateSettings({ ui: DEFAULT_UI, backup_freq: 'never' });
+      setUi(DEFAULT_UI);
+      setBackupFreq('never');
+      onThemeChange?.('dark');
+      onAccentChange?.('blue');
+      await reloadPrefs();
+      setConfirmReset(false);
+      setResetDone(true);
+    } catch (err) { setDeleteError(err.message || String(err)); }
+    finally { setResetting(false); }
   }
 
   async function handleDeleteAll() {
@@ -356,17 +443,17 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
               onChange={n => saveUi({ dashboard: { split: n } })}
               format={n => `${n}% / ${100 - n}%`} />
           </Row>
-          <Row title="Current columns" stack>
-            <ColumnToggles cols={DASH_COLS} selected={dashColSel('current')}
-              onToggle={col => toggleColumn('dashboard', 'current', col)} />
+          <Row title="Current columns" desc="Drag to reorder · click to toggle." stack>
+            <ColumnOrderEditor cols={DASH_COLS} selected={dashColSel('current')}
+              onChange={next => setColumns('dashboard', 'current', next)} />
           </Row>
           <Row title="Planned columns" stack>
-            <ColumnToggles cols={DASH_COLS} selected={dashColSel('planned')}
-              onToggle={col => toggleColumn('dashboard', 'planned', col)} />
+            <ColumnOrderEditor cols={DASH_COLS} selected={dashColSel('planned')}
+              onChange={next => setColumns('dashboard', 'planned', next)} />
           </Row>
           <Row title="Recently-completed columns" stack>
-            <ColumnToggles cols={DASH_COLS} selected={dashColSel('completed')}
-              onToggle={col => toggleColumn('dashboard', 'completed', col)} />
+            <ColumnOrderEditor cols={DASH_COLS} selected={dashColSel('completed')}
+              onChange={next => setColumns('dashboard', 'completed', next)} />
           </Row>
         </Section>
 
@@ -393,13 +480,13 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
               <ChipToggle label="Quick Actions" on={!!lib.quick_actions} onClick={() => saveUi({ library: { quick_actions: !lib.quick_actions } })} />
             </div>
           </Row>
-          <Row title="View columns" stack>
-            <ColumnToggles cols={LIBRARY_VIEW_COLS} selected={lib.columns?.view ?? DEFAULT_UI.library.columns.view}
-              onToggle={col => toggleColumn('library', 'view', col)} />
+          <Row title="View columns" desc="Drag to reorder · click to toggle." stack>
+            <ColumnOrderEditor cols={LIBRARY_VIEW_COLS} selected={lib.columns?.view ?? DEFAULT_UI.library.columns.view}
+              onChange={next => setColumns('library', 'view', next)} />
           </Row>
           <Row title="Manage columns" stack>
-            <ColumnToggles cols={LIBRARY_MANAGE_COLS} selected={lib.columns?.manage ?? DEFAULT_UI.library.columns.manage}
-              onToggle={col => toggleColumn('library', 'manage', col)} />
+            <ColumnOrderEditor cols={LIBRARY_MANAGE_COLS} selected={lib.columns?.manage ?? DEFAULT_UI.library.columns.manage}
+              onChange={next => setColumns('library', 'manage', next)} />
           </Row>
         </Section>
 
@@ -515,6 +602,29 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
 
         {/* ── Danger Zone ── */}
         <Section title="Danger Zone" danger>
+          <Row title="Reset settings" desc="Restore all display, layout, and column preferences to their defaults. Your library and password are not affected.">
+            {confirmReset ? (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
+                <button type="button" className="btn btn-danger" style={{ padding: '6px 10px' }}
+                  disabled={resetting} onClick={handleResetDefaults}>
+                  {resetting ? 'Resetting…' : 'Yes, reset'}
+                </button>
+                <button type="button" className="icon-btn" style={{ padding: '6px 10px' }}
+                  onClick={() => setConfirmReset(false)}>Cancel</button>
+              </div>
+            ) : (
+              <button type="button" className="btn btn-danger-outline"
+                onClick={() => { setConfirmReset(true); setResetDone(false); }}>
+                Reset to Defaults
+              </button>
+            )}
+          </Row>
+          {resetDone && (
+            <Row title="" desc="" stack>
+              <div className="settings-msg settings-msg-success">Settings restored to defaults.</div>
+            </Row>
+          )}
           <Row title="Delete all data" desc="Permanently remove every entry in your library.">
             <button className="btn btn-danger" type="button" onClick={() => setScreen('confirm-delete')}>Wipe Data</button>
           </Row>

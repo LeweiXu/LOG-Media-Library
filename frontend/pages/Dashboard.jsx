@@ -37,7 +37,6 @@ function CoverThumb({ url, title }) {
 export default function DashboardAlt({ onFilterChange }) {
   const { prefs } = usePreferences();
   const dash = prefs.dashboard || DEFAULT_UI.dashboard;
-  const showC = (table, col) => (dash.columns?.[table] || DEFAULT_UI.dashboard.columns[table]).includes(col);
   const [stats,           setStats]           = useState(null);
   const [current,         setCurrent]         = useState([]);
   const [planned,         setPlanned]         = useState([]);
@@ -179,7 +178,8 @@ export default function DashboardAlt({ onFilterChange }) {
 
   // ── Shared table rendering: every dashboard table supports the same column
   // catalogue; visibility is driven by the saved per-table column preference. ──
-  const dashCols = table => DASH_COL_ORDER.filter(c => showC(table, c));
+  // Columns in the saved order (filtered to known keys); ordering is set in Settings.
+  const dashCols = table => (dash.columns?.[table] || DEFAULT_UI.dashboard.columns[table]).filter(c => DASH_COL_META[c]);
 
   function renderHead(table) {
     return (
