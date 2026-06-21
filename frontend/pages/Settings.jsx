@@ -142,12 +142,10 @@ function ColumnOrderEditor({ cols, selected, onChange }) {
     <div className="settings-chip-row">
       {order.map(key => {
         const on = enabledSet.has(key);
-        // The drop lands after the target only when it's the last chip and we're
-        // dragging downward onto it — that's the one case the indicator shows on
-        // the right; every other target inserts before (indicator on the left).
+        // Dragging onto a chip that sits after the dragged one inserts *after*
+        // it (indicator on the right); a chip before it inserts before (left).
         const isOver = overKey === key;
-        const dropAfter = isOver && key === order[order.length - 1]
-          && dragKey && order.indexOf(dragKey) < order.indexOf(key);
+        const dropAfter = isOver && dragKey && order.indexOf(dragKey) < order.indexOf(key);
         return (
           <button
             key={key}

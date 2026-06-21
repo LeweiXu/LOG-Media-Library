@@ -1157,11 +1157,7 @@ html.light .skeleton-pie::after {
 }
 .source-chip.is-on .source-box { color: var(--accent); }
 
-/* ── Settings chips ── */
-/* All Settings chips (toggles + draggable column chips) share one compact size
-   so the rows line up consistently and a full column set fits on one row. */
-.settings-chip-row .source-chip { padding: 6px 8px; }
-.col-chip { gap: 5px; }
+/* ── Draggable column-order chips (Settings) ── */
 .col-chip[draggable="true"] { cursor: grab; }
 .col-chip[draggable="true"]:active { cursor: grabbing; }
 .col-chip .col-chip-grip { color: var(--dim); font-size: 11px; line-height: 1; flex-shrink: 0; }
