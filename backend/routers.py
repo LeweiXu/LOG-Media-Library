@@ -465,15 +465,20 @@ async def explore(
     limit:   int  = Query(40, ge=1, le=200),
     seed:    int  = Query(0,  ge=0, description="Shuffle seed; only consulted on a fresh fetch"),
     refresh: bool = Query(False, description="Bypass and overwrite the per-medium cache"),
+    sources: str  = Query("", description="Comma-separated available sources to draw from"),
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
     ui = deep_merge_ui(current_user.ui_preferences)
+    explore_cfg = ui["explore"]
+    source_set = {s for s in (sources or "").split(",") if s} or None
     return await explore_media(
         db,
         username=current_user.username,
         medium=medium or None,
-        explore_by=ui["explore"].get("by") or "all",
+        explore_by=explore_cfg.get("by") or "all",
+        personalize=explore_cfg.get("personalize", True) is not False,
+        sources=source_set,
         limit=limit,
         seed=seed or None,
         refresh=refresh,

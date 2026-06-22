@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates, createEntry } from '../../api.jsx';
 import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, onCoverError } from '../../utils.jsx';
-import { SEARCH_SOURCES, SOURCE_LABEL, loadSavedSources, saveSources, resultToEntry } from './searchSources.js';
+import { SEARCH_SOURCES, SOURCE_LABEL, loadSavedSources, saveSources, resultToEntry, loadAvailableSources } from './searchSources.js';
 import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
@@ -22,7 +22,12 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
   const [nuSearching,     setNuSearching]      = useState(false);
   const extPresent = useExtensionPresent();
 
-  const nuRequested = selectedSources.size === 0 || selectedSources.has('novelupdates');
+  // Sitewide-available sources gate which chips show and what an unfiltered
+  // search fans out across (read once on mount; changed in Console).
+  const availableSet = useMemo(() => loadAvailableSources(), []);
+  const availableList = useMemo(() => SEARCH_SOURCES.filter(s => availableSet.has(s.value)), [availableSet]);
+
+  const nuRequested = (selectedSources.size === 0 || selectedSources.has('novelupdates')) && availableSet.has('novelupdates');
 
   async function runDupCheck(list) {
     if (!list.length) { setInLibrary([]); return; }
@@ -65,7 +70,9 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
         setConfirmQueue(found.map(resultToEntry));
         return;
       }
-      const data = await searchMedia(query.trim(), [...selectedSources], extended);
+      const sources = (selectedSources.size ? [...selectedSources] : availableList.map(s => s.value))
+        .filter(v => availableSet.has(v));
+      const data = await searchMedia(query.trim(), sources, extended);
       let list = Array.isArray(data) ? data : data?.results ?? [];
       setResults(list);
       await runDupCheck(list);
@@ -199,7 +206,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                     )}
                   </div>
                   <div className="source-grid">
-                    {SEARCH_SOURCES.map(s => {
+                    {availableList.map(s => {
                       const on = selectedSources.has(s.value);
                       return (
                         <button

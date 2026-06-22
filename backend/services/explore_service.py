@@ -36,6 +36,7 @@ endpoints rather than reusing the title-search code paths.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import random
@@ -187,6 +188,30 @@ _PROVIDER_FNS_BY_MEDIUM: dict[str, list] = {
     "Visual Novel": [_discover_vndb],
 }
 
+# Source value (matching the frontend SEARCH_SOURCES values) each discover
+# function emits. Used to restrict discovery to the user's available sources so
+# the recommender doesn't fill results from a source the UI will then hide.
+_DISCOVER_SOURCE: dict = {
+    _discover_tmdb:         "tmdb",
+    _discover_jikan:        "jikan",
+    _discover_anilist:      "anilist",
+    _discover_novelupdates: "novelupdates",
+    _discover_comicvine:    "comicvine",
+    _discover_google_books: "google_books",
+    _discover_rawg:         "rawg",
+    _discover_igdb:         "igdb",
+    _discover_vndb:         "vndb",
+}
+
+
+def _providers_for(medium: str, allowed: Optional[set[str]]) -> list:
+    """Discovery providers for a medium, restricted to ``allowed`` sources
+    (None = no restriction)."""
+    fns = _PROVIDER_FNS_BY_MEDIUM.get(medium, [])
+    if allowed is None:
+        return fns
+    return [fn for fn in fns if _DISCOVER_SOURCE.get(fn) in allowed]
+
 
 async def _call_discover_provider(
     fn,
@@ -233,15 +258,16 @@ async def _discover_medium_with_fallback(
     rng: random.Random,
     target_visible: int,
     owned: set[tuple[str, str]],
+    allowed_sources: Optional[set[str]] = None,
 ) -> list[ExploreItem]:
     """Try providers by priority, querying more pages until enough items exist.
 
     A fallback provider is only used when the higher-priority provider returns
     nothing useful or cannot fill the remaining visible recommendations after
-    several pages.
+    several pages. ``allowed_sources`` restricts which providers are consulted.
     """
     combined: list[ExploreItem] = []
-    for fn in _PROVIDER_FNS_BY_MEDIUM.get(medium, []):
+    for fn in _providers_for(medium, allowed_sources):
         pages = list(range(1, _MAX_DISCOVERY_PAGES_PER_PROVIDER + 1))
         rng.shuffle(pages)
 
@@ -309,19 +335,30 @@ def _scalar_bias(value: Optional[str], weights: dict[str, float], cap: float) ->
 # library" filter so adding an entry on one tab doesn't leave it visible on
 # another.
 
-def _cache_key(medium: Optional[str]) -> str:
+def _cache_key(medium: Optional[str], personalize: bool = True, sources: Optional[set[str]] = None) -> str:
     """Normalise a medium hint into the string used as the cache key.
 
-    Empty string is the cache key for the "All" sidebar tab.
+    Empty string is the cache key for the "All" sidebar tab. Neutral
+    (non-personalized) results and different available-source sets are cached
+    separately so changing either preference never serves a stale ranking.
     """
-    return medium or ""
+    # The medium column is VARCHAR(50), so keep the key short: a printable flag
+    # for neutral mode and a short hash of the available-source set (the full
+    # comma list would overflow the column).
+    base = medium or ""
+    if not personalize:
+        base += "|n"
+    if sources:
+        digest = hashlib.sha1(",".join(sorted(sources)).encode()).hexdigest()[:10]
+        base += "|s" + digest
+    return base
 
 
-def _read_cache(db: Session, username: str, medium: Optional[str]) -> Optional[list[ExploreItem]]:
+def _read_cache(db: Session, username: str, medium: Optional[str], personalize: bool = True, sources: Optional[set[str]] = None) -> Optional[list[ExploreItem]]:
     row = db.execute(
         select(ExploreCache.items_json).where(
             ExploreCache.username == username,
-            ExploreCache.medium   == _cache_key(medium),
+            ExploreCache.medium   == _cache_key(medium, personalize, sources),
         )
     ).first()
     if not row:
@@ -334,9 +371,9 @@ def _read_cache(db: Session, username: str, medium: Optional[str]) -> Optional[l
         return None
 
 
-def _write_cache(db: Session, username: str, medium: Optional[str], items: list[ExploreItem]) -> None:
+def _write_cache(db: Session, username: str, medium: Optional[str], items: list[ExploreItem], personalize: bool = True, sources: Optional[set[str]] = None) -> None:
     payload = json.dumps([i.model_dump() for i in items])
-    key = _cache_key(medium)
+    key = _cache_key(medium, personalize, sources)
     existing = db.execute(
         select(ExploreCache).where(
             ExploreCache.username == username,
@@ -363,12 +400,14 @@ def _owned_entry_keys(db: Session, username: str) -> set[tuple[str, str]]:
 async def explore_media(
     db: Session,
     *,
-    username:   str,
-    medium:     Optional[str] = None,
-    explore_by: str           = "all",
-    limit:      int           = 40,
-    seed:       Optional[int] = None,
-    refresh:    bool          = False,
+    username:    str,
+    medium:      Optional[str] = None,
+    explore_by:  str           = "all",
+    personalize: bool          = True,
+    sources:     Optional[set[str]] = None,
+    limit:       int           = 40,
+    seed:        Optional[int] = None,
+    refresh:     bool          = False,
 ) -> ExploreResponse:
     """Return ranked explore items + a snapshot of the user's top consumed
     genres / origins / mediums.
@@ -386,9 +425,9 @@ async def explore_media(
     owned = _owned_entry_keys(db, username)
 
     if not refresh:
-        cached = _read_cache(db, username, medium)
+        cached = _read_cache(db, username, medium, personalize, sources)
         if cached is not None:
-            return _finalise(db, username, profile, cached, limit)
+            return _finalise(db, username, profile, cached, limit, personalize)
 
     rng = random.Random(seed) if seed is not None else random.Random()
 
@@ -396,9 +435,10 @@ async def explore_media(
     if medium and medium in VALID_MEDIUMS:
         mediums_to_query = [medium]
     else:
-        # When "all": prefer mediums the user already consumes, else a
-        # sensible default mix.
-        if profile.mediums:
+        # When "all": personalized mode prefers the mediums the user already
+        # consumes; neutral mode always uses the full default mix for an even
+        # spread across mediums.
+        if personalize and profile.mediums:
             mediums_to_query = [m for m, _ in profile.mediums.most_common(3)]
         else:
             mediums_to_query = []
@@ -408,14 +448,23 @@ async def explore_media(
                 "Light Novel", "Web Novel", "Comic", "Visual Novel",
             ]
 
-    top_genre_names = [g for g, _ in profile.genres.most_common(5)]
+    # Drop any medium with no available provider so we don't waste a fetch slot
+    # on a medium whose results would all be filtered out.
+    mediums_to_query = [m for m in mediums_to_query if _providers_for(m, sources)]
+
+    # Neutral mode runs discovery without genre hints so nothing is steered
+    # toward the user's tastes.
+    top_genre_names = [] if not personalize else [g for g, _ in profile.genres.most_common(5)]
 
     # Pre-compute weighted dicts used by the bias scorers.
     genre_weights  = _normalised_weights(profile.genres)
     medium_weights = _normalised_weights(profile.mediums)
     origin_weights = _normalised_weights(profile.origins)
 
-    if explore_by == "genre":
+    if not personalize:
+        # Neutral recommender: no genre/medium/origin bias at all.
+        gcap, mcap, ocap = 0.0, 0.0, 0.0
+    elif explore_by == "genre":
         gcap, mcap, ocap = _BIAS_CAP_GENRE, 0.0, 0.0
     elif explore_by == "medium":
         gcap, mcap, ocap = 0.0, _BIAS_CAP_MEDIUM, 0.0
@@ -437,7 +486,7 @@ async def explore_media(
             medium_rng = random.Random(rng.randint(0, 2**31 - 1))
             tasks.append(
                 _discover_medium_with_fallback(
-                    client, med, top_genre_names, medium_rng, target_per_medium, owned
+                    client, med, top_genre_names, medium_rng, target_per_medium, owned, sources
                 )
             )
         groups = await asyncio.gather(*tasks, return_exceptions=True)
@@ -484,17 +533,18 @@ async def explore_media(
     # re-applied at read time, so we strip them before caching to keep the
     # row small and avoid serving stale "in library" tags.
     to_cache = [i.model_copy(update={"matches": [], "in_library": False}) for i in items]
-    _write_cache(db, username, medium, to_cache)
+    _write_cache(db, username, medium, to_cache, personalize, sources)
 
-    return _finalise(db, username, profile, items, limit)
+    return _finalise(db, username, profile, items, limit, personalize)
 
 
 def _finalise(
-    db:       Session,
-    username: str,
-    profile:  ConsumptionProfile,
-    items:    list[ExploreItem],
-    limit:    int,
+    db:          Session,
+    username:    str,
+    profile:     ConsumptionProfile,
+    items:       list[ExploreItem],
+    limit:       int,
+    personalize: bool = True,
 ) -> ExploreResponse:
     """Apply the live "in library" filter, tag matches, and trim to ``limit``.
 
@@ -513,5 +563,5 @@ def _finalise(
     return ExploreResponse(
         items        = filtered[:limit],
         affinity     = profile.snapshot(),
-        personalised = profile.sample_size > 0,
+        personalised = personalize and profile.sample_size > 0,
     )

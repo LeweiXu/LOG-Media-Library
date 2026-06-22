@@ -25,8 +25,28 @@ export const SOURCE_LABEL = {
   imdb:   'IMDb',
 };
 
-const LS_SOURCES_KEY = 'search_sources';
+// Curated sitewide default for which sources are *available* to search: roughly
+// one provider per medium so the Add/Explore pickers don't offer overlapping
+// sources that return the same titles (e.g. AniList vs MyAnimeList for anime).
+// MyAnimeList (jikan) covers anime + manga, with MangaUpdates kept as a manga
+// backup; TMDB covers film/TV; NovelUpdates covers light/web novels. Users edit
+// the available set in Console → Search Sources.
+export const DEFAULT_SOURCES = [
+  'tmdb',         // film, tv
+  'jikan',        // anime, manga (MyAnimeList)
+  'mangaupdates', // manga backup
+  'novelupdates', // light novel, web novel
+  'rawg',         // game
+  'vndb',         // visual novel
+  'google_books', // book
+  'comicvine',    // comic
+];
 
+const LS_SOURCES_KEY = 'search_sources';
+const LS_AVAILABLE_KEY = 'available_sources';
+
+// Per-session source *selection* within a picker (which available sources to
+// actually query). Empty = use all available sources.
 export function loadSavedSources() {
   try {
     const raw = localStorage.getItem(LS_SOURCES_KEY);
@@ -40,6 +60,29 @@ export function loadSavedSources() {
 
 export function saveSources(set) {
   localStorage.setItem(LS_SOURCES_KEY, JSON.stringify([...set]));
+}
+
+// Sitewide set of sources that are *available* to pick (Console setting).
+// Defaults to the curated one-per-medium list above.
+export function loadAvailableSources() {
+  try {
+    const raw = localStorage.getItem(LS_AVAILABLE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch (_) { /* ignore */ }
+  return new Set(DEFAULT_SOURCES);
+}
+
+export function saveAvailableSources(set) {
+  localStorage.setItem(LS_AVAILABLE_KEY, JSON.stringify([...set]));
+}
+
+// The SEARCH_SOURCES entries that are currently available, in canonical order.
+export function availableSourceList() {
+  const avail = loadAvailableSources();
+  return SEARCH_SOURCES.filter(s => avail.has(s.value));
 }
 
 // Normalize a search/scrape result into the entry shape EntryForm expects.

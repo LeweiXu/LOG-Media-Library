@@ -7,6 +7,7 @@ import { MEDIUMS } from '../utils.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import { useExtensionPresent } from '../extensionBridge.js';
 import CustomSelect from './components/CustomSelect.jsx';
+import { SEARCH_SOURCES, loadAvailableSources, saveAvailableSources } from './components/searchSources.js';
 import ListsPanel from './components/ListsPanel.jsx';
 import DedupPanel from './components/DedupPanel.jsx';
 import CacheCoversPanel from './components/CacheCoversPanel.jsx';
@@ -288,6 +289,18 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   }, []);
   useEffect(() => { reloadLists(); }, [reloadLists]);
 
+  // ── Sitewide *available* search sources (which sources the Add Entry and
+  //    Explore pickers offer). Shared via localStorage; read by those pages. ──
+  const [availableSources, setAvailableSources] = useState(() => loadAvailableSources());
+  function toggleSource(value) {
+    setAvailableSources(prev => {
+      const next = new Set(prev);
+      next.has(value) ? next.delete(value) : next.add(value);
+      saveAvailableSources(next);
+      return next;
+    });
+  }
+
   async function exportCSV() {
     try {
       const blob = await exportEntries();
@@ -485,11 +498,6 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
 
         {/* ── Import / Export ── */}
         <p className="console-group-label">Import / Export</p>
-        <Section title="Export" desc="download your library as CSV">
-          <Row title="Export CSV" desc="A full snapshot of every entry, importable back into Logarium.">
-            <button type="button" className="btn" onClick={exportCSV}>Export CSV</button>
-          </Row>
-        </Section>
         <CollapsibleSection title="Import — CSV" desc="import a Logarium CSV with duplicate resolution">
           <ImportPanel onImported={reloadLists} />
         </CollapsibleSection>
@@ -499,6 +507,11 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         <CollapsibleSection title="Import — MAL XML" desc="import a MyAnimeList anime/manga export">
           <ImportMalPanel onImported={reloadLists} />
         </CollapsibleSection>
+        <Section title="Export" desc="download your library as CSV">
+          <Row title="Export CSV" desc="A full snapshot of every entry, importable back into Logarium.">
+            <button type="button" className="btn" onClick={exportCSV}>Export CSV</button>
+          </Row>
+        </Section>
 
         {/* ── Display ── */}
         <p className="console-group-label">Settings</p>
@@ -627,6 +640,22 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               <ChipToggle label="Hide owned" on={exp.hide_in_library !== false}
                 onClick={() => saveUi({ explore: { hide_in_library: !(exp.hide_in_library !== false) } })}
                 title="Hide titles already in your library" />
+            </div>
+          </Row>
+        </Section>
+
+        {/* ── Search Sources ── */}
+        <Section title="Search Sources" desc="which sources are available to search">
+          <Row
+            title="Available sources"
+            desc="Which providers the Add Entry and Explore source pickers offer. The default is one source per medium so overlapping sources don't return duplicate titles."
+            stack>
+            <div className="settings-chip-row">
+              {SEARCH_SOURCES.map(s => (
+                <ChipToggle key={s.value} label={s.label}
+                  on={availableSources.has(s.value)}
+                  onClick={() => toggleSource(s.value)} />
+              ))}
             </div>
           </Row>
         </Section>

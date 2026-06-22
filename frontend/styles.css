@@ -1358,6 +1358,17 @@ html.light .skeleton-pie::after {
   color: var(--accent);
 }
 
+/* Header flag shown while Library multi-select (manage) mode is active — the
+   toggle itself lives in the right sidebar's View section. */
+.mode-flag {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 1px 6px;
+}
+
 /* Wide variant — the Explore page's main column is far wider than the
    add-entry modal, so the source chips get more columns there. */
 .source-select-wide .source-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
@@ -2255,6 +2266,16 @@ a.explore-title:hover { color: var(--accent); }
 .batch-select { width: 100%; }
 .batch-field-row { display: flex; gap: 6px; align-items: center; }
 .batch-actions { display: flex; gap: 6px; align-items: center; }
+
+/* Library right-sidebar Sort ↔ Batch swap region. Each panel keeps its natural
+   height (anchored where Sort sits); the batch panel just leaves a slightly
+   larger gap before the View section below. */
+.lib-sort-list { display: flex; flex-direction: column; gap: 2px; }
+.batch-desktop .batch-panel { margin-bottom: 24px; }
+
+/* Batch controls match the small topbar button size (no full-width stretch). */
+.batch-panel .batch-select { padding: 3px 9px; font-size: 11px; }
+.batch-panel .batch-actions .icon-btn { padding: 3px 9px; font-size: 11px; }
 /* The batch panel renders in the sidebar on desktop; the mobile copy in the
    main column is hidden above the breakpoint. Scoped to a min-width query (not
    a plain rule) so it never overrides the max-width:720 rule that reveals it on

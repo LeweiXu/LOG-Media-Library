@@ -56,16 +56,19 @@ medium, so a film and a web novel are filtered, sorted, and counted the same way
   entry. `completed_at` is set automatically the moment an entry flips to
   `completed` (and cleared if it moves back), so "what did I finish this year"
   is always accurate without manual bookkeeping.
-- **Bulk management** on the dedicated Manage page: multi-select entries and
-  bulk-edit a field (rating, medium, origin, year, total…), bulk-delete, or find
-  and merge duplicates.
+- **Bulk management** via Library's multi-select mode (the right-sidebar
+  "Multi-select" toggle): select entries and bulk-edit a field (rating, medium,
+  origin, year, total…), bulk-delete, or — from the Console page — find and merge
+  duplicates.
 
 ### Adding media
 - **Auto metadata search**: type a title and Logarium fans out across **13
   external providers** concurrently, normalises every result into a common
   shape, deduplicates by title/medium, and ranks them (exact-title matches
   first) so you can add a fully-populated entry (cover, year, counts, source)
-  in one click. Providers covered:
+  in one click. Which providers are offered is configurable sitewide on the
+  Console page (defaulting to roughly one per medium to avoid duplicate hits
+  across overlapping sources). Providers covered:
 
   | Domain            | Providers                                             |
   |-------------------|-------------------------------------------------------|
@@ -91,7 +94,9 @@ medium, so a film and a web novel are filtered, sorted, and counted the same way
   you actually consume), fans out to each provider's trending/popular endpoints,
   drops anything already in your library, and ranks the rest by popularity
   biased toward your tastes, along whichever dimension (genre / medium / origin)
-  you choose in Settings. A Refresh button reshuffles with seeded jitter.
+  you choose on the Console page. Turn **Personalize** off there for a fully
+  neutral recommender (no bias, even medium mix — the sidebar shows "bias off").
+  A Refresh button reshuffles with seeded jitter.
 
 ### Statistics
 - **Rich dashboards** powered by Recharts: totals and breakdowns by medium,
@@ -121,7 +126,10 @@ medium, so a film and a web novel are filtered, sorted, and counted the same way
 ### Accounts & data
 - **Multi-user** with JWT bearer auth; **every** library/stats/search query is
   scoped to the owning user, so accounts are fully isolated.
-- **Settings** for password change, Explore bias, and data wipe.
+- **Console page** consolidating settings (password, theme & accent colour,
+  per-page layout, Explore bias & personalisation, available search sources) and
+  library tools (custom lists, duplicate finder, cover caching, import/export,
+  data wipe).
 - **Optional email backups**: when SMTP is configured, a background scheduler
   emails periodic library backups on each user's chosen cadence.
 
@@ -156,9 +164,10 @@ the backend and mirrored on the frontend. Schema changes go through Alembic
 migrations, which are the source of truth for the database.
 
 **Frontend.** A React + Vite SPA (React Router) gated on auth state, with pages
-for Dashboard, Library, Explore, Manage, and Statistics. All network calls go
+for Dashboard, Library, Explore, Statistics, and Console (settings + library
+tools; Manage is a multi-select mode within Library). All network calls go
 through a single `api.jsx` helper layer; styling is plain CSS in a deliberate
-dark terminal aesthetic (no UI framework).
+dark terminal aesthetic (no UI framework), with a user-selectable accent colour.
 
 ---
 

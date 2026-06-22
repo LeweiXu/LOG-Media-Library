@@ -492,6 +492,9 @@ export default function Library({ initialFilters = {} }) {
 
   function openListsModal(tab = 'add') { setListModalTab(tab); setShowLists(true); }
 
+  // At-a-glance figures for the right sidebar, derived from the global counts.
+  const completionPct = counts._total ? Math.round((counts.completed || 0) / counts._total * 100) : 0;
+
   const mobileShow = ({
     title: 'status', medium: 'medium', rating: 'completed',
     status: 'status', year: 'year', updated_at: 'updated', completed_at: 'completed',
@@ -744,14 +747,6 @@ export default function Library({ initialFilters = {} }) {
               onClick={() => setDrawer(d => d === 'left' ? '' : 'left')}
               aria-label="Toggle filters" title="Filters">☰ Filters</button>
             <span className="page-title">Library</span>
-            <div className="mode-toggle" role="tablist" aria-label="Library mode">
-              <button type="button" role="tab" aria-selected={!isManage}
-                className={`mode-toggle-btn${!isManage ? ' is-on' : ''}`}
-                onClick={() => changeMode('view')}>View</button>
-              <button type="button" role="tab" aria-selected={isManage}
-                className={`mode-toggle-btn${isManage ? ' is-on' : ''}`}
-                onClick={() => changeMode('manage')}>Manage</button>
-            </div>
             <span className="page-desc">
               {loading ? <SkeletonLine width={74} height={11} /> : `${total} entries`}
             </span>
@@ -961,23 +956,33 @@ export default function Library({ initialFilters = {} }) {
       <div className="sidebar-right">
         <ExtensionInstallButton />
 
-        {isManage && <div className="batch-desktop">{batchPanel}</div>}
-
-        {/* Sort is available in both View and Manage modes. */}
-        <p className="panel-title">Sort</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
-          {SORT_FIELDS.map(f => (
-            <div key={f.key} className="sidebar-item" style={{ padding: '4px 0', fontSize: 11 }}
-              onClick={() => handleSort(f.key)}>
-              {f.label}
-              {sort === f.key && <span style={{ color: 'var(--accent)' }}>{order === 'asc' ? ' ↑' : ' ↓'}</span>}
+        {/* Manage (multi-select) replaces Sort with the batch-edit tools in place. */}
+        {isManage ? (
+          <div className="batch-desktop">{batchPanel}</div>
+        ) : (
+          <>
+            <p className="panel-title">Sort</p>
+            <div className="lib-sort-list">
+              {SORT_FIELDS.map(f => (
+                <div key={f.key} className="sidebar-item" style={{ padding: '4px 0', fontSize: 11 }}
+                  onClick={() => handleSort(f.key)}>
+                  {f.label}
+                  {sort === f.key && <span style={{ color: 'var(--accent)' }}>{order === 'asc' ? ' ↑' : ' ↓'}</span>}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
 
         <p className="panel-title" style={{ marginTop: 20 }}>View</p>
+        <button type="button" className={`source-chip${isManage ? ' is-on' : ''}`}
+          onClick={() => changeMode(isManage ? 'view' : 'manage')} style={{ width: '100%' }}
+          title="Select multiple entries to batch-edit or delete">
+          <span className="source-box">{isManage ? '[x]' : '[ ]'}</span>
+          Multi-select
+        </button>
         <button type="button" className={`source-chip${showActions ? ' is-on' : ''}`}
-          onClick={toggleQuickActions} style={{ width: '100%' }}
+          onClick={toggleQuickActions} style={{ width: '100%', marginTop: 4 }}
           title="Show per-row action buttons in the table">
           <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
           Quick Actions
@@ -988,6 +993,29 @@ export default function Library({ initialFilters = {} }) {
           <span className="source-box">{fixTitle ? '[x]' : '[ ]'}</span>
           Fixed Table
         </button>
+
+        <div style={{ marginTop: 20 }}>
+          <p className="panel-title">At a Glance</p>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', marginBottom: 5 }}>
+              <span>Completion</span>
+              <span style={{ color: 'var(--green)' }}>{completionPct}%</span>
+            </div>
+            <div style={{ height: 4, background: 'var(--border)', position: 'relative' }}>
+              <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${completionPct}%`, height: '100%', background: 'var(--green)' }} />
+            </div>
+          </div>
+          <div className="stat-grid">
+            <div className="stat-box">
+              <span className="stat-val">{counts.current || 0}</span>
+              <span className="stat-lbl">Current</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-val">{counts.completed || 0}</span>
+              <span className="stat-lbl">Completed</span>
+            </div>
+          </div>
+        </div>
 
         <div style={{ marginTop: 20 }}>
           <p className="panel-title">Showing</p>

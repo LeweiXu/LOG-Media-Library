@@ -381,9 +381,13 @@ export const runBackup       = () => req('/backup/run', { method: 'POST' });
 // Bias dimension and "hide owned" are server-side preferences read from the
 // user's settings — they are NOT passed as query params from the page.
 // `refresh: true` bypasses the per-medium cache on the server.
-export const getExplore = ({ medium, limit, seed, refresh } = {}) => {
+export const getExplore = ({ medium, limit, seed, refresh, sources } = {}) => {
   const params = { medium, limit, seed };
   if (refresh) params.refresh = 'true';
+  // Comma-separated list of sitewide-available sources; restricts which
+  // providers the recommender draws from (so it doesn't fill with a source the
+  // user has disabled and then have the UI hide it).
+  if (Array.isArray(sources) && sources.length) params.sources = sources.join(',');
   const qs = new URLSearchParams(
     Object.fromEntries(
       Object.entries(params).filter(([, v]) => v !== '' && v != null),

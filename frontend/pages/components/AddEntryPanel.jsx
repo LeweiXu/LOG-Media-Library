@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates } from '../../api.jsx';
 import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, onCoverError } from '../../utils.jsx';
-import { SEARCH_SOURCES, SOURCE_LABEL, saveSources, resultToEntry } from './searchSources.js';
+import { SEARCH_SOURCES, SOURCE_LABEL, saveSources, resultToEntry, loadAvailableSources } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
 import CustomSelect from './CustomSelect.jsx';
@@ -41,7 +41,12 @@ export default function AddEntryPanel({
   const [nuSearching, setNuSearching] = useState(false);
   const extPresent = useExtensionPresent();
 
-  const nuRequested = selectedSources.size === 0 || selectedSources.has('novelupdates');
+  // Sitewide-available sources gate which chips show and what an unfiltered
+  // search fans out across (read once on mount; changed in Console).
+  const availableSet = useMemo(() => loadAvailableSources(), []);
+  const availableList = useMemo(() => SEARCH_SOURCES.filter(s => availableSet.has(s.value)), [availableSet]);
+
+  const nuRequested = (selectedSources.size === 0 || selectedSources.has('novelupdates')) && availableSet.has('novelupdates');
 
   async function runDupCheck(list) {
     if (!list.length) { setInLibrary([]); return; }
@@ -125,9 +130,8 @@ export default function AddEntryPanel({
         setPreviews(found);
         return;
       }
-      const sources = selectedSources.size
-        ? [...selectedSources]
-        : SEARCH_SOURCES.map(s => s.value);
+      const sources = (selectedSources.size ? [...selectedSources] : availableList.map(s => s.value))
+        .filter(v => availableSet.has(v));
       const data = await searchMedia(q, sources, true);
       let list = Array.isArray(data) ? data : data?.results ?? [];
       setResults(list);
@@ -227,7 +231,7 @@ export default function AddEntryPanel({
               <span className="form-label">Sources — filter recommendations &amp; search</span>
             </div>
             <div className="source-grid">
-              {SEARCH_SOURCES.map(s => {
+              {availableList.map(s => {
                 const on = selectedSources.has(s.value);
                 return (
                   <button

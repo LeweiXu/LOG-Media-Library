@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getExplore } from '../api.jsx';
 import { MEDIUMS, statusLabel, onCoverError } from '../utils.jsx';
-import { loadSavedSources } from './components/searchSources.js';
+import { loadSavedSources, loadAvailableSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import AddEntryPanel from './components/AddEntryPanel.jsx';
@@ -66,6 +66,10 @@ export default function Explore() {
   // Client-side pagination over the (source-filtered) recommendations.
   const [recPage, setRecPage] = useState(1);
 
+  // Sitewide-available sources (Console setting) — limits both the picker and
+  // which recommendations are shown. Read once on mount.
+  const availableSet = useMemo(() => loadAvailableSources(), []);
+
   // Keep the selected sources in the URL (?src=) so a reload restores them.
   useEffect(() => {
     setSearchParams(prev => {
@@ -93,6 +97,7 @@ export default function Explore() {
       const data = await getExplore({
         medium, limit: EXPLORE_FETCH_LIMIT, seed,
         refresh: refreshFlag,
+        sources: [...availableSet],
       });
       if (requestSeq !== exploreRequestSeq.current) return;
       setItems(data.items || []);
@@ -106,7 +111,7 @@ export default function Explore() {
       setLoading(false);
       setRefreshFlag(false);
     }
-  }, [medium, seed, refreshFlag]);
+  }, [medium, seed, refreshFlag, availableSet]);
 
   useEffect(() => {
     fetchExplore();
@@ -131,14 +136,16 @@ export default function Explore() {
     fetchExplore();
   };
 
-  // Recommendations filtered by the selected sources (client-side). Empty
-  // selection = show everything. Keep each item's original index so the
-  // per-card add/added state (keyed by index) stays correct.
+  // Recommendations are limited to the sitewide-available sources, then further
+  // narrowed by the per-session source selection (empty = all available). Keep
+  // each item's original index so per-card add/added state stays correct.
   const visibleItems = useMemo(() => {
-    const withIdx = items.map((item, idx) => ({ item, idx }));
+    const withIdx = items
+      .map((item, idx) => ({ item, idx }))
+      .filter(({ item }) => availableSet.has(item.source));
     if (selectedSources.size === 0) return withIdx;
     return withIdx.filter(({ item }) => selectedSources.has(item.source));
-  }, [items, selectedSources]);
+  }, [items, selectedSources, availableSet]);
 
   // Reset to the first page whenever the filtered set changes underneath us.
   useEffect(() => { setRecPage(1); }, [medium, selectedSources, items]);
@@ -484,8 +491,9 @@ export default function Explore() {
             )}
 
             <div className="explore-affinity-note">
-              Ranking nudges results toward your most-consumed genres, origins,
-              and mediums. Change the bias dimension in Settings → Explore.
+              {personalised
+                ? 'Ranking nudges results toward your most-consumed genres, origins, and mediums. Change the bias dimension in Console → Explore.'
+                : 'Personalization is off — recommendations are neutral. Turn it on in Console → Explore to bias results toward your library.'}
             </div>
           </>
         )}
