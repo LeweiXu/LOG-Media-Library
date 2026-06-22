@@ -48,6 +48,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'explore failed' }));
     return true;
   }
+  // NovelUpdates Explore fallback: load a Top-Series ranking first-party (NU is
+  // Cloudflare-blocked server-side) and return parsed recommendation items,
+  // caching each (cross-site-403) cover so it displays on the website.
+  if (msg && msg.type === 'exploreNu') {
+    exploreNovelUpdates(msg.rank, msg.token, msg.apiBase)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'explore failed' }));
+    return true;
+  }
   // ── Overlay-mode delegation ──
   // When the UI runs as an in-page overlay (iframe), Firefox sandboxes it: no
   // chrome.tabs/scripting and no cross-origin fetch. So the iframe asks the
@@ -441,6 +450,38 @@ async function searchNovelUpdates(query, token, apiBase) {
   // Cache covers first-party so the cross-site 403 falls back to our cached copy.
   if (token && apiBase && results.length) {
     await cacheCoversBatch(results.map((r) => r.cover_url).filter(Boolean), token, apiBase);
+  }
+  return { ok: true, results };
+}
+
+// NovelUpdates Explore: open a Top-Series ranking in a background tab, scrape
+// the same `.search_main_box_nu` listing as the Series Finder (so synopsis +
+// covers come through), and cache covers first-party. `rank` selects the NU
+// ranking (popmonth / sixmonths / popular); defaults to this month's popular.
+async function exploreNovelUpdates(rank, token, apiBase) {
+  const r = ['popmonth', 'sixmonths', 'popular'].includes(rank) ? rank : 'popmonth';
+  const url = `https://www.novelupdates.com/series-ranking/?rank=${r}`;
+  const tab = await chrome.tabs.create({ url, active: false });
+  let results = [];
+  try {
+    await waitForComplete(tab.id);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const [{ result } = {}] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: scrapeNuSearchResults,
+      });
+      if (result && result.ready) { results = result.results || []; break; }
+      await delay(2000); // still on the "Just a moment…" challenge — wait it out
+    }
+  } catch (e) {
+    return { ok: false, reason: (e && e.message) || 'explore failed' };
+  } finally {
+    try { await chrome.tabs.remove(tab.id); } catch { /* ignore */ }
+  }
+
+  // Cache covers first-party so the cross-site 403 falls back to our cached copy.
+  if (token && apiBase && results.length) {
+    await cacheCoversBatch(results.map((r2) => r2.cover_url).filter(Boolean), token, apiBase);
   }
   return { ok: true, results };
 }

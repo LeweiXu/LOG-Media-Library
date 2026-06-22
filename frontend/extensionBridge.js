@@ -105,6 +105,33 @@ export function extensionGoodreadsExplore(genre, timeoutMs = 25000) {
   });
 }
 
+// ── NovelUpdates Explore (silent fallback) ────────────────────────────────────
+// NU's Top-Series rankings are Cloudflare-blocked server-side, so when no
+// NovelUpdates web-novel recs come back and the extension is present, load a
+// ranking page first-party in a background tab and return parsed ExploreItems
+// (synopsis included; covers are cached server-side so the 403 hot-link falls
+// back to our cached copy).
+
+let _nuExpReqId = 0;
+
+export function extensionNuExplore(rank = '', timeoutMs = 30000) {
+  if (!extensionPresent()) return Promise.resolve([]);
+  return new Promise((resolve) => {
+    const id = ++_nuExpReqId;
+    const cleanup = () => { clearTimeout(timer); window.removeEventListener('message', onMsg); };
+    const timer = setTimeout(() => { cleanup(); resolve([]); }, timeoutMs);
+    function onMsg(e) {
+      if (e.source !== window) return;
+      const d = e.data;
+      if (!d || d.logarium !== true || d.dir !== 'fromExt' || d.type !== 'exploreNuResult' || d.id !== id) return;
+      cleanup();
+      resolve(d.ok && Array.isArray(d.results) ? d.results : []);
+    }
+    window.addEventListener('message', onMsg);
+    post({ type: 'exploreNu', id, rank: rank || '', token: localStorage.getItem('auth_token'), apiBase: BASE });
+  });
+}
+
 /** Merge `extra` results into `base`, skipping title|medium duplicates. */
 export function mergeResults(base, extra) {
   const key = (r) => `${(r.title || '').toLowerCase().trim()}|${r.medium || ''}`;

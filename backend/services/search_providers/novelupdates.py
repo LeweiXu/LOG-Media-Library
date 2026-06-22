@@ -50,6 +50,24 @@ def _external_rating_from_text(text: str) -> Optional[float]:
         return None
 
 
+def _synopsis_from_box(box) -> Optional[str]:
+    """Full series synopsis from a NU listing box.
+
+    Every Series Finder / ranking result keeps its full description in a hidden
+    ``.search_body_nu .testhide`` block (the visible teaser is truncated). Strip
+    the "more>>/<<less" toggle controls and collapse whitespace. Mirrors the
+    extension's ``scrapeNuSearchResults`` so direct + fallback fetches agree.
+    """
+    hidden = box.select_one(".search_body_nu .testhide")
+    if not hidden:
+        return None
+    for junk in hidden.select(".morelink, .moreless, span.list, a"):
+        junk.extract()
+    text = re.sub(r"\s+", " ", hidden.get_text(" ", strip=True))
+    text = re.sub(r"(more>>|<<\s*less)\s*$", "", text, flags=re.I).strip()
+    return text[:800] or None
+
+
 async def search_novelupdates(
     client,       # httpx.AsyncClient — not used directly; kept for API consistency
     title: str,
@@ -159,12 +177,14 @@ async def search_novelupdates(
                 if m:
                     year = int(m.group(1))
 
-            desc_parts = []
-            if genres:
-                desc_parts.append("Genres: " + ", ".join(genres))
-            if last_updated:
-                desc_parts.append(f"Last updated: {last_updated}")
-            description = " | ".join(desc_parts) or None
+            description = _synopsis_from_box(box)
+            if not description:
+                desc_parts = []
+                if genres:
+                    desc_parts.append("Genres: " + ", ".join(genres))
+                if last_updated:
+                    desc_parts.append(f"Last updated: {last_updated}")
+                description = " | ".join(desc_parts) or None
 
             results.append(
                 SearchResult(
@@ -292,6 +312,10 @@ async def _discover_novelupdates(client, medium: str, page: int = 1):
                 if m:
                     year = int(m.group(1))
 
+            description = _synopsis_from_box(box)
+            if not description and genres:
+                description = "Genres: " + ", ".join(genres)
+
             out.append(ExploreItem(
                 title=display_title,
                 medium="Web Novel",
@@ -301,7 +325,7 @@ async def _discover_novelupdates(client, medium: str, page: int = 1):
                 total=chapters,
                 external_id=series_id,
                 source="novelupdates",
-                description=("Genres: " + ", ".join(genres)) if genres else None,
+                description=description,
                 external_url=series_url,
                 genres=", ".join(genres) or None,
                 external_rating=external_rating,

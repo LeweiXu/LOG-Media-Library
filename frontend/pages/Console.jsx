@@ -194,31 +194,6 @@ function Section({ title, desc, danger, children }) {
   );
 }
 
-// A collapsible section whose body is *unmounted* while closed — so the tool
-// panels inside only run their side-effects (fetches, SSE streams) once opened,
-// and tear them down when collapsed. Optionally disabled with a hint tooltip.
-function CollapsibleSection({ title, desc, defaultOpen = false, disabled, disabledHint, children }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const isOpen = open && !disabled;
-  return (
-    <section className="settings-section">
-      <button
-        type="button"
-        className="settings-section-head settings-section-toggle"
-        aria-expanded={isOpen}
-        disabled={disabled}
-        title={disabled ? disabledHint : undefined}
-        onClick={() => { if (!disabled) setOpen(o => !o); }}
-      >
-        <span className="sh-toggle-ind" aria-hidden="true">{isOpen ? '[−]' : '[+]'}</span>
-        <span className="sh-title">{title}</span>
-        {desc && <span className="sh-desc">{desc}</span>}
-      </button>
-      {isOpen && <div className="settings-section-body">{children}</div>}
-    </section>
-  );
-}
-
 // A single setting line: label/description on the left, control on the right.
 // `stack` drops the control onto its own full-width line below the label.
 function Row({ title, desc, stack, children }) {
@@ -371,6 +346,11 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   const [success, setSuccess] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [screen, setScreen] = useState('settings');
+  // Two-tab split: Tools (library/import/extension tools, uncollapsed) opens by
+  // default; Settings holds all preference panels. Switching away from Tools
+  // unmounts the tool panels (aborting any running SSE stream), mirroring the
+  // old collapse-to-abort behaviour.
+  const [tab, setTab] = useState('tools');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
@@ -462,14 +442,22 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   return (
     <div className="stats-layout">
       <div className="settings-page">
-        <div className="page-head" style={{ marginBottom: 24 }}>
+        <div className="page-head" style={{ marginBottom: 20, borderBottom: 'none', paddingBottom: 0 }}>
           <div className="page-head-left">
             <span className="page-title">Console</span>
             <span className="page-desc">library tools & settings</span>
           </div>
         </div>
 
-        {prefsError && (
+        {/* ── Tab bar: Tools (default) · Settings — full width, 50/50 ── */}
+        <div className="term-tabs console-tabs" style={{ marginBottom: 20 }}>
+          <button type="button" className={`term-tab${tab === 'tools' ? ' is-on' : ''}`}
+            onClick={() => setTab('tools')}>Tools</button>
+          <button type="button" className={`term-tab${tab === 'settings' ? ' is-on' : ''}`}
+            onClick={() => setTab('settings')}>Settings</button>
+        </div>
+
+        {prefsError && tab === 'settings' && (
           <div className="settings-load-error">
             <span>
               Couldn't load your saved settings — the server may be unreachable.
@@ -482,6 +470,9 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
           </div>
         )}
 
+        {/* ════════════════════════════ TOOLS TAB ════════════════════════════ */}
+        {tab === 'tools' && (
+        <>
         {/* ── Browser extension (only when not installed or out of date) ── */}
         {showExtSection && (
           <>
@@ -493,44 +484,54 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
           </>
         )}
 
-        {/* ── Library tools ── */}
+        {/* ── Library tools (uncollapsed) ── */}
         <p className="console-group-label">Library Tools</p>
-        <CollapsibleSection title="Manage Lists" desc="build, rename or delete custom lists">
-          <ListsPanel initialTab="manage" existingLists={customLists}
-            onCreated={reloadLists} onRenamed={reloadLists} onDeleted={reloadLists} />
-        </CollapsibleSection>
-        <CollapsibleSection title="Find Duplicates" desc="merge entries that share a title + medium">
-          <DedupPanel />
-        </CollapsibleSection>
-        <CollapsibleSection title="Cache Covers (server)" desc="download & store uncached covers on the server">
-          <CacheCoversPanel />
-        </CollapsibleSection>
-        <CollapsibleSection title="Cache Covers (extension)"
-          desc="resync covers first-party via the browser extension"
-          disabled={!extPresent}
-          disabledHint="Requires the Logarium browser extension">
-          <ResyncPanel />
-        </CollapsibleSection>
+        <Section title="Manage Lists" desc="build, rename or delete custom lists">
+          <div className="console-tool-body">
+            <ListsPanel initialTab="manage" existingLists={customLists}
+              onCreated={reloadLists} onRenamed={reloadLists} onDeleted={reloadLists} />
+          </div>
+        </Section>
+        <Section title="Find Duplicates" desc="merge entries that share a title + medium">
+          <div className="console-tool-body"><DedupPanel /></div>
+        </Section>
+        <Section title="Cache Covers (server)" desc="download & store uncached covers on the server">
+          <div className="console-tool-body"><CacheCoversPanel /></div>
+        </Section>
+        <Section title="Cache Covers (extension)"
+          desc="resync covers first-party via the browser extension">
+          <div className="console-tool-body">
+            {extPresent
+              ? <ResyncPanel />
+              : <p style={{ margin: 0, color: 'var(--dim)', fontSize: 12 }}>
+                  Requires the Logarium browser extension.
+                </p>}
+          </div>
+        </Section>
 
-        {/* ── Import / Export ── */}
+        {/* ── Import / Export (uncollapsed) ── */}
         <p className="console-group-label">Import / Export</p>
-        <CollapsibleSection title="Import — CSV" desc="import a Logarium CSV with duplicate resolution">
-          <ImportPanel onImported={reloadLists} />
-        </CollapsibleSection>
-        <CollapsibleSection title="Import — Auto-search" desc="upload a list of titles; metadata is fetched automatically">
-          <ImportAutoPanel onImported={reloadLists} />
-        </CollapsibleSection>
-        <CollapsibleSection title="Import — MAL XML" desc="import a MyAnimeList anime/manga export">
-          <ImportMalPanel onImported={reloadLists} />
-        </CollapsibleSection>
+        <Section title="Import — CSV" desc="import a Logarium CSV with duplicate resolution">
+          <div className="console-tool-body"><ImportPanel onImported={reloadLists} /></div>
+        </Section>
+        <Section title="Import — Auto-search" desc="upload a list of titles; metadata is fetched automatically">
+          <div className="console-tool-body"><ImportAutoPanel onImported={reloadLists} /></div>
+        </Section>
+        <Section title="Import — MAL XML" desc="import a MyAnimeList anime/manga export">
+          <div className="console-tool-body"><ImportMalPanel onImported={reloadLists} /></div>
+        </Section>
         <Section title="Export" desc="download your library as CSV">
           <Row title="Export CSV" desc="A full snapshot of every entry, importable back into Logarium.">
             <button type="button" className="btn" onClick={exportCSV}>Export CSV</button>
           </Row>
         </Section>
+        </>
+        )}
 
+        {/* ═══════════════════════════ SETTINGS TAB ══════════════════════════ */}
+        {tab === 'settings' && (
+        <>
         {/* ── Display ── */}
-        <p className="console-group-label">Settings</p>
         <Section title="Display">
           <Row title="Theme" desc="Colour scheme for the whole interface.">
             <RowSelect
@@ -769,6 +770,8 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
             <button className="btn btn-danger" type="button" onClick={() => setScreen('confirm-delete')}>Wipe Data</button>
           </Row>
         </Section>
+        </>
+        )}
       </div>
     </div>
   );

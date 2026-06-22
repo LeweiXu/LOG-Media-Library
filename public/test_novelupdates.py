@@ -36,18 +36,13 @@ STATIC_HTML_PATH: Optional[str] = None
 
 # ──────────────────────────────────────────────────────────────────────────────
 
-_NU_ORIGIN_HINTS = {
-    "wuxia": "Chinese",
-    "xianxia": "Chinese",
-    "xuanhuan": "Chinese",
-    "manhua": "Chinese",
-    "chinese": "Chinese",
-    "manhwa": "Korean",
-    "korean": "Korean",
-    "shounen": "Japanese",
-    "shoujo": "Japanese",
-    "josei": "Japanese",
-    "seinen": "Japanese",
+# NovelUpdates lists each series' original language explicitly (the country
+# code in the .search_ratings span), so origin is read directly — no fragile
+# genre-keyword guessing. Mirrors _NU_ORIGIN_MAP in the real provider.
+_NU_ORIGIN_MAP = {
+    "CN": "Chinese",
+    "KR": "Korean",
+    "JP": "Japanese",
 }
 
 
@@ -117,13 +112,11 @@ def _parse_html(html: str, medium: str) -> list[dict]:
             for a in box.select("a.gennew.search")
         ]
 
-        # Origin
+        # Origin — read directly from the language code NU lists per series.
         origin: Optional[str] = None
-        genres_lower = " ".join(genres).lower()
-        for hint, orig in _NU_ORIGIN_HINTS.items():
-            if hint in genres_lower:
-                origin = orig
-                break
+        origin_code = box.select_one(".search_ratings span")
+        if origin_code:
+            origin = _NU_ORIGIN_MAP.get(origin_code.get_text(strip=True).upper())
 
         # Medium
         if medium:

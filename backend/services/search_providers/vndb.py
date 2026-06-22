@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 
@@ -8,6 +9,20 @@ from schemas import ExploreItem, SearchResult
 from .utils import safe_year, country_to_origin
 
 logger = logging.getLogger(__name__)
+
+# VNDB descriptions carry BBCode-ish markup ([url=…]…[/url], [spoiler], [b], …)
+# and literal newlines. Strip the tags and collapse whitespace into a clean blurb.
+_BB_URL = re.compile(r"\[url=[^\]]*\](.*?)\[/url\]", re.S | re.I)
+_BB_TAG = re.compile(r"\[/?[a-z][^\]]*\]", re.I)
+
+
+def _clean_description(text) -> str | None:
+    if not text or not isinstance(text, str):
+        return None
+    cleaned = _BB_URL.sub(r"\1", text)
+    cleaned = _BB_TAG.sub("", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:800] or None
 
 # VNDB language code → origin mapping (lowercase keys)
 _LANG_TO_ORIGIN: dict[str, str] = {
@@ -39,7 +54,7 @@ async def search_vndb(
             "https://api.vndb.org/kana/vn",
             json={
                 "filters": ["search", "=", title],
-                "fields": "id,title,released,rating,image.url,olang,tags.name",
+                "fields": "id,title,released,rating,image.url,olang,tags.name,description",
                 "results": max(1, min(limit, 100)),
             },
         )
@@ -82,6 +97,7 @@ async def search_vndb(
                 cover_url=cover,
                 external_id=vndb_id,
                 source="vndb",
+                description=_clean_description(item.get("description")),
                 external_url=f"https://vndb.org/{vndb_id}",
                 external_rating=ext_rating,
                 genres=genres,
@@ -99,7 +115,7 @@ async def _discover_vndb(client: httpx.AsyncClient, medium: str, page: int = 1) 
             "https://api.vndb.org/kana/vn",
             json={
                 "filters": ["rating", ">", 70],
-                "fields": "id,title,released,rating,image.url,olang,tags.name",
+                "fields": "id,title,released,rating,image.url,olang,tags.name,description",
                 "sort": "rating",
                 "reverse": True,
                 "results": 25,
@@ -132,6 +148,7 @@ async def _discover_vndb(client: httpx.AsyncClient, medium: str, page: int = 1) 
             cover_url=(item.get("image") or {}).get("url"),
             external_id=vndb_id,
             source="vndb",
+            description=_clean_description(item.get("description")),
             external_url=f"https://vndb.org/{vndb_id}",
             genres=", ".join(t["name"] for t in tags[:8] if t.get("name")) or None,
             external_rating=ext_rating,

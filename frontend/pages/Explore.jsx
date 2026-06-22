@@ -8,7 +8,7 @@ import AddEntryModal from './components/AddEntryModal.jsx';
 import AddEntryPanel from './components/AddEntryPanel.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
-import { useExtensionPresent, extensionGoodreadsExplore, mergeResults } from '../extensionBridge.js';
+import { useExtensionPresent, extensionGoodreadsExplore, extensionNuExplore, mergeResults } from '../extensionBridge.js';
 import { usePreferences } from '../preferences.jsx';
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it.
@@ -168,6 +168,22 @@ export default function Explore() {
           && !recs.some(it => it.source === 'goodreads')) {
         const genre = (affinity?.top_genres || [])[0] || '';
         const extra = await extensionGoodreadsExplore(genre);
+        if (requestSeq === exploreRequestSeq.current && extra.length) {
+          setItems(prev => {
+            const merged = mergeResults(prev, extra);
+            if (exploreCache[medium]) exploreCache[medium].items = merged;
+            return merged;
+          });
+        }
+      }
+
+      // NovelUpdates rankings are Cloudflare-blocked server-side, so if no
+      // web-novel recs came back, NU is available, and the extension is present,
+      // load a ranking page first-party (synopsis + cached covers) and merge in.
+      const webNovelRelevant = !medium || medium === 'Web Novel';
+      if (extPresent && webNovelRelevant && availableSet.has('novelupdates')
+          && !recs.some(it => it.source === 'novelupdates')) {
+        const extra = await extensionNuExplore();
         if (requestSeq === exploreRequestSeq.current && extra.length) {
           setItems(prev => {
             const merged = mergeResults(prev, extra);

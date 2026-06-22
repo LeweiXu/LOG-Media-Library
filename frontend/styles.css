@@ -953,6 +953,12 @@ html.light .skeleton-pie::after {
 }
 .settings-section-toggle[aria-expanded="false"] .sh-toggle-ind { color: var(--dim); }
 
+/* Console Tools/Settings tabs span the full panel width, 50/50, centred. */
+.console-tabs .term-tab {
+  flex: 1;
+  text-align: center;
+}
+
 /* Group labels separating tool blocks from settings on the Console page. */
 .console-group-label {
   font-size: 10px;

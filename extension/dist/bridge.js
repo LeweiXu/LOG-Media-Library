@@ -76,6 +76,17 @@
         .catch(() => {
           window.postMessage({ logarium: true, dir: 'fromExt', type: 'exploreGoodreadsResult', id, ok: false }, window.location.origin);
         });
+    } else if (data.type === 'exploreNu') {
+      // Same request/response shape — load a NovelUpdates Top-Series ranking
+      // first-party (Cloudflare-blocked server-side) and return parsed items.
+      const id = data.id;
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'exploreNu', rank: data.rank, token: data.token, apiBase: data.apiBase }))
+        .then((resp) => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'exploreNuResult', id, ...(resp || { ok: false }) }, window.location.origin);
+        })
+        .catch(() => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'exploreNuResult', id, ok: false }, window.location.origin);
+        });
     }
   });
 })();
