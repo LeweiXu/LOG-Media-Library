@@ -110,11 +110,18 @@ _COMPARE_FIELDS = [
 def _csv_to_typed(row: dict) -> dict:
     """Convert a raw CSV row (all string values) to typed Python values."""
     def _int(v):
-        try:
-            s = (v or "").strip()
-            return int(s) if s else None
-        except (ValueError, TypeError):
+        s = (v or "").strip()
+        if not s:
             return None
+        try:
+            return int(s)
+        except (ValueError, TypeError):
+            # Spreadsheets (Excel/Sheets) re-save integer columns as "6.0";
+            # accept that rather than dropping the value (→ false conflicts).
+            try:
+                return int(float(s))
+            except (ValueError, TypeError):
+                return None
 
     def _float(v):
         try:
@@ -183,7 +190,9 @@ def _numeric_equal(a, b) -> bool:
 def _fields_equal(field: str, csv_val, db_val) -> bool:
     if field in {"created_at", "completed_at"}:
         return _dt_equal(csv_val, db_val)
-    if field in {"rating", "external_rating"}:
+    # Compare every numeric field by value so 6 and 6.0 match (avoids spurious
+    # conflicts from int/float formatting, e.g. a spreadsheet-mangled re-export).
+    if field in {"rating", "external_rating", "year", "progress", "total"}:
         return _numeric_equal(csv_val, db_val)
     return csv_val == db_val
 

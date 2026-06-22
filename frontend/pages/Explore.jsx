@@ -9,6 +9,7 @@ import AddEntryPanel from './components/AddEntryPanel.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { useExtensionPresent, extensionGoodreadsExplore, mergeResults } from '../extensionBridge.js';
+import { usePreferences } from '../preferences.jsx';
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it.
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
@@ -88,6 +89,13 @@ export default function Explore() {
   const availableSet = useMemo(() => loadAvailableSources(), []);
   const extPresent = useExtensionPresent();
 
+  // The Explore bias settings (changed on Console) affect the ranking the backend
+  // returns, so a change must bust the per-medium cache and re-fetch — otherwise
+  // toggling Personalize wouldn't show until a reload.
+  const { prefs } = usePreferences();
+  const personalize = prefs?.explore?.personalize !== false;
+  const exploreBy = prefs?.explore?.by || 'all';
+
   // Keep the selected sources in the URL (?src=) so a reload restores them.
   useEffect(() => {
     setSearchParams(prev => {
@@ -118,7 +126,10 @@ export default function Explore() {
     try {
       const want = [...availableSet];
       const cached = exploreCache[medium];
-      const incremental = !force && !refreshFlag && cached;
+      // Reuse the cache only when the bias settings still match; a Personalize /
+      // dimension change invalidates it and forces a fresh ranked fetch.
+      const incremental = !force && !refreshFlag && cached
+        && cached.personalize === personalize && cached.by === exploreBy;
 
       let recs, affinity, personalised;
       if (incremental) {
@@ -143,7 +154,7 @@ export default function Explore() {
         personalised = !!data.personalised;
       }
 
-      exploreCache[medium] = { sources: want, items: recs, affinity, personalised };
+      exploreCache[medium] = { sources: want, items: recs, affinity, personalised, personalize, by: exploreBy };
       setItems(recs);
       setAffinity(affinity);
       setPersonalised(personalised);
@@ -173,7 +184,7 @@ export default function Explore() {
       setLoading(false);
       setRefreshFlag(false);
     }
-  }, [medium, seed, refreshFlag, availableSet, extPresent]);
+  }, [medium, seed, refreshFlag, availableSet, extPresent, personalize, exploreBy]);
 
   useEffect(() => {
     fetchExplore();
@@ -512,9 +523,6 @@ export default function Explore() {
 
       {/* ── Right sidebar: affinity snapshot ───────────────────────────────── */}
       <aside className="sidebar-right">
-        <button type="button" className="quickadd-open-btn" onClick={() => setQuickAddOpen(true)}>
-          Quick Add
-        </button>
         <div className="panel-title">Your library</div>
         {!affinity || affinity.sample_size === 0 ? (
           <p className="explore-affinity-empty">
@@ -566,6 +574,10 @@ export default function Explore() {
             </div>
           </>
         )}
+        <button type="button" className="quickadd-open-btn" onClick={() => setQuickAddOpen(true)}
+          style={{ marginTop: 16 }}>
+          Quick Add
+        </button>
       </aside>
 
       {pendingAdd && (

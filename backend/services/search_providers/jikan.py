@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import collections
 import logging
+import time
 
 import httpx
 
@@ -8,6 +11,47 @@ from schemas import ExploreItem, SearchResult
 from .utils import safe_year
 
 logger = logging.getLogger(__name__)
+
+
+class _RateLimiter:
+    """Process-wide async throttle for Jikan.
+
+    Jikan (the public MyAnimeList proxy) allows ~3 requests/second and 60/minute;
+    Explore's page fan-out blows past that and trips 429s. Every Jikan request
+    goes through ``_jikan_get``, which serialises on this limiter so starts are
+    spaced and the rolling per-minute cap is respected. Kept just under the
+    documented limits for safety.
+    """
+
+    def __init__(self, per_second: float = 2.5, per_minute: int = 55) -> None:
+        self._min_interval = 1.0 / per_second
+        self._per_minute = per_minute
+        self._lock = asyncio.Lock()
+        self._last = 0.0
+        self._times: collections.deque[float] = collections.deque()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            now = time.monotonic()
+            while self._times and now - self._times[0] > 60:
+                self._times.popleft()
+            wait = self._min_interval - (now - self._last)
+            if len(self._times) >= self._per_minute:
+                wait = max(wait, 60 - (now - self._times[0]))
+            if wait > 0:
+                await asyncio.sleep(wait)
+                now = time.monotonic()
+            self._last = now
+            self._times.append(now)
+
+
+_limiter = _RateLimiter()
+
+
+async def _jikan_get(client: httpx.AsyncClient, url: str, params: dict) -> httpx.Response:
+    """Throttled GET against Jikan; all callers must use this, not client.get."""
+    await _limiter.acquire()
+    return await client.get(url, params=params)
 
 
 async def search_jikan(
@@ -26,7 +70,7 @@ async def search_jikan(
 
     for url, med in endpoints:
         try:
-            r = await client.get(url, params={"q": title, "limit": per_endpoint, "sfw": "true"})
+            r = await _jikan_get(client, url, {"q": title, "limit": per_endpoint, "sfw": "true"})
             r.raise_for_status()
             for item in r.json().get("data", []):
                 titles = item.get("titles", [])
@@ -102,7 +146,7 @@ async def _discover_jikan(client: httpx.AsyncClient, medium: str, page: int = 1)
     if medium == "Light Novel":
         params["type"] = "lightnovel"
     try:
-        r = await client.get(endpoint, params=params)
+        r = await _jikan_get(client, endpoint, params)
         r.raise_for_status()
     except Exception as exc:
         logger.warning("Jikan top error: %s", exc)

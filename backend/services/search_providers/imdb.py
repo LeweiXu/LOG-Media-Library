@@ -245,6 +245,7 @@ query {{
       releaseYear {{ year }}
       ratingsSummary {{ aggregateRating }}
       primaryImage {{ url }}
+      plot {{ plotText {{ plainText }} }}
       titleGenres {{ genres {{ genre {{ text }} }} }}
     }} }} }}
   }}
@@ -287,6 +288,7 @@ async def _discover_imdb(client, medium: str, top_genres=None, page: int = 1):
             text = (g.get("genre") or {}).get("text") if isinstance(g, dict) else None
             if text:
                 genres.append(text)
+        plot = ((node.get("plot") or {}).get("plotText") or {}).get("plainText")
         out.append(ExploreItem(
             title=name,
             medium=medium,
@@ -296,7 +298,7 @@ async def _discover_imdb(client, medium: str, top_genres=None, page: int = 1):
             total=1 if medium == "Film" else None,
             external_id=tt,
             source="imdb",
-            description=None,
+            description=(plot[:800] if plot else None),
             external_url=_title_url(tt),
             genres=", ".join(dict.fromkeys(genres)) or None,
             external_rating=_rating((node.get("ratingsSummary") or {}).get("aggregateRating")),

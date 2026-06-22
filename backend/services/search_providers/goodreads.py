@@ -16,6 +16,7 @@ add-by-URL / series paths and search enrichment parse a book page the same way.
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
 import re
@@ -89,7 +90,7 @@ def _year_from_ms(ms) -> Optional[int]:
 def _strip_html(text: Optional[str]) -> Optional[str]:
     if not text:
         return None
-    cleaned = re.sub(r"<[^>]+>", "", text).strip()
+    cleaned = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
     return cleaned or None
 
 
@@ -340,6 +341,44 @@ def _parse_shelf(html: str) -> list:
     return out
 
 
+async def _enrich_descriptions(items, cap: int = 18) -> None:
+    """Fill in synopses for shelf items (the shelf page carries none).
+
+    Goodreads shelf rows have no description, so look each one up via the
+    WAF-free ``auto_complete`` JSON — the same source ``search_goodreads`` uses,
+    keeping Explore synopses consistent with search. Bounded + concurrent +
+    best-effort; items past ``cap`` (or that fail) simply keep no description.
+    """
+    targets = [it for it in items if not it.description and it.title][:cap]
+    if not targets:
+        return
+    sem = asyncio.Semaphore(6)
+
+    async def _fill(item):
+        async with sem:
+            text = await _fetch_text(
+                f"{GOODREADS}/book/auto_complete", params={"format": "json", "q": item.title}
+            )
+        if not text:
+            return
+        try:
+            cands = json.loads(text)
+        except (ValueError, TypeError):
+            return
+        if not isinstance(cands, list) or not cands:
+            return
+        match = next(
+            (c for c in cands if isinstance(c, dict) and str(c.get("bookId")) == str(item.external_id)),
+            cands[0],
+        )
+        desc = match.get("description") if isinstance(match, dict) else None
+        if isinstance(desc, dict):
+            desc = desc.get("html")
+        item.description = _strip_html(desc)
+
+    await asyncio.gather(*(_fill(it) for it in targets), return_exceptions=True)
+
+
 async def _discover_goodreads(client, medium: str, top_genres=None, page: int = 1):
     """Scrape a Goodreads genre shelf as Book Explore candidates.
 
@@ -354,7 +393,9 @@ async def _discover_goodreads(client, medium: str, top_genres=None, page: int = 
     if not html:
         return []
     try:
-        return _parse_shelf(html)
+        items = _parse_shelf(html)
     except Exception as exc:  # best-effort, like every discovery provider
         logger.warning("Goodreads shelf parse error (%s): %s", slug, exc)
         return []
+    await _enrich_descriptions(items)
+    return items

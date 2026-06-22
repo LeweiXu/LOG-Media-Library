@@ -27,7 +27,7 @@ const SORT_FIELDS = [
 
 // Fields offered by the Manage-mode "bulk edit field" tool, with input kind.
 const BULK_FIELDS = [
-  { key: 'rating', label: 'Rating',  kind: 'number', min: 0, max: 10 },
+  { key: 'rating', label: 'Rating',  kind: 'number', min: 0, max: 10, step: 0.5 },
   { key: 'medium', label: 'Medium',  kind: 'medium' },
   { key: 'origin', label: 'Origin',  kind: 'origin' },
   { key: 'year',   label: 'Year',    kind: 'number', min: 1800, max: 2100 },
@@ -659,7 +659,7 @@ export default function Library({ initialFilters = {} }) {
               }
               return (
                 <input className="inline-select batch-select" type="number" placeholder={meta.label}
-                  min={meta.min} max={meta.max} value={bulkFieldValue} disabled={bulkBusy}
+                  min={meta.min} max={meta.max} step={meta.step} value={bulkFieldValue} disabled={bulkBusy}
                   style={{ flex: 1 }}
                   onChange={e => setBulkFieldValue(e.target.value)} />
               );
