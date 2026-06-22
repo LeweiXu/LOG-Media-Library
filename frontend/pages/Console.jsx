@@ -5,7 +5,7 @@ import {
 } from '../api.jsx';
 import { MEDIUMS } from '../utils.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
-import { useExtensionPresent } from '../extensionBridge.js';
+import { useExtensionPresent, useExtensionStatus } from '../extensionBridge.js';
 import CustomSelect from './components/CustomSelect.jsx';
 import { SEARCH_SOURCES, loadAvailableSources, saveAvailableSources } from './components/searchSources.js';
 import ListsPanel from './components/ListsPanel.jsx';
@@ -281,6 +281,10 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
 
   // ── Library tools state ──
   const extPresent = useExtensionPresent();
+  // Only surface the extension download section when there's something to do:
+  // it's not installed, or an installed copy is out of date.
+  const { present: extInstalled, outOfDate: extOutOfDate } = useExtensionStatus();
+  const showExtSection = !extInstalled || extOutOfDate;
   const [customLists, setCustomLists] = useState([]);
   const reloadLists = useCallback(async () => {
     try {
@@ -478,12 +482,16 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
           </div>
         )}
 
-        {/* ── Browser extension ── */}
-        <p className="console-group-label">Browser Extension</p>
-        <Section title="Logarium Browser Extension"
-          desc="add from source pages, cache covers, and unlock blocked sources">
-          <ExtensionDownloadSection />
-        </Section>
+        {/* ── Browser extension (only when not installed or out of date) ── */}
+        {showExtSection && (
+          <>
+            <p className="console-group-label">Browser Extension</p>
+            <Section title="Logarium Browser Extension"
+              desc="add from source pages, cache covers, and unlock blocked sources">
+              <ExtensionDownloadSection />
+            </Section>
+          </>
+        )}
 
         {/* ── Library tools ── */}
         <p className="console-group-label">Library Tools</p>

@@ -32,24 +32,19 @@ function DownloadRow({ browser, url, version, note, recommended, loading }) {
 
 export default function ExtensionDownloadSection() {
   const {
-    present, firefox, chrome, firefoxVersion, chromeVersion,
+    firefox, chrome, firefoxVersion, chromeVersion,
     loading, outOfDate, installedVersion, latestVersion,
   } = useExtensionStatus();
   const ff = isFirefox();
 
   return (
-    <div>
+    <div style={{ paddingTop: 12 }}>
       <p style={{ margin: '0 0 14px', fontSize: 12, color: 'var(--dim)', lineHeight: 1.6 }}>
         A lightweight companion for Chrome and Firefox that lets you add or update
         entries from the source page, caches covers the server can’t fetch itself, and
         unlocks sources (NovelUpdates, Goodreads) that are otherwise blocked server-side.
       </p>
 
-      {present && !outOfDate && (
-        <div className="ext-exists" role="status" style={{ marginBottom: 12 }}>
-          ✓ Extension installed{installedVersion ? ` (v${installedVersion})` : ''} and up to date.
-        </div>
-      )}
       {outOfDate && (
         <div className="ext-update-note">
           {installedVersion

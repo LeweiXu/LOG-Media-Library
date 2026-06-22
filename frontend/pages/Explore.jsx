@@ -18,6 +18,13 @@ const newSeed = () => Math.floor(Math.random() * 0xffffffff);
 const EXPLORE_FETCH_LIMIT = 120;
 const REC_PAGE_SIZE = 30;
 
+// Per-medium recommendation cache that survives navigation within the SPA
+// session (module scope, not component state). Lets a source-availability change
+// fetch only the newly-added sources instead of re-querying everything: removed
+// sources are filtered out of the cached pool, added ones are appended.
+//   medium -> { sources: string[], items, affinity, personalised }
+const exploreCache = {};
+
 export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [items,        setItems]        = useState([]);
@@ -25,7 +32,17 @@ export default function Explore() {
   const [personalised, setPersonalised] = useState(false);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState('');
+  const [scanSeconds,  setScanSeconds]  = useState(0);
   const exploreRequestSeq = useRef(0);
+
+  // Tick a seconds counter while a scan is running so the long source fan-out
+  // shows progress (and reassures the user they don't have to wait on the page).
+  useEffect(() => {
+    if (!loading) { setScanSeconds(0); return; }
+    setScanSeconds(0);
+    const t = setInterval(() => setScanSeconds(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [loading]);
 
   // Local medium filter — always starts unset ("All") and is never persisted to
   // the URL or settings, so a reload always lands on the full mixed feed.
@@ -91,20 +108,45 @@ export default function Explore() {
   }, [setSearchParams]);
 
   // ── Fetch explore data whenever filters or seed change ──────────────────
-  const fetchExplore = useCallback(async () => {
+  // `force` (Refresh/Reroll) always re-queries the full set; otherwise, when a
+  // cached pool exists for this medium, only the newly-available sources are
+  // fetched and no-longer-available ones are filtered out — so toggling a source
+  // in Console doesn't trigger a slow full reroll.
+  const fetchExplore = useCallback(async ({ force = false } = {}) => {
     const requestSeq = ++exploreRequestSeq.current;
     setLoading(true); setError(''); setCardState({});
     try {
-      const data = await getExplore({
-        medium, limit: EXPLORE_FETCH_LIMIT, seed,
-        refresh: refreshFlag,
-        sources: [...availableSet],
-      });
-      if (requestSeq !== exploreRequestSeq.current) return;
-      const recs = data.items || [];
+      const want = [...availableSet];
+      const cached = exploreCache[medium];
+      const incremental = !force && !refreshFlag && cached;
+
+      let recs, affinity, personalised;
+      if (incremental) {
+        const wantSet = new Set(want);
+        const have = new Set(cached.sources);
+        const added = want.filter(s => !have.has(s));
+        recs = cached.items.filter(it => wantSet.has(it.source));
+        affinity = cached.affinity;
+        personalised = cached.personalised;
+        if (added.length) {
+          const data = await getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, seed, sources: added });
+          if (requestSeq !== exploreRequestSeq.current) return;
+          recs = mergeResults(recs, data.items || []);
+        }
+      } else {
+        const data = await getExplore({
+          medium, limit: EXPLORE_FETCH_LIMIT, seed, refresh: refreshFlag, sources: want,
+        });
+        if (requestSeq !== exploreRequestSeq.current) return;
+        recs = data.items || [];
+        affinity = data.affinity || null;
+        personalised = !!data.personalised;
+      }
+
+      exploreCache[medium] = { sources: want, items: recs, affinity, personalised };
       setItems(recs);
-      setAffinity(data.affinity || null);
-      setPersonalised(!!data.personalised);
+      setAffinity(affinity);
+      setPersonalised(personalised);
 
       // Goodreads shelves are usually reachable server-side, but if they're
       // WAF-blocked no Goodreads books come back. When Book recs are relevant,
@@ -113,10 +155,14 @@ export default function Explore() {
       const bookRelevant = !medium || medium === 'Book';
       if (extPresent && bookRelevant && availableSet.has('goodreads')
           && !recs.some(it => it.source === 'goodreads')) {
-        const genre = (data.affinity?.top_genres || [])[0] || '';
+        const genre = (affinity?.top_genres || [])[0] || '';
         const extra = await extensionGoodreadsExplore(genre);
         if (requestSeq === exploreRequestSeq.current && extra.length) {
-          setItems(prev => mergeResults(prev, extra));
+          setItems(prev => {
+            const merged = mergeResults(prev, extra);
+            if (exploreCache[medium]) exploreCache[medium].items = merged;
+            return merged;
+          });
         }
       }
     } catch (e) {
@@ -140,16 +186,16 @@ export default function Explore() {
     setSeed(newSeed());
   };
 
-  // Refresh = re-fetch the current cached page without invalidating it.
-  // Useful after adding entries elsewhere so "in library" tags refresh.
+  // Refresh = force a full re-query so "in library" tags pick up changes made
+  // elsewhere (bypasses the incremental per-source path).
   const handleRefresh = () => {
-    fetchExplore();
+    fetchExplore({ force: true });
   };
 
   // An entry was created from the top search/add section — re-query the current
   // recommendations so their "in library" tags pick up the new entry.
   const handleAddPanelCreated = () => {
-    fetchExplore();
+    fetchExplore({ force: true });
   };
 
   // Recommendations are limited to the sitewide-available sources, then further
@@ -228,6 +274,10 @@ export default function Explore() {
     const idx = pendingAdd.idx;
     setCardState(s => ({ ...s, [idx]: `added:${created?.status || pendingAdd.status}` }));
     if (created) setAddedEntries(prev => ({ ...prev, [idx]: created }));
+    // Keep the persisted pool in sync so the card stays "in library" if the user
+    // navigates away and back (the incremental path reuses these cached items).
+    const cached = exploreCache[medium];
+    if (cached && cached.items[idx]) cached.items[idx].in_library = true;
     setPendingAdd(null);
   }
 
@@ -304,7 +354,7 @@ export default function Explore() {
             <span className="page-title">Explore</span>
             {!searchActive && (
               <span className="page-desc">
-                {loading ? <span className="loading-dots">scanning</span>
+                {loading ? <span className="loading-dots">scanning{scanSeconds >= 2 ? ` ${scanSeconds}s` : ''}</span>
                          : `${visibleItems.length} suggestions`}
               </span>
             )}
@@ -356,6 +406,10 @@ export default function Explore() {
 
         {!error && loading && (
           <div className="skeleton-page" aria-label="Loading explore">
+            <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.6, marginBottom: 12 }}>
+              Querying external sources{scanSeconds >= 2 ? ` · ${scanSeconds}s elapsed` : ''} — this can take a while.
+              You don’t need to stay here; your suggestions will be ready when you come back.
+            </div>
             <SkeletonExploreGrid cards={9} />
           </div>
         )}

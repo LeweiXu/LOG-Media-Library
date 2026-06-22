@@ -90,6 +90,11 @@ export default function EntryForm({
     return () => { cancelled = true; };
   }, []);
 
+  // While an on-add field is being fetched from another source we flag it so the
+  // relevant input shows a "fetching…" placeholder instead of looking empty.
+  // 'total' = manga chapters / IMDb episodes; 'imdb' also fills the source rating.
+  const [fetching, setFetching] = useState('');
+
   // For a MAL/Jikan manga being added with no chapter total (MAL leaves ongoing
   // series blank), fetch the latest chapter count from MangaUpdates on demand.
   useEffect(() => {
@@ -97,6 +102,7 @@ export default function EntryForm({
     if (entry?.source !== 'jikan' || entry?.medium !== 'Manga' || entry?.total) return;
     if (!entry?.title) return;
     let cancelled = false;
+    setFetching('total');
     fetchChapterCount(entry.title)
       .then(res => {
         const total = res?.total;
@@ -104,7 +110,8 @@ export default function EntryForm({
           setFormState(f => (f.total === '' ? { ...f, total: String(total) } : f));
         }
       })
-      .catch(() => { /* non-critical */ });
+      .catch(() => { /* non-critical */ })
+      .finally(() => { if (!cancelled) setFetching(''); });
     return () => { cancelled = true; };
   }, []);
 
@@ -116,6 +123,7 @@ export default function EntryForm({
     if (entry?.source !== 'imdb' || !entry?.external_id) return;
     if (entry?.external_rating && entry?.total) return;
     let cancelled = false;
+    setFetching('imdb');
     fetchImdbDetail(entry.external_id)
       .then(d => {
         if (cancelled || !d) return;
@@ -128,7 +136,8 @@ export default function EntryForm({
           genres:          f.genres || d.genres || '',
         }));
       })
-      .catch(() => { /* non-critical */ });
+      .catch(() => { /* non-critical */ })
+      .finally(() => { if (!cancelled) setFetching(''); });
     return () => { cancelled = true; };
   }, []);
 
@@ -282,7 +291,7 @@ export default function EntryForm({
         <div>
           <label className="form-label">Total</label>
           <input className="form-input" type="number" min="0" value={form.total}
-            placeholder="12"
+            placeholder={fetching ? 'fetching…' : '12'}
             onChange={e => setField('total', e.target.value)} />
         </div>
       </div>
@@ -297,7 +306,7 @@ export default function EntryForm({
         <div>
           <label className="form-label">Source Rating</label>
           <input className="form-input" type="number" min="0" max="100" step="0.1"
-            value={form.external_rating} placeholder="-"
+            value={form.external_rating} placeholder={fetching === 'imdb' ? 'fetching…' : '-'}
             onChange={e => setField('external_rating', e.target.value)} />
         </div>
       </div>
