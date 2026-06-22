@@ -47,7 +47,7 @@ export function useExtensionPresent() {
 const post = (msg) =>
   window.postMessage({ logarium: true, dir: 'toExt', ...msg }, window.location.origin);
 
-// ── Cover resync (used by ResyncModal) ────────────────────────────────────────
+// ── Cover resync (used by ResyncPanel) ────────────────────────────────────────
 
 export const startSync = (sources, token, apiBase) => post({ type: 'startSync', sources, token, apiBase });
 export const cancelSync = () => post({ type: 'cancelSync' });

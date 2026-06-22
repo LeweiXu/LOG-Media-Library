@@ -1,11 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   changePassword, deleteAllEntries, getSettings, updateSettings,
-  getBackupStatus, runBackup,
+  getBackupStatus, runBackup, getCustomLists, exportEntries,
 } from '../api.jsx';
 import { MEDIUMS } from '../utils.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
+import { useExtensionPresent } from '../extensionBridge.js';
 import CustomSelect from './components/CustomSelect.jsx';
+import ListsPanel from './components/ListsPanel.jsx';
+import DedupPanel from './components/DedupPanel.jsx';
+import CacheCoversPanel from './components/CacheCoversPanel.jsx';
+import ResyncPanel from './components/ResyncPanel.jsx';
+import ImportPanel from './components/ImportPanel.jsx';
+import ImportAutoPanel from './components/ImportAutoPanel.jsx';
+import ImportMalPanel from './components/ImportMalPanel.jsx';
 
 const LIBRARY_SORT_FIELDS = [
   { key: 'title', label: 'Title' }, { key: 'medium', label: 'Medium' },
@@ -184,6 +192,31 @@ function Section({ title, desc, danger, children }) {
   );
 }
 
+// A collapsible section whose body is *unmounted* while closed — so the tool
+// panels inside only run their side-effects (fetches, SSE streams) once opened,
+// and tear them down when collapsed. Optionally disabled with a hint tooltip.
+function CollapsibleSection({ title, desc, defaultOpen = false, disabled, disabledHint, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const isOpen = open && !disabled;
+  return (
+    <section className="settings-section">
+      <button
+        type="button"
+        className="settings-section-head settings-section-toggle"
+        aria-expanded={isOpen}
+        disabled={disabled}
+        title={disabled ? disabledHint : undefined}
+        onClick={() => { if (!disabled) setOpen(o => !o); }}
+      >
+        <span className="sh-toggle-ind" aria-hidden="true">{isOpen ? '[−]' : '[+]'}</span>
+        <span className="sh-title">{title}</span>
+        {desc && <span className="sh-desc">{desc}</span>}
+      </button>
+      {isOpen && <div className="settings-section-body">{children}</div>}
+    </section>
+  );
+}
+
 // A single setting line: label/description on the left, control on the right.
 // `stack` drops the control onto its own full-width line below the label.
 function Row({ title, desc, stack, children }) {
@@ -213,7 +246,7 @@ function RowSelect(props) {
   return <CustomSelect {...props} style={{ width: 200, ...(props.style || {}) }} />;
 }
 
-export default function Settings({ theme, onThemeChange, accent, onAccentChange, onLogout, onDataDeleted }) {
+export default function Console({ theme, onThemeChange, accent, onAccentChange, onLogout, onDataDeleted }) {
   const { prefs, loaded: prefsLoaded, error: prefsError, reload: reloadPrefs, updateUi } = usePreferences();
   const [reloading, setReloading] = useState(false);
 
@@ -243,6 +276,27 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
   const dash = ui.dashboard || DEFAULT_UI.dashboard;
   const statp = ui.statistics || DEFAULT_UI.statistics;
   const exp = ui.explore || DEFAULT_UI.explore;
+
+  // ── Library tools state ──
+  const extPresent = useExtensionPresent();
+  const [customLists, setCustomLists] = useState([]);
+  const reloadLists = useCallback(async () => {
+    try {
+      const data = await getCustomLists();
+      setCustomLists(Array.isArray(data) ? data : []);
+    } catch { /* lists are best-effort */ }
+  }, []);
+  useEffect(() => { reloadLists(); }, [reloadLists]);
+
+  async function exportCSV() {
+    try {
+      const blob = await exportEntries();
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob), download: 'library.csv',
+      });
+      a.click();
+    } catch (err) { alert(`Export failed: ${err.message}`); }
+  }
 
   // ── backup_freq is the only remaining scalar setting (a backend concern). ──
   const [backupFreq,     setBackupFreq]     = useState('never');
@@ -392,8 +446,8 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
       <div className="settings-page">
         <div className="page-head" style={{ marginBottom: 24 }}>
           <div className="page-head-left">
-            <span className="page-title">Settings</span>
-            <span className="page-desc">customize your Logarium</span>
+            <span className="page-title">Console</span>
+            <span className="page-desc">library tools & settings</span>
           </div>
         </div>
 
@@ -410,7 +464,44 @@ export default function Settings({ theme, onThemeChange, accent, onAccentChange,
           </div>
         )}
 
+        {/* ── Library tools ── */}
+        <p className="console-group-label">Library Tools</p>
+        <CollapsibleSection title="Manage Lists" desc="build, rename or delete custom lists">
+          <ListsPanel initialTab="manage" existingLists={customLists}
+            onCreated={reloadLists} onRenamed={reloadLists} onDeleted={reloadLists} />
+        </CollapsibleSection>
+        <CollapsibleSection title="Find Duplicates" desc="merge entries that share a title + medium">
+          <DedupPanel />
+        </CollapsibleSection>
+        <CollapsibleSection title="Cache Covers (server)" desc="download & store uncached covers on the server">
+          <CacheCoversPanel />
+        </CollapsibleSection>
+        <CollapsibleSection title="Cache Covers (extension)"
+          desc="resync covers first-party via the browser extension"
+          disabled={!extPresent}
+          disabledHint="Requires the Logarium browser extension">
+          <ResyncPanel />
+        </CollapsibleSection>
+
+        {/* ── Import / Export ── */}
+        <p className="console-group-label">Import / Export</p>
+        <Section title="Export" desc="download your library as CSV">
+          <Row title="Export CSV" desc="A full snapshot of every entry, importable back into Logarium.">
+            <button type="button" className="btn" onClick={exportCSV}>Export CSV</button>
+          </Row>
+        </Section>
+        <CollapsibleSection title="Import — CSV" desc="import a Logarium CSV with duplicate resolution">
+          <ImportPanel onImported={reloadLists} />
+        </CollapsibleSection>
+        <CollapsibleSection title="Import — Auto-search" desc="upload a list of titles; metadata is fetched automatically">
+          <ImportAutoPanel onImported={reloadLists} />
+        </CollapsibleSection>
+        <CollapsibleSection title="Import — MAL XML" desc="import a MyAnimeList anime/manga export">
+          <ImportMalPanel onImported={reloadLists} />
+        </CollapsibleSection>
+
         {/* ── Display ── */}
+        <p className="console-group-label">Settings</p>
         <Section title="Display">
           <Row title="Theme" desc="Colour scheme for the whole interface.">
             <RowSelect

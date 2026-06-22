@@ -137,35 +137,18 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 .topbar-right .online  { color: var(--green); }
 .topbar-right .offline { color: var(--red); }
 
-/* Settings + logout read as a matched pair of flat terminal buttons. */
-.topbar-right .topbar-user-btn {
+/* Username is plain, non-interactive label text (Console nav link is the way in). */
+.topbar-right .topbar-user {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--dim);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
   letter-spacing: 0.05em;
-  padding: 3px 9px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  padding: 3px 4px;
+  user-select: none;
 }
 
-.topbar-right .topbar-user-btn .topbar-user-icon {
-  color: var(--dim);
-  font-size: 12px;
-  line-height: 1;
-  display: inline-block;
-  transition: color 0.15s;
-}
-
-.topbar-right .topbar-user-btn .topbar-user-name { color: var(--text); }
-
-.topbar-right .topbar-user-btn:hover { color: var(--accent); border-color: var(--accent); }
-.topbar-right .topbar-user-btn:hover .topbar-user-icon { color: var(--accent); }
-.topbar-right .topbar-user-btn:hover .topbar-user-name { color: var(--accent); }
+.topbar-right .topbar-user .topbar-user-name { color: var(--text); }
 
 .topbar-right .btn-logout {
   background: var(--surface);
@@ -946,6 +929,44 @@ html.light .skeleton-pie::after {
 }
 .settings-section-head .sh-desc { font-size: 11px; color: var(--dim); }
 .settings-section-body { padding: 2px 18px; }
+
+/* ── Console: collapsible tool sections ── */
+/* The section header doubles as an expand/collapse toggle (a <button>). */
+.settings-section-toggle {
+  width: 100%;
+  text-align: left;
+  font-family: 'IBM Plex Mono', monospace;
+  cursor: pointer;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  transition: color 0.12s;
+}
+/* No bottom rule while collapsed — avoids a double line above the box edge. */
+.settings-section-toggle[aria-expanded="false"] { border-bottom: none; }
+.settings-section-toggle:hover:not(:disabled) .sh-title { color: var(--accent); }
+.settings-section-toggle:disabled { cursor: not-allowed; opacity: 0.5; }
+.settings-section-toggle .sh-toggle-ind {
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: -0.05em;
+  flex-shrink: 0;
+}
+.settings-section-toggle[aria-expanded="false"] .sh-toggle-ind { color: var(--dim); }
+
+/* Group labels separating tool blocks from settings on the Console page. */
+.console-group-label {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 24px 2px 8px;
+}
+.console-group-label:first-of-type { margin-top: 4px; }
+
+/* Inline tool body inside a collapsible section. */
+.console-tool-body { padding: 16px 18px; }
+.console-tool-body .dedup-groups { margin-top: 4px; }
+.console-tool-body .mal-conflicts { max-height: 460px; overflow-y: auto; }
 
 /* One setting line — label/description left, control right, full panel width. */
 .set-row {
@@ -2070,7 +2091,7 @@ a.explore-title:hover { color: var(--accent); }
     flex: 0 0 auto;
     white-space: nowrap;
   }
-  .topbar-user-btn .topbar-user-name { display: none !important; }
+  .topbar-right .topbar-user { display: none; }
   .topbar-right .btn-logout { display: none; }
   .settings-mobile-logout { display: block; }
   .settings-auth-action { align-items: flex-start; }
@@ -2915,7 +2936,6 @@ html.light .landing-footer-note {
   border-color: var(--border2);
 }
 
-html.light .topbar-right .topbar-user-btn,
 html.light .topbar-right .btn-logout {
   background: #f7faf7;
   border-color: var(--border2);

@@ -4,7 +4,7 @@ import Dashboard   from './pages/Dashboard.jsx';
 import Library     from './pages/Library.jsx';
 import Statistics  from './pages/Statistics.jsx';
 import Explore     from './pages/Explore.jsx';
-import Settings    from './pages/Settings.jsx';
+import Console     from './pages/Console.jsx';
 import LandingPage from './pages/LandingPage.jsx';
 import AuthModal      from './pages/components/AuthModal.jsx';
 import { PreferencesProvider } from './preferences.jsx';
@@ -112,6 +112,9 @@ export default function App() {
             <NavLink to="/statistics" className={({ isActive }) => isActive ? 'active' : undefined}>
               Statistics
             </NavLink>
+            <NavLink to="/console" className={({ isActive }) => isActive ? 'active' : undefined}>
+              Console
+            </NavLink>
           </nav>
         )}
 
@@ -122,15 +125,9 @@ export default function App() {
           <span style={{ color: 'var(--dim)' }}>{BASE.slice(BASE.indexOf('//') + 2)}</span>
           {isAuthenticated ? (
             <>
-              <button
-                type="button"
-                className="topbar-user-btn"
-                onClick={() => navigate('/settings')}
-                title="Settings"
-              >
-                <span className="topbar-user-icon" aria-hidden="true">⚙</span>
+              <span className="topbar-user">
                 <span className="topbar-user-name">{username}</span>
-              </button>
+              </span>
               <button
                 type="button"
                 className="btn-logout"
@@ -181,9 +178,9 @@ export default function App() {
             ? <Statistics key={username} />
             : <Navigate to="/" replace />}
         />
-        <Route path="/settings"
+        <Route path="/console"
           element={isAuthenticated
-            ? <Settings
+            ? <Console
                 key={username}
                 theme={theme}
                 onThemeChange={t => setTheme(t === 'light' ? 'light' : 'dark')}
@@ -194,6 +191,8 @@ export default function App() {
               />
             : <Navigate to="/" replace />}
         />
+        {/* Settings merged into Console — keep the old path working for bookmarks. */}
+        <Route path="/settings" element={<Navigate to="/console" replace />} />
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
       </Routes>
 

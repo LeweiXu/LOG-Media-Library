@@ -1,25 +1,18 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  getEntries, updateEntry, deleteEntry, exportEntries,
+  getEntries, updateEntry, deleteEntry,
   getCustomLists, batchUpdateEntries, batchDeleteEntries,
 } from '../api.jsx';
 import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
-import ImportModal from './components/ImportModal.jsx';
-import ImportAutoModal from './components/ImportAutoModal.jsx';
-import ImportMalModal from './components/ImportMalModal.jsx';
 import ListsModal from './components/ListsModal.jsx';
-import DedupModal from './components/DedupModal.jsx';
-import CacheCoversModal from './components/CacheCoversModal.jsx';
-import ResyncModal from './components/ResyncModal.jsx';
 import InlineListSelect from './components/InlineListSelect.jsx';
 import ListChips, { ALL_LISTS, UNLISTED_LIST } from './components/ListChips.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
-import { useExtensionPresent } from '../extensionBridge.js';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
 
@@ -141,10 +134,6 @@ export default function Library({ initialFilters = {} }) {
   const [showLists, setShowLists] = useState(false);
   const [listModalTab, setListModalTab] = useState('add');
   const [lastEntryWarning, setLastEntryWarning] = useState(null);
-  const [showDedup, setShowDedup] = useState(false);
-  const [showCacheCovers, setShowCacheCovers] = useState(false);
-  const [showResync, setShowResync] = useState(false);
-  const extPresent = useExtensionPresent();
 
   const [drawer, setDrawer] = useState('');
   // View toggles + per-mode columns come from the saved UI preferences.
@@ -500,20 +489,6 @@ export default function Library({ initialFilters = {} }) {
       {sort === field && <span style={{ marginLeft: 4, opacity: 0.7 }}>{order === 'asc' ? '↑' : '↓'}</span>}
     </th>
   );
-
-  const [showImport,     setShowImport]     = useState(false);
-  const [showImportAuto, setShowImportAuto] = useState(false);
-  const [showImportMal,  setShowImportMal]  = useState(false);
-
-  async function exportCSV() {
-    try {
-      const blob = await exportEntries();
-      const a = Object.assign(document.createElement('a'), {
-        href: URL.createObjectURL(blob), download: 'library.csv',
-      });
-      a.click();
-    } catch (err) { alert(`Export failed: ${err.message}`); }
-  }
 
   function openListsModal(tab = 'add') { setListModalTab(tab); setShowLists(true); }
 
@@ -988,42 +963,17 @@ export default function Library({ initialFilters = {} }) {
 
         {isManage && <div className="batch-desktop">{batchPanel}</div>}
 
-        {!isManage && (
-          <>
-            <p className="panel-title">Sort</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
-              {SORT_FIELDS.map(f => (
-                <div key={f.key} className="sidebar-item" style={{ padding: '4px 0', fontSize: 11 }}
-                  onClick={() => handleSort(f.key)}>
-                  {f.label}
-                  {sort === f.key && <span style={{ color: 'var(--accent)' }}>{order === 'asc' ? ' ↑' : ' ↓'}</span>}
-                </div>
-              ))}
+        {/* Sort is available in both View and Manage modes. */}
+        <p className="panel-title">Sort</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 18 }}>
+          {SORT_FIELDS.map(f => (
+            <div key={f.key} className="sidebar-item" style={{ padding: '4px 0', fontSize: 11 }}
+              onClick={() => handleSort(f.key)}>
+              {f.label}
+              {sort === f.key && <span style={{ color: 'var(--accent)' }}>{order === 'asc' ? ' ↑' : ' ↓'}</span>}
             </div>
-          </>
-        )}
-
-        <p className="panel-title">Tools</p>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
-          onClick={() => openListsModal('manage')}>Manage Lists</button>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
-          onClick={() => setShowDedup(true)}>Find Duplicates</button>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
-          onClick={() => setShowCacheCovers(true)}>Cache Covers (server)</button>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4, marginBottom: 18 }}
-          disabled={!extPresent}
-          title={extPresent ? 'Resync covers via the browser extension' : 'Requires the Logarium browser extension'}
-          onClick={() => setShowResync(true)}>Cache Covers (extension)</button>
-
-        <p className="panel-title">Export / Import</p>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%' }}
-          onClick={exportCSV}>Export CSV</button>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
-          onClick={() => setShowImport(true)}>Import CSV</button>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
-          onClick={() => setShowImportAuto(true)}>Import (auto-search)</button>
-        <button className="icon-btn" style={{ textAlign: 'left', padding: '6px 10px', width: '100%', marginTop: 4 }}
-          onClick={() => setShowImportMal(true)}>Import (MAL XML)</button>
+          ))}
+        </div>
 
         <p className="panel-title" style={{ marginTop: 20 }}>View</p>
         <button type="button" className={`source-chip${showActions ? ' is-on' : ''}`}
@@ -1110,13 +1060,6 @@ export default function Library({ initialFilters = {} }) {
           </div>
         </div>
       )}
-
-      {showImport && <ImportModal onClose={() => setShowImport(false)} onImported={refreshView} />}
-      {showImportAuto && <ImportAutoModal onClose={() => setShowImportAuto(false)} onImported={refreshView} />}
-      {showImportMal && <ImportMalModal onClose={() => setShowImportMal(false)} onImported={refreshView} />}
-      {showDedup && <DedupModal onClose={() => setShowDedup(false)} onResolved={refreshView} />}
-      {showCacheCovers && <CacheCoversModal onClose={() => setShowCacheCovers(false)} />}
-      {showResync && <ResyncModal onClose={() => setShowResync(false)} />}
     </div>
   );
 }
