@@ -1,23 +1,17 @@
-import { useExtensionInstallUrl, isFirefox } from '../../extensionBridge.js';
+import { Link } from 'react-router-dom';
 
-// Small inline nudge to install the browser extension, shown where the extension
-// would unlock more (NovelUpdates search results, cover resync). Links to the
-// store/AMO when configured (see EXTENSION_*_URL in extensionBridge.js); until
-// then it just explains what the extension adds.
+// Small inline nudge shown where the browser extension would unlock more
+// (NovelUpdates search results, cover resync). The extension installer now lives
+// on the Console page, so this points there rather than linking to the store.
 export default function ExtensionInstallHint({ context = 'search', style }) {
-  const url = useExtensionInstallUrl();
-  const linkLabel = isFirefox() ? 'Add to Firefox' : 'Add to Chrome';
-
   const lead = context === 'search'
-    ? 'NovelUpdates results need the Logarium browser extension.'
+    ? 'NovelUpdates may be blocked without the Logarium browser extension.'
     : 'Logarium browser extension not detected.';
 
   return (
     <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.6, ...style }}>
       {lead}{' '}
-      {url
-        ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{linkLabel} →</a>
-        : null}
+      <Link to="/console" style={{ color: 'var(--accent)' }}>Install it from Console →</Link>
     </div>
   );
 }

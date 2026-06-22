@@ -297,6 +297,10 @@ export const fetchByUrl = (url) =>
 export const fetchChapterCount = (title) =>
   req(`/search/chapter-count?${new URLSearchParams({ title })}`);
 
+/** Resolve IMDb detail (rating, episode count, …) for a tt id → SearchResult. */
+export const fetchImdbDetail = (id) =>
+  req(`/search/imdb-detail?${new URLSearchParams({ id })}`);
+
 /**
  * Upload cover image bytes to the server cache, keyed by the original cover URL.
  * Used by the browser extension to cache covers it fetched first-party (e.g.

@@ -8,7 +8,7 @@ import AddEntryModal from './components/AddEntryModal.jsx';
 import AddEntryPanel from './components/AddEntryPanel.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
-import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
+import { useExtensionPresent, extensionGoodreadsExplore, mergeResults } from '../extensionBridge.js';
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it.
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
@@ -69,6 +69,7 @@ export default function Explore() {
   // Sitewide-available sources (Console setting) — limits both the picker and
   // which recommendations are shown. Read once on mount.
   const availableSet = useMemo(() => loadAvailableSources(), []);
+  const extPresent = useExtensionPresent();
 
   // Keep the selected sources in the URL (?src=) so a reload restores them.
   useEffect(() => {
@@ -100,9 +101,24 @@ export default function Explore() {
         sources: [...availableSet],
       });
       if (requestSeq !== exploreRequestSeq.current) return;
-      setItems(data.items || []);
+      const recs = data.items || [];
+      setItems(recs);
       setAffinity(data.affinity || null);
       setPersonalised(!!data.personalised);
+
+      // Goodreads shelves are usually reachable server-side, but if they're
+      // WAF-blocked no Goodreads books come back. When Book recs are relevant,
+      // Goodreads is an available source, and the extension is present, load the
+      // shelf first-party and merge the results in.
+      const bookRelevant = !medium || medium === 'Book';
+      if (extPresent && bookRelevant && availableSet.has('goodreads')
+          && !recs.some(it => it.source === 'goodreads')) {
+        const genre = (data.affinity?.top_genres || [])[0] || '';
+        const extra = await extensionGoodreadsExplore(genre);
+        if (requestSeq === exploreRequestSeq.current && extra.length) {
+          setItems(prev => mergeResults(prev, extra));
+        }
+      }
     } catch (e) {
       if (requestSeq !== exploreRequestSeq.current) return;
       setError(e.message);
@@ -111,7 +127,7 @@ export default function Explore() {
       setLoading(false);
       setRefreshFlag(false);
     }
-  }, [medium, seed, refreshFlag, availableSet]);
+  }, [medium, seed, refreshFlag, availableSet, extPresent]);
 
   useEffect(() => {
     fetchExplore();
@@ -442,7 +458,6 @@ export default function Explore() {
 
       {/* ── Right sidebar: affinity snapshot ───────────────────────────────── */}
       <aside className="sidebar-right">
-        <ExtensionInstallButton />
         <button type="button" className="quickadd-open-btn" onClick={() => setQuickAddOpen(true)}>
           Quick Add
         </button>

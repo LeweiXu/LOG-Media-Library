@@ -24,6 +24,7 @@ from services import entry_service
 from services.entry_service import delete_all_entries
 from services import auth_service
 from services.search_service import search_media, lookup_chapter_count
+from services.search_providers.imdb import fetch_imdb_detail
 from services.url_import_service import fetch_from_url
 from services.stats_service import get_stats
 from services.export_service import export_entries_csv
@@ -435,13 +436,14 @@ async def search(
 
 @router.get("/search/from-url", response_model=list[SearchResult])
 async def search_from_url(
-    url: str = Query(..., min_length=1, description="Media-page URL to scrape (NovelUpdates, jjwxc, qidian, imdb)"),
+    url: str = Query(..., min_length=1, description="Media-page URL to scrape (NovelUpdates, jjwxc, qidian, imdb, Goodreads)"),
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    """Scrape a single supported media page into a one-item result list.
+    """Scrape a supported media page into a result list.
 
-    Returns an empty list for unsupported domains or any scrape failure, so the
-    client degrades gracefully to manual entry.
+    Usually one item, but some pages resolve to many (a Goodreads series page →
+    one result per book). Returns an empty list for unsupported domains or any
+    scrape failure, so the client degrades gracefully to manual entry.
     """
     return await fetch_from_url(url)
 
@@ -456,6 +458,23 @@ async def chapter_count(
     Called when adding an ongoing MAL/Jikan manga whose chapter total is blank.
     """
     return {"total": await lookup_chapter_count(title)}
+
+
+@router.get("/search/imdb-detail", response_model=SearchResult)
+async def imdb_detail(
+    id: str = Query(..., min_length=1, description="IMDb title id (ttXXXXXXX)"),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """On-demand IMDb detail (rating, episode count, year, cover, genres).
+
+    Called when adding an IMDb-sourced Film/TV entry whose rating/total are blank
+    (the suggestion-based search leaves them unset). Returns 404 if IMDb can't be
+    resolved so the client keeps whatever it already had.
+    """
+    result = await fetch_imdb_detail(id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="IMDb title not found")
+    return result
 
 # ── Explore endpoint ──────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ Strategy:
   - All providers are optional — if no API key is configured the provider is skipped.
 
 Source → Provider mapping:
+  imdb          → IMDb (Film & TV — default)
   tmdb          → TMDB (Film & TV)
   anilist       → AniList (Anime & Manga)
   jikan         → MyAnimeList via Jikan (Anime & Manga)
@@ -16,6 +17,7 @@ Source → Provider mapping:
   mangadex      → MangaDex (Manga, Comic)
   igdb          → IGDB (Games)
   rawg          → RAWG (Games)
+  goodreads     → Goodreads (Books)
   google_books  → Google Books
   open_library  → Open Library
   comicvine     → ComicVine (Comic)
@@ -29,7 +31,7 @@ Keys required (all optional — provider is skipped if absent):
   COMICVINE_API_KEY
 
 No-key providers (always active):
-  AniList, Jikan (MAL proxy), MangaDex, Kitsu, Open Library, VNDB
+  AniList, Jikan (MAL proxy), MangaDex, Kitsu, Open Library, VNDB, Goodreads
 """
 from __future__ import annotations
 
@@ -54,6 +56,8 @@ from services.search_providers import (
     search_mangaupdates,
     search_novelupdates,
     search_vndb,
+    search_goodreads,
+    search_imdb,
 )
 from services.search_providers.utils import TIMEOUT
 
@@ -67,12 +71,14 @@ _SOURCE_PRIORITY = [
     "novelupdates", # best web novel metadata, highly curated
     "vndb",         # best visual novel metadata, highly curated
     "jikan",        # MAL data — preferred over AniList for anime & manga
-    "tmdb",         # best film/TV metadata
+    "imdb",         # best film/TV metadata + authoritative ratings
+    "tmdb",         # film/TV fallback (covers, overviews)
     "igdb",         # best game metadata
     "anilist",      # good anime/manga, lower priority than Jikan/MangaUpdates
     "kitsu",        # decent fallback for anime/manga
     "mangadex",     # great for manga, cover quality varies
     "mangaupdates", # best manga metadata, highly curated
+    "goodreads",    # best book metadata + reliable ratings
     "google_books",
     "open_library",
     "comicvine",
@@ -138,6 +144,7 @@ def _deduplicate_and_rank(
 
 _ALL_PROVIDERS = [
     search_tmdb,
+    search_imdb,
     search_anilist,
     search_jikan,
     search_kitsu,
@@ -146,6 +153,7 @@ _ALL_PROVIDERS = [
     search_mangadex,
     search_igdb,
     search_rawg,
+    search_goodreads,
     search_google_books,
     search_open_library,
     search_comicvine,
@@ -154,6 +162,7 @@ _ALL_PROVIDERS = [
 
 _SOURCE_TO_PROVIDER = {
     "tmdb":         search_tmdb,
+    "imdb":         search_imdb,
     "anilist":      search_anilist,
     "jikan":        search_jikan,
     "kitsu":        search_kitsu,
@@ -162,6 +171,7 @@ _SOURCE_TO_PROVIDER = {
     "mangaupdates": search_mangaupdates,
     "igdb":         search_igdb,
     "rawg":         search_rawg,
+    "goodreads":    search_goodreads,
     "google_books": search_google_books,
     "open_library": search_open_library,
     "comicvine":    search_comicvine,
@@ -170,13 +180,13 @@ _SOURCE_TO_PROVIDER = {
 
 # Medium → preferred providers for auto-import narrowing.
 _MEDIUM_PROVIDERS: dict[str, list] = {
-    "Film":         [search_tmdb],
-    "TV Show":      [search_tmdb],
+    "Film":         [search_imdb, search_tmdb],
+    "TV Show":      [search_imdb, search_tmdb],
     "Anime":        [search_jikan, search_anilist, search_kitsu],
     "Manga":        [search_jikan, search_anilist, search_mangadex, search_mangaupdates],
     "Light Novel":  [search_novelupdates, search_jikan, search_anilist, search_google_books, search_open_library],
     "Web Novel":    [search_novelupdates, search_google_books, search_open_library],
-    "Book":         [search_google_books, search_open_library],
+    "Book":         [search_goodreads, search_google_books, search_open_library],
     "Game":         [search_igdb, search_rawg],
     "Comic":        [search_comicvine, search_mangadex],
     "Visual Novel": [search_vndb],

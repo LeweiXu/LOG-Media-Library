@@ -2,6 +2,7 @@
 // modal (AddEntryModal) and the full-page add panel (AddEntryPanel).
 
 export const SEARCH_SOURCES = [
+  { value: 'imdb',         label: 'IMDb' },
   { value: 'tmdb',         label: 'TMDB' },
   { value: 'anilist',      label: 'AniList' },
   { value: 'jikan',        label: 'MyAnimeList' },
@@ -11,6 +12,7 @@ export const SEARCH_SOURCES = [
   { value: 'mangaupdates', label: 'MangaUpdates' },
   { value: 'igdb',         label: 'IGDB' },
   { value: 'rawg',         label: 'RAWG' },
+  { value: 'goodreads',    label: 'Goodreads' },
   { value: 'google_books', label: 'Google Books' },
   { value: 'open_library', label: 'Open Library' },
   { value: 'comicvine',    label: 'ComicVine' },
@@ -22,23 +24,24 @@ export const SOURCE_LABEL = {
   // URL-only sources (not keyword-searchable, so not in SEARCH_SOURCES)
   jjwxc:  'JJWXC',
   qidian: 'Qidian',
-  imdb:   'IMDb',
 };
 
 // Curated sitewide default for which sources are *available* to search: roughly
 // one provider per medium so the Add/Explore pickers don't offer overlapping
 // sources that return the same titles (e.g. AniList vs MyAnimeList for anime).
 // MyAnimeList (jikan) covers anime + manga, with MangaUpdates kept as a manga
-// backup; TMDB covers film/TV; NovelUpdates covers light/web novels. Users edit
-// the available set in Console → Search Sources.
+// backup; IMDb covers film/TV (authoritative ratings + episode counts);
+// NovelUpdates covers light/web novels; Goodreads covers books (richer metadata +
+// reliable ratings than Google Books). Users edit the available set in
+// Console → Search Sources.
 export const DEFAULT_SOURCES = [
-  'tmdb',         // film, tv
+  'imdb',         // film, tv
   'jikan',        // anime, manga (MyAnimeList)
   'mangaupdates', // manga backup
   'novelupdates', // light novel, web novel
   'rawg',         // game
   'vndb',         // visual novel
-  'google_books', // book
+  'goodreads',    // book
   'comicvine',    // comic
 ];
 

@@ -54,11 +54,13 @@ from services.search_providers.utils import TIMEOUT
 from services.search_providers.anilist import _discover_anilist
 from services.search_providers.comicvine import _discover_comicvine
 from services.search_providers.google_books import _discover_google_books
+from services.search_providers.goodreads import _discover_goodreads
 from services.search_providers.igdb import _discover_igdb
 from services.search_providers.jikan import _discover_jikan
 from services.search_providers.novelupdates import _discover_novelupdates
 from services.search_providers.rawg import _discover_rawg
 from services.search_providers.tmdb import _discover_tmdb
+from services.search_providers.imdb import _discover_imdb
 from services.search_providers.vndb import _discover_vndb
 
 logger = logging.getLogger(__name__)
@@ -176,14 +178,14 @@ def _normalised_weights(counter: Counter[str], top_n: int = 10) -> dict[str, flo
 # service only owns provider ordering, fallback, cache, filtering, and ranking.
 
 _PROVIDER_FNS_BY_MEDIUM: dict[str, list] = {
-    "Film":         [_discover_tmdb],
-    "TV Show":      [_discover_tmdb],
+    "Film":         [_discover_imdb, _discover_tmdb],
+    "TV Show":      [_discover_imdb, _discover_tmdb],
     "Anime":        [_discover_jikan, _discover_anilist],
     "Manga":        [_discover_jikan, _discover_anilist],
     "Light Novel":  [_discover_jikan, _discover_anilist],
     "Web Novel":    [_discover_novelupdates],    # scrapes NU rankings
     "Comic":        [_discover_comicvine],
-    "Book":         [_discover_google_books],   # special-cased — needs top_genres
+    "Book":         [_discover_goodreads, _discover_google_books],  # genre-aware; need top_genres
     "Game":         [_discover_rawg, _discover_igdb],
     "Visual Novel": [_discover_vndb],
 }
@@ -193,11 +195,13 @@ _PROVIDER_FNS_BY_MEDIUM: dict[str, list] = {
 # the recommender doesn't fill results from a source the UI will then hide.
 _DISCOVER_SOURCE: dict = {
     _discover_tmdb:         "tmdb",
+    _discover_imdb:         "imdb",
     _discover_jikan:        "jikan",
     _discover_anilist:      "anilist",
     _discover_novelupdates: "novelupdates",
     _discover_comicvine:    "comicvine",
     _discover_google_books: "google_books",
+    _discover_goodreads:    "goodreads",
     _discover_rawg:         "rawg",
     _discover_igdb:         "igdb",
     _discover_vndb:         "vndb",
@@ -220,7 +224,7 @@ async def _call_discover_provider(
     top_genres: list[str],
     page: int,
 ) -> list[ExploreItem]:
-    if fn is _discover_google_books:
+    if fn in (_discover_google_books, _discover_goodreads, _discover_imdb):
         return await fn(client, medium, top_genres, page)
     return await fn(client, medium, page)
 

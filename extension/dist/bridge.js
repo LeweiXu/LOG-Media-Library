@@ -65,6 +65,17 @@
         .catch(() => {
           window.postMessage({ logarium: true, dir: 'fromExt', type: 'searchNuResult', id, ok: false }, window.location.origin);
         });
+    } else if (data.type === 'exploreGoodreads') {
+      // Same request/response shape as searchNu — load a Goodreads genre shelf
+      // first-party and return parsed recommendation items.
+      const id = data.id;
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'exploreGoodreads', genre: data.genre, token: data.token, apiBase: data.apiBase }))
+        .then((resp) => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'exploreGoodreadsResult', id, ...(resp || { ok: false }) }, window.location.origin);
+        })
+        .catch(() => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'exploreGoodreadsResult', id, ok: false }, window.location.origin);
+        });
     }
   });
 })();

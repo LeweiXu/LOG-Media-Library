@@ -12,7 +12,7 @@ keyword search.
 from __future__ import annotations
 
 from . import (
-    novelupdates, jjwxc, qidian, imdb,
+    novelupdates, jjwxc, qidian, imdb, goodreads,
     tmdb, anilist, jikan, kitsu, mangadex, mangaupdates,
     igdb, rawg, google_books, open_library, comicvine, vndb,
 )
@@ -23,6 +23,7 @@ DOMAIN_SCRAPERS = {
     "jjwxc.net":        jjwxc.fetch,
     "qidian.com":       qidian.fetch,
     "imdb.com":         imdb.fetch,
+    "goodreads.com":    goodreads.fetch,   # book page → 1 result; series → many
     # API-backed sources
     "themoviedb.org":   tmdb.fetch,
     "anilist.co":       anilist.fetch,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getCustomLists, fetchChapterCount } from '../../api.jsx';
+import { getCustomLists, fetchChapterCount, fetchImdbDetail } from '../../api.jsx';
 import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
 import CustomListField from './CustomListField.jsx';
 import CustomSelect from './CustomSelect.jsx';
@@ -103,6 +103,30 @@ export default function EntryForm({
         if (!cancelled && total) {
           setFormState(f => (f.total === '' ? { ...f, total: String(total) } : f));
         }
+      })
+      .catch(() => { /* non-critical */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // IMDb search results come from the suggestion endpoint, which has no rating or
+  // episode count — fetch those (plus any blank cover/genres/year) on demand when
+  // adding an IMDb-sourced Film/TV entry, mirroring the chapter-count fill above.
+  useEffect(() => {
+    if (isEdit) return;
+    if (entry?.source !== 'imdb' || !entry?.external_id) return;
+    if (entry?.external_rating && entry?.total) return;
+    let cancelled = false;
+    fetchImdbDetail(entry.external_id)
+      .then(d => {
+        if (cancelled || !d) return;
+        setFormState(f => ({
+          ...f,
+          external_rating: f.external_rating === '' && d.external_rating != null ? String(d.external_rating) : f.external_rating,
+          total:           f.total === ''   && d.total != null  ? String(d.total) : f.total,
+          year:            f.year === ''     && d.year != null   ? String(d.year) : f.year,
+          cover_url:       f.cover_url || d.cover_url || '',
+          genres:          f.genres || d.genres || '',
+        }));
       })
       .catch(() => { /* non-critical */ });
     return () => { cancelled = true; };

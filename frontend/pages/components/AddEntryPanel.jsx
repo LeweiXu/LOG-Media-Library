@@ -223,7 +223,7 @@ export default function AddEntryPanel({
           <div style={{ fontSize: 10, color: 'var(--dim)', letterSpacing: '0.03em', padding: '6px 0 0' }}>
             {URL_SCRAPE_SOURCES.has(detectedSource)
               ? `Detected ${SOURCE_LABEL[detectedSource] ?? detectedSource} link — source toggles ignored`
-              : 'Paste a supported media URL (TMDB, AniList, MAL, NovelUpdates, IMDb, …)'}
+              : 'Paste a supported media URL (TMDB, AniList, MAL, NovelUpdates, Goodreads book/series, IMDb, …)'}
           </div>
         ) : (
           <div className="source-select source-select-wide" style={{ marginTop: 10 }}>

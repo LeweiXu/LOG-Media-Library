@@ -12,7 +12,6 @@ import ListsModal from './components/ListsModal.jsx';
 import InlineListSelect from './components/InlineListSelect.jsx';
 import ListChips, { ALL_LISTS, UNLISTED_LIST } from './components/ListChips.jsx';
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
-import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
 
@@ -954,8 +953,6 @@ export default function Library({ initialFilters = {} }) {
 
       {/* ── Right sidebar ── */}
       <div className="sidebar-right">
-        <ExtensionInstallButton />
-
         {/* Manage (multi-select) replaces Sort with the batch-edit tools in place. */}
         {isManage ? (
           <div className="batch-desktop">{batchPanel}</div>

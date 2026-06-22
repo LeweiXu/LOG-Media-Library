@@ -79,6 +79,32 @@ export function extensionNuSearch(query, timeoutMs = 25000) {
   });
 }
 
+// ── Goodreads Explore (silent fallback) ──────────────────────────────────────
+// Goodreads genre shelves are usually reachable server-side, but if they get
+// WAF-blocked the recommender returns no Goodreads books. When the extension is
+// present we load the shelf first-party in a background tab and return parsed
+// ExploreItems to merge into the Book recommendations.
+
+let _grReqId = 0;
+
+export function extensionGoodreadsExplore(genre, timeoutMs = 25000) {
+  if (!extensionPresent()) return Promise.resolve([]);
+  return new Promise((resolve) => {
+    const id = ++_grReqId;
+    const cleanup = () => { clearTimeout(timer); window.removeEventListener('message', onMsg); };
+    const timer = setTimeout(() => { cleanup(); resolve([]); }, timeoutMs);
+    function onMsg(e) {
+      if (e.source !== window) return;
+      const d = e.data;
+      if (!d || d.logarium !== true || d.dir !== 'fromExt' || d.type !== 'exploreGoodreadsResult' || d.id !== id) return;
+      cleanup();
+      resolve(d.ok && Array.isArray(d.results) ? d.results : []);
+    }
+    window.addEventListener('message', onMsg);
+    post({ type: 'exploreGoodreads', id, genre: genre || '', token: localStorage.getItem('auth_token'), apiBase: BASE });
+  });
+}
+
 /** Merge `extra` results into `base`, skipping title|medium duplicates. */
 export function mergeResults(base, extra) {
   const key = (r) => `${(r.title || '').toLowerCase().trim()}|${r.medium || ''}`;

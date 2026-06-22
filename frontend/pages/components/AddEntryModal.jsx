@@ -189,7 +189,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                   <div className="add-url-hint">
                     {URL_SCRAPE_SOURCES.has(detectedSource)
                       ? `Detected ${SOURCE_LABEL[detectedSource] ?? detectedSource} link — source toggles ignored`
-                      : 'Paste a NovelUpdates, JJWXC, Qidian, or IMDb URL'}
+                      : 'Paste a NovelUpdates, Goodreads (book or series), JJWXC, Qidian, or IMDb URL'}
                   </div>
                 ) : (
                 <div className="source-select">

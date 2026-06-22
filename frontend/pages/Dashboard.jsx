@@ -5,7 +5,7 @@ import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeA
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
-import ExtensionInstallButton from './components/ExtensionInstallButton.jsx';
+import ExtensionUpdateLink from './components/ExtensionUpdateLink.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
 
@@ -466,7 +466,7 @@ export default function DashboardAlt({ onFilterChange }) {
 
       {/* ── Right sidebar ── */}
       <div className="sidebar-right">
-        <ExtensionInstallButton />
+        <ExtensionUpdateLink />
         <p className="panel-title">Summary</p>
         {loading ? (
           <SkeletonStatGrid />

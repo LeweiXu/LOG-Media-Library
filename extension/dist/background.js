@@ -40,6 +40,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'search failed' }));
     return true;
   }
+  // Goodreads Explore fallback: load a genre shelf first-party and return parsed
+  // recommendation items (used when the server-side shelf fetch is blocked).
+  if (msg && msg.type === 'exploreGoodreads') {
+    exploreGoodreads(msg.genre)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'explore failed' }));
+    return true;
+  }
   // ── Overlay-mode delegation ──
   // When the UI runs as an in-page overlay (iframe), Firefox sandboxes it: no
   // chrome.tabs/scripting and no cross-origin fetch. So the iframe asks the
@@ -83,6 +91,7 @@ function detectSiteUrl(url) {
     'mangadex.org', 'mangaupdates.com', 'baka-updates.com', 'igdb.com', 'rawg.io',
     'books.google.com', 'play.google.com', 'openlibrary.org',
     'comicvine.gamespot.com', 'vndb.org', 'jjwxc.net', 'qidian.com', 'imdb.com',
+    'goodreads.com',
   ];
   return API.some((d) => host.includes(d)) ? { kind: 'api' } : { kind: 'unsupported' };
 }
@@ -573,6 +582,89 @@ function scrapeNuSearchResults() {
       genres: genres.join(', '),
       external_rating,
       description: description || null,
+    });
+  }
+  return { ready: true, results };
+}
+
+// ── Goodreads Explore shelf (background tab + injected scraper) ────────────────
+
+// Slugify a genre name into a Goodreads shelf slug ("Science Fiction" →
+// "science-fiction"); fall back to the general fiction shelf.
+function goodreadsShelfSlug(genre) {
+  const slug = (genre || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || 'fiction';
+}
+
+async function exploreGoodreads(genre) {
+  const url = `https://www.goodreads.com/shelf/show/${goodreadsShelfSlug(genre)}`;
+  const tab = await chrome.tabs.create({ url, active: false });
+  let results = [];
+  try {
+    await waitForComplete(tab.id);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const [{ result } = {}] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: scrapeGoodreadsShelf,
+      });
+      if (result && result.ready) { results = result.results || []; break; }
+      await delay(2000); // still loading / interstitial — wait it out
+    }
+  } catch (e) {
+    return { ok: false, reason: (e && e.message) || 'explore failed' };
+  } finally {
+    try { await chrome.tabs.remove(tab.id); } catch { /* ignore */ }
+  }
+  return { ok: true, results };
+}
+
+// Injected into a Goodreads shelf page. Mirrors backend
+// search_providers/goodreads.py `_parse_shelf`. Returns { ready, results }.
+function scrapeGoodreadsShelf() {
+  if (/just a moment|checking your browser/i.test(document.title || '') || document.readyState === 'loading') {
+    return { ready: false };
+  }
+  const rows = document.querySelectorAll('div.elementList');
+  if (!rows.length) return { ready: false };
+
+  const upgrade = (src) => (src || '').replace(/\._S[XY]\d+_(?=\.)/, '');
+  const bookId = (href) => { const m = (href || '').match(/\/book\/show\/(\d+)/); return m ? m[1] : ''; };
+
+  const results = [];
+  for (const row of Array.from(rows).slice(0, 30)) {
+    const link = row.querySelector('a.bookTitle') || row.querySelector('a.leftAlignedImage');
+    if (!link) continue;
+    const href = link.getAttribute('href') || '';
+    const title = (link.textContent || link.getAttribute('title') || '').trim().replace(/\s*\([^()]*,\s*#[0-9.]+\)\s*$/, '');
+    if (!title || !href.includes('/book/show/')) continue;
+
+    const img = row.querySelector('img');
+    const cover_url = img ? upgrade(img.getAttribute('src') || '') : '';
+
+    let year = '';
+    let external_rating = null;
+    const grey = row.querySelector('.greyText.smallText') || row.querySelector('.greyText');
+    if (grey) {
+      const t = grey.textContent || '';
+      const rm = t.match(/avg rating\s*([\d.]+)/);
+      if (rm) external_rating = Math.round(parseFloat(rm[1]) * 2 * 10) / 10;
+      const ym = t.match(/published\s*(\d{4})/);
+      if (ym) year = ym[1];
+    }
+
+    results.push({
+      title,
+      medium: 'Book',
+      source: 'goodreads',
+      origin: '',
+      year,
+      cover_url,
+      total: '',
+      external_id: bookId(href),
+      external_url: href.startsWith('/') ? `https://www.goodreads.com${href}` : href,
+      genres: '',
+      external_rating,
+      description: null,
     });
   }
   return { ready: true, results };

@@ -146,11 +146,12 @@ const _SOURCE_DOMAINS = {
   'jjwxc.net':              'jjwxc',
   'qidian.com':             'qidian',
   'imdb.com':               'imdb',
+  'goodreads.com':          'goodreads',
 };
 
 /** Sources whose pages can be imported by pasting a URL (resolved backend-side). */
 export const URL_SCRAPE_SOURCES = new Set([
-  'novelupdates', 'jjwxc', 'qidian', 'imdb',
+  'novelupdates', 'jjwxc', 'qidian', 'imdb', 'goodreads',
   'tmdb', 'anilist', 'jikan', 'kitsu', 'mangadex', 'mangaupdates',
   'igdb', 'rawg', 'google_books', 'open_library', 'comicvine', 'vndb',
 ]);
@@ -185,6 +186,10 @@ export function externalUrl(source, external_id, medium) {
     }
     case 'google_books':
       return `https://books.google.com/books?id=${external_id}`;
+    case 'goodreads':
+      return `https://www.goodreads.com/book/show/${external_id}`;
+    case 'imdb':
+      return `https://www.imdb.com/title/${external_id}/`;
     default:
       return null;
   }

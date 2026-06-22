@@ -18,6 +18,7 @@ const API_DOMAINS = [
   'mangadex.org', 'mangaupdates.com', 'baka-updates.com', 'igdb.com', 'rawg.io',
   'books.google.com', 'play.google.com', 'openlibrary.org',
   'comicvine.gamespot.com', 'vndb.org', 'jjwxc.net', 'qidian.com', 'imdb.com',
+  'goodreads.com',
 ];
 
 /**

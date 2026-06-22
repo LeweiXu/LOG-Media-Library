@@ -46,4 +46,8 @@ async def fetch_from_url(url: str) -> list[SearchResult]:
         logger.exception("URL scrape failed for %s", url)
         return []
 
-    return [result] if result else []
+    # A scraper may resolve a page to one entry or many (e.g. a Goodreads series
+    # page → one result per book). Flatten either shape to a list.
+    if not result:
+        return []
+    return result if isinstance(result, list) else [result]

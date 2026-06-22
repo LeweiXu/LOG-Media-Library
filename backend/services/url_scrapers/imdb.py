@@ -1,12 +1,12 @@
 """Resolve a single IMDb title URL into a SearchResult.
 
-IMDb's own pages sit behind an AWS WAF JS challenge that a plain HTTP client
-can't pass, so direct scraping returns a challenge stub. Instead we resolve the
-``ttXXXXXXX`` id through TMDB's ``/find`` endpoint (the project already
-configures ``TMDB_API_KEY`` for its TMDB provider) and reuse TMDB's genre map.
-The resulting entry still records ``source="imdb"`` and links back to IMDb,
-matching what the user pasted. If no TMDB key is configured we fall back to a
-best-effort JSON-LD scrape (usually blocked, hence a graceful ``None``).
+IMDb's own HTML pages sit behind an AWS WAF JS challenge a plain client can't
+pass, but its **GraphQL** API is reachable anonymously, so we resolve the
+``ttXXXXXXX`` id straight through ``search_providers.imdb.fetch_imdb_detail``
+(IMDb rating, episode count, year, cover, genres, plot). If that fails we fall
+back to TMDB's ``/find`` endpoint (the project already configures
+``TMDB_API_KEY``), and finally to a best-effort JSON-LD scrape (usually blocked,
+hence a graceful ``None``). Every path records ``source="imdb"``.
 """
 from __future__ import annotations
 
@@ -156,7 +156,13 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
     tt = _tt_id(url)
     if not tt:
         return None
-    result = await _resolve_via_tmdb(client, tt)
+    # Primary: IMDb's own GraphQL (real IMDb rating + episode count). Fall back to
+    # TMDB resolution, then a JSON-LD scrape, if GraphQL is unavailable.
+    from services.search_providers.imdb import fetch_imdb_detail
+
+    result = await fetch_imdb_detail(tt)
+    if result is None:
+        result = await _resolve_via_tmdb(client, tt)
     if result is None:
         result = await _scrape_jsonld(tt)
     return result

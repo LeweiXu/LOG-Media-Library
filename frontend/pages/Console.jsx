@@ -15,6 +15,7 @@ import ResyncPanel from './components/ResyncPanel.jsx';
 import ImportPanel from './components/ImportPanel.jsx';
 import ImportAutoPanel from './components/ImportAutoPanel.jsx';
 import ImportMalPanel from './components/ImportMalPanel.jsx';
+import ExtensionDownloadSection from './components/ExtensionDownloadSection.jsx';
 
 const LIBRARY_SORT_FIELDS = [
   { key: 'title', label: 'Title' }, { key: 'medium', label: 'Medium' },
@@ -477,6 +478,13 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
           </div>
         )}
 
+        {/* ── Browser extension ── */}
+        <p className="console-group-label">Browser Extension</p>
+        <Section title="Logarium Browser Extension"
+          desc="add from source pages, cache covers, and unlock blocked sources">
+          <ExtensionDownloadSection />
+        </Section>
+
         {/* ── Library tools ── */}
         <p className="console-group-label">Library Tools</p>
         <CollapsibleSection title="Manage Lists" desc="build, rename or delete custom lists">
@@ -645,10 +653,10 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         </Section>
 
         {/* ── Search Sources ── */}
-        <Section title="Search Sources" desc="which sources are available to search">
+        <Section title="Search Sources">
           <Row
             title="Available sources"
-            desc="Which providers the Add Entry and Explore source pickers offer. The default is one source per medium so overlapping sources don't return duplicate titles."
+            desc="Which providers the Add Entry and Explore source pickers offer."
             stack>
             <div className="settings-chip-row">
               {SEARCH_SOURCES.map(s => (
