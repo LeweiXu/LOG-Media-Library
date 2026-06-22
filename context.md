@@ -74,10 +74,10 @@ logarium/
 │       └── search_providers/
 │           ├── __init__.py           # provider registry
 │           ├── utils.py
-│           ├── tmdb.py  anilist.py  jikan.py  kitsu.py  mangadex.py
+│           ├── tmdb.py  imdb.py  anilist.py  jikan.py  kitsu.py  mangadex.py
 │           ├── mangaupdates.py  novelupdates.py
 │           ├── igdb.py  rawg.py  vndb.py
-│           └── google_books.py  open_library.py  comicvine.py
+│           └── google_books.py  open_library.py  comicvine.py  goodreads.py
 ├── frontend/
 │   ├── index.html  index.jsx  app.jsx
 │   ├── api.jsx           # all network calls (reads VITE_API_BASE)
@@ -98,7 +98,7 @@ logarium/
 │           ├── ListChips.jsx  ListsPanel.jsx  ListsModal.jsx  InlineListSelect.jsx  CustomListField.jsx
 │           ├── DedupPanel.jsx  CacheCoversPanel.jsx  ResyncPanel.jsx
 │           ├── ImportPanel.jsx  ImportAutoPanel.jsx  ImportMalPanel.jsx
-│           ├── ExtensionInstall{Button,Hint,Modal}.jsx
+│           ├── ExtensionInstallHint.jsx  ExtensionDownloadSection.jsx  ExtensionUpdateLink.jsx
 │           ├── CustomSelect.jsx  Skeletons.jsx  terminal.jsx
 │           └── searchSources.js   # provider list + available-sources selection
 ├── extension/           # Manifest V3 browser extension (Chrome + Firefox)
@@ -171,7 +171,12 @@ All routes except health and auth require `Authorization: Bearer <token>`.
 ### Search
 - `GET /search?title=...&source=...` (optionally `sources=a,b,c`)
 - `source` optional; omitted -> fan out across providers, deduplicate/rank (capped at 10)
-- `GET /search/url?url=...` -> add-by-URL: scrape a supported source page to a prefilled entry
+- `GET /search/from-url?url=...` -> add-by-URL: scrape a supported source page to a
+  prefilled entry. Usually one result, but some pages resolve to **many** (a
+  Goodreads `/series/<id>` URL -> one result per numbered book)
+- `GET /search/chapter-count?title=...` -> on-demand MangaUpdates chapter total (ongoing manga)
+- `GET /search/imdb-detail?id=tt...` -> on-demand IMDb detail (rating, episode count,
+  year, cover, genres); used to enrich an IMDb-sourced Film/TV entry when adding
 
 ### Explore (recommendations)
 - `GET /explore?medium=&limit=&seed=&refresh=&sources=a,b,c`
@@ -224,10 +229,14 @@ All routes except health and auth require `Authorization: Bearer <token>`.
     batch-edit tools (the former Manage page)
   - Explore: personalised recommendations with a "bias on/off" affinity sidebar
   - Statistics: Recharts visualizations and breakdowns
-  - Console: merged settings + library tools — theme/accent, per-page layout,
-    Explore bias & personalisation, available search sources, change password,
-    periodic backup, plus collapsible inline tools (custom lists, duplicate
-    finder, cover caching, CSV/auto/MAL import, CSV export, data wipe)
+  - Console: merged settings + library tools — a browser-extension download
+    section at the top (shown only when the extension is missing or out of date),
+    theme/accent, per-page layout, Explore bias & personalisation, available
+    search sources, change password, periodic backup, plus collapsible inline
+    tools (custom lists, duplicate finder, cover caching, CSV/auto/MAL import,
+    CSV export, data wipe). The "Install Extension" button was removed from other
+    pages; the Dashboard shows only an "Update Extension" link (→ Console) when an
+    installed copy is out of date.
 - **UI preferences** live in a single `ui_preferences` JSON document
   (`frontend/preferences.jsx` `usePreferences`, mirrored by `schemas.DEFAULT_UI`);
   per-page layout reads from it. Don't add parallel localStorage prefs (the
@@ -238,28 +247,43 @@ All routes except health and auth require `Authorization: Bearer <token>`.
 
 ## 7. Search Provider Notes
 
-Search is provider-based and asynchronous. Providers currently wired:
-- TMDB, AniList, Jikan, Kitsu
+Search is provider-based and asynchronous. Providers currently wired (15):
+- IMDb, TMDB, AniList, Jikan, Kitsu
 - NovelUpdates, MangaDex, MangaUpdates
 - IGDB, RAWG
-- Google Books, Open Library, ComicVine
+- Goodreads, Google Books, Open Library, ComicVine
 - VNDB
 
 Backend combines provider results, deduplicates similar title/medium pairs, and
-ranks by source priority (exact title matches first).
+ranks by source priority (exact title matches first). See README → "How Each
+Source Works" for the per-source access mechanism, keys, and quirks. Highlights:
+- **IMDb** (no key, default Film/TV): suggestion API for search, GraphQL for
+  detail (real rating + episode count, fetched on add via `/search/imdb-detail`)
+  and for Explore. IMDb title pages are AWS-WAF-walled and unused.
+- **Goodreads** (no key, default Books): `auto_complete` JSON for search, page
+  `__NEXT_DATA__`/`ld+json` scrape for detail + **whole-series add** (a
+  `/series/<id>` URL → one entry per numbered book), genre shelves for Explore.
+  `/search` is WAF-walled and unused.
+- **NovelUpdates** (no key): HTML scrape behind Cloudflare; intermittently
+  blocked server-side, so the extension provides a silent first-party fallback.
+- Ratings out of 5 (Goodreads, NovelUpdates) are normalised ×2 to 0–10.
 
 **Available sources.** The Add-Entry and Explore source pickers only offer the
 sources enabled in Console -> Search Sources (sitewide; localStorage
 `available_sources` in `frontend/pages/components/searchSources.js`). The default
-`DEFAULT_SOURCES` is roughly one provider per medium — TMDB (film/TV), Jikan
+`DEFAULT_SOURCES` is roughly one provider per medium — **IMDb (film/TV)**, Jikan
 (anime/manga) with MangaUpdates as a manga backup, NovelUpdates (light/web novel),
-**RAWG (games)**, VNDB (visual novels), Google Books (books), ComicVine (comics) —
+RAWG (games), VNDB (visual novels), **Goodreads (books)**, ComicVine (comics) —
 chosen to avoid duplicate hits across overlapping sources (e.g. AniList vs Jikan).
 
 **Explore recommender.** `explore_service.py` reuses the providers' trending /
 popular endpoints per medium, restricted to the available sources, drops owned
 titles, and ranks by popularity plus an optional bias toward the user's
-consumption profile (off when `ui.explore.personalize` is false).
+consumption profile (off when `ui.explore.personalize` is false). Results are
+cached per `(user, medium)`, so leaving a slow scan and returning shows the
+finished set. The Explore page also keeps a per-medium client cache so toggling a
+source only queries the newly-added source instead of a full reroll; if Goodreads
+shelves are blocked, the extension loads them first-party and merges them in.
 
 ---
 

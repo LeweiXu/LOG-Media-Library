@@ -62,7 +62,7 @@ medium, so a film and a web novel are filtered, sorted, and counted the same way
   duplicates.
 
 ### Adding media
-- **Auto metadata search**: type a title and Logarium fans out across **13
+- **Auto metadata search**: type a title and Logarium fans out across **15
   external providers** concurrently, normalises every result into a common
   shape, deduplicates by title/medium, and ranks them (exact-title matches
   first) so you can add a fully-populated entry (cover, year, counts, source)
@@ -72,13 +72,19 @@ medium, so a film and a web novel are filtered, sorted, and counted the same way
 
   | Domain            | Providers                                             |
   |-------------------|-------------------------------------------------------|
-  | Film & TV         | TMDB                                                  |
+  | Film & TV         | IMDb (default), TMDB                                  |
   | Anime & Manga     | AniList, Jikan (MyAnimeList), Kitsu, MangaDex         |
   | Games             | IGDB, RAWG                                            |
-  | Books             | Google Books, Open Library                            |
+  | Books             | Goodreads (default), Google Books, Open Library       |
   | Novels            | NovelUpdates, MangaUpdates                            |
   | Comics            | ComicVine                                             |
   | Visual Novels     | VNDB                                                  |
+
+  IMDb (suggestion + GraphQL APIs) and Goodreads (autocomplete + page scrape)
+  need no key; IMDb is the Film/TV default for its authoritative ratings and
+  episode counts, Goodreads the Book default for its richer metadata. Goodreads
+  also supports **whole-series add**: paste a series URL and every numbered book
+  surfaces as its own entry.
 
   Every provider is **optional and best-effort**: one with no API key, or one
   that errors or times out, is silently skipped so you always get partial
@@ -120,8 +126,12 @@ medium, so a film and a web novel are filtered, sorted, and counted the same way
   can't be hot-linked: the extension fetches the image first-party (attaching
   your own `cf_clearance` cookie) and uploads the bytes to your server, which
   stores them so the cover renders from your own cache afterward.
-- Doubles as a silent search fallback for sources (like NovelUpdates) that are
-  Cloudflare-blocked server-side.
+- Doubles as a silent fallback for sources blocked server-side: NovelUpdates
+  search (Cloudflare) and Goodreads recommendations (WAF) are fetched first-party
+  in the background and merged in. When a source is blocked and the extension
+  isn't installed, the app points you to install it from the Console page.
+- Install/update is surfaced on the **Console** page; the Dashboard shows an
+  "Update Extension" link only when an installed copy is out of date.
 
 ### Accounts & data
 - **Multi-user** with JWT bearer auth; **every** library/stats/search query is
@@ -168,6 +178,114 @@ for Dashboard, Library, Explore, Statistics, and Console (settings + library
 tools; Manage is a multi-select mode within Library). All network calls go
 through a single `api.jsx` helper layer; styling is plain CSS in a deliberate
 dark terminal aesthetic (no UI framework), with a user-selectable accent colour.
+
+---
+
+## How Each Source Works
+
+Every provider lives in `backend/services/search_providers/<name>.py`, exposes a
+`search_<name>()` (and usually a `_discover_<name>()` for Explore), is registered
+in `search_providers/__init__.py` + `search_service.py`, and is **best-effort**:
+a missing key, timeout, or block degrades to `[]` rather than failing the search.
+Ratings are normalised to a **0–10 `external_rating`** (sources scored out of 5
+are multiplied by 2). Add-by-URL resolvers live in `url_scrapers/<name>.py`.
+
+### Keyed REST APIs
+
+These call an official/stable JSON API and are skipped unless their key is set
+(see [Environment](#9-environment-variables)).
+
+| Source | Key | Mediums | Notes |
+|--------|-----|---------|-------|
+| **TMDB** | `TMDB_API_KEY` | Film, TV Show | `search/movie` + `search/tv`; trending endpoints for Explore. Rating is TMDB `vote_average`. Still the fallback for Film/TV behind IMDb. |
+| **IGDB** | `IGDB_CLIENT_ID` + `IGDB_CLIENT_SECRET` | Game | Twitch-auth'd API; token fetched and cached at call time. |
+| **RAWG** | `RAWG_API_KEY` | Game | Default game source. |
+| **Google Books** | `GOOGLE_BOOKS_API_KEY` (optional) | Book | Works keyless at a lower quota. |
+| **ComicVine** | `COMICVINE_API_KEY` | Comic | Default comic source. |
+
+### Keyless REST / GraphQL APIs
+
+No credentials; reachable server-side directly.
+
+- **AniList** — GraphQL (`graphql.anilist.co`). Anime & Manga.
+- **Jikan** — unofficial MyAnimeList REST. Anime & Manga. When you add an
+  *ongoing* MAL manga with no chapter total, the form fills it on demand from
+  MangaUpdates via `GET /search/chapter-count` (shown as `fetching…` in the
+  Total field while it resolves).
+- **Kitsu** — JSON:API. Anime & Manga.
+- **MangaDex** — REST. Manga & Comic.
+- **MangaUpdates** — REST. Manga (curated metadata); also powers the chapter-count
+  lookup above.
+- **VNDB** — POST query API. Visual Novels.
+- **Open Library** — REST. Book fallback.
+
+### IMDb — suggestion + GraphQL (no key, default for Film/TV)
+
+IMDb's HTML title pages sit behind an AWS WAF JS challenge, but two backend
+surfaces are reachable anonymously, so **no extension is needed**:
+
+- **Search** → the autocomplete endpoint `v3.sg.media-imdb.com/suggestion/x/<q>.json`
+  (title, year, type → Film/TV, poster). It returns no rating/episode count, so
+  those stay blank on the result card.
+- **Detail / on-add enrich** → `POST api.graphql.imdb.com` for the real IMDb
+  rating, episode `total`, year, cover, genres, and plot. The add form fetches
+  this on demand (`GET /search/imdb-detail?id=tt…`, helper `fetchImdbDetail`),
+  showing `fetching…` in the Total and Source-Rating fields meanwhile.
+- **Explore** → GraphQL `advancedTitleSearch` ranked by popularity, optionally
+  genre-constrained from your taste profile.
+- **Add by URL** (`url_scrapers/imdb.py`) resolves a `tt…` id via the same
+  GraphQL detail call, falling back to TMDB `/find` then a JSON-LD scrape.
+
+IMDb ratings are already 0–10 (no scaling). It's the Film/TV default for its
+authoritative ratings and episode counts; TMDB stays available for covers/blurbs.
+
+### Goodreads — autocomplete + page scrape (no key, default for Books)
+
+Goodreads `/search` is WAF-walled, but its other surfaces are reachable with a
+browser-impersonated request (`curl_cffi`):
+
+- **Search** → the WAF-free `book/auto_complete` JSON.
+- **Book detail / Add by URL** (`url_scrapers/goodreads.py`) → scrapes the book
+  page's `__NEXT_DATA__` Apollo blob (+ `ld+json`) for title, page count, year,
+  cover, genres, rating.
+- **Whole-series add** → pasting a `/series/<id>` URL parses the series page for
+  the canonical numbered installments (incl. decimals like #0.5 / #4.5, excluding
+  foreign editions / omnibuses / box sets), concurrently fetches each book page,
+  and returns one `SearchResult` per book — so every book lands as its own entry.
+- **Explore** → genre **shelf** pages (`/shelf/show/<genre>`), which are reachable
+  server-side; if they're ever blocked, the extension loads the shelf first-party
+  and the results are merged in (see below).
+
+Goodreads ratings are out of 5 → ×2.
+
+### NovelUpdates — Cloudflare scrape with extension fallback
+
+NovelUpdates has no API and sits behind Cloudflare, so everything is an HTML
+scrape via `curl_cffi`: the Series Finder for search, the series page for
+add-by-URL, and the Top-Series rankings for Explore. Ratings are out of 5 → ×2.
+
+When Cloudflare's managed challenge fires, the server-side scrape returns nothing.
+The **browser extension** is the fallback: it runs the same search first-party in
+a background tab (with your `cf_clearance` cookie) and merges the results in
+silently. It also **caches NovelUpdates covers** (which 403 when hot-linked) by
+fetching them first-party and uploading the bytes to `/covers/upload`. If a
+source comes back blocked and the extension isn't installed, the app links you to
+install it from the Console page.
+
+### Other URL-only sources
+
+`url_scrapers/` also resolves **JJWXC** and **Qidian** (Chinese web-novel pages,
+scraped) from a pasted URL, plus the keyed/keyless API sources above (so a TMDB,
+AniList, MAL, Goodreads, IMDb, … link resolves straight to a prefilled entry).
+
+### The browser extension's role
+
+The extension is **optional** — the app works without it — but it unblocks the
+sources the server can't always reach: it provides the silent fallback for
+**NovelUpdates search** and **Goodreads recommendations**, caches Cloudflare-gated
+**covers**, and lets you add the page you're viewing in two clicks. Install/update
+lives on the **Console** page; the Dashboard shows an "Update Extension" link only
+when an installed copy is out of date.
 
 ---
 
@@ -409,9 +527,25 @@ Then load `extension/dist` as a temporary/unpacked extension:
 
 > Temporary installs are wiped on Firefox restart and nag on every Chrome
 > startup. For a permanent install, package/sign as below. Production builds
-> (`package` / `sign:firefox`) use `.env.production` automatically.
+> (`package` / `sign:firefox` / `release`) use `.env.production` automatically.
 
-#### Permanent Chrome `.zip`
+#### One-shot release (both artifacts)
+
+```bash
+npm run release                   # bump patch, build, emit Chrome .zip + signed .xpi
+npm run release -- minor          # bump minor instead (or `-- major`)
+```
+
+`npm run release` (`extension/scripts/release.js`) is the normal path: it
+**bumps the version automatically** (patch by default; `public/manifest.json` is
+the source of truth, `package.json` is kept in sync), builds, then produces both
+the Chrome `.zip` (`web-ext build`) and the signed Firefox `.xpi`
+(`web-ext sign`, needs the AMO credentials below) under
+`extension/dist-artifacts/`. Because it bumps before building, you **don't need
+to edit the version by hand** — and AMO won't reject a duplicate version. The
+`package` / `sign:firefox` scripts below build a single artifact without bumping.
+
+#### Permanent Chrome `.zip` only
 
 ```bash
 npm run package                   # → extension/dist-artifacts/logarium-<version>-chrome.zip
@@ -422,8 +556,7 @@ Distribute via the [Chrome Web Store Developer Dashboard](https://chrome.google.
 → complete the listing. The review justifies the broad permissions
 (`<all_urls>` + `cookies` + `declarativeNetRequestWithHostAccess`), which exist
 solely to fetch cover images first-party and attach the user's own
-`cf_clearance` cookie for Cloudflare-gated covers. Bump `version` in
-`extension/public/manifest.json` for each update.
+`cf_clearance` cookie for Cloudflare-gated covers.
 
 #### Permanent Firefox `.xpi` (signed)
 
@@ -441,8 +574,10 @@ carries the required `browser_specific_settings.gecko.id`.
 3. Install permanently: `about:addons` → gear icon → **Install Add-on From
    File…** → pick the `.xpi`.
 
-Bump `version` in `extension/public/manifest.json` before each signed build
-(AMO rejects duplicate versions).
+> Prefer `npm run release` (above) for routine updates — it bumps the version
+> automatically and emits both artifacts in one step. Reach for `sign:firefox`
+> only when you want the `.xpi` alone; if you do, bump `version` in
+> `extension/public/manifest.json` first (AMO rejects duplicate versions).
 
 > The extension's bridge content script is only injected on the origins listed
 > under `content_scripts.matches` in `extension/public/manifest.json`
