@@ -22,7 +22,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -116,6 +116,20 @@ run('web-ext', [
 run('web-ext', [
   'sign', '--source-dir', 'dist', '--artifacts-dir', 'dist-artifacts', '--channel', 'unlisted',
 ], amoCreds);
+
+// Both new artifacts now exist — prune every older .zip/.xpi so the dir only
+// ever holds the current version. Anything whose name doesn't contain the new
+// version string is a previous release; keep the just-built files.
+const artifactsDir = join(root, 'dist-artifacts');
+let pruned = 0;
+for (const file of readdirSync(artifactsDir)) {
+  if (!/\.(zip|xpi)$/i.test(file)) continue;
+  if (file.includes(next)) continue; // keep the just-built artifacts
+  unlinkSync(join(artifactsDir, file));
+  console.log(`  ✗ removed old artifact ${file}`);
+  pruned += 1;
+}
+if (pruned) console.log(`  pruned ${pruned} previous artifact${pruned === 1 ? '' : 's'}.`);
 
 console.log(`\n✓ Released v${next}. Artifacts in extension/dist-artifacts/:`);
 console.log(`    logarium-${next}-chrome.zip   (Chrome/zip)`);
