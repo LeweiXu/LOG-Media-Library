@@ -87,6 +87,10 @@ export function scrapeNovelUpdates() {
   const ratingMatch = document.body.textContent.match(/(\d(?:\.\d+)?)\s*\/\s*5/);
   if (ratingMatch) external_rating = Math.round(parseFloat(ratingMatch[1]) * 2 * 10) / 10;
 
+  // Full synopsis lives in #editdescription.
+  const descEl = document.querySelector('#editdescription');
+  const description = descEl ? descEl.textContent.replace(/\s+/g, ' ').trim() : '';
+
   return {
     title,
     medium,
@@ -99,6 +103,7 @@ export function scrapeNovelUpdates() {
     external_url: `https://www.novelupdates.com/series/${slug}/`,
     genres,
     external_rating,
+    description: description || null,
     status: 'planned',
   };
 }

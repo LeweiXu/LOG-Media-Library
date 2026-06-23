@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import re
 from typing import Optional
@@ -53,17 +54,23 @@ def _external_rating_from_text(text: str) -> Optional[float]:
 def _synopsis_from_box(box) -> Optional[str]:
     """Full series synopsis from a NU listing box.
 
-    Every Series Finder / ranking result keeps its full description in a hidden
-    ``.search_body_nu .testhide`` block (the visible teaser is truncated). Strip
-    the "more>>/<<less" toggle controls and collapse whitespace. Mirrors the
+    The visible first paragraph sits as a bare text node directly inside
+    ``.search_body_nu``; the continuation lives in a hidden ``.testhide`` block.
+    Reading only ``.testhide`` (as we used to) dropped that first paragraph, so
+    take the whole body instead and strip its structural children (title / stats
+    / genre sub-blocks) and the "more>>/<<less" toggle controls. Mirrors the
     extension's ``scrapeNuSearchResults`` so direct + fallback fetches agree.
     """
-    hidden = box.select_one(".search_body_nu .testhide")
-    if not hidden:
+    body = box.select_one(".search_body_nu")
+    if not body:
         return None
-    for junk in hidden.select(".morelink, .moreless, span.list, a"):
+    clone = copy.copy(body)
+    for junk in clone.select(
+        ".search_title, .search_stats, .search_genre, .dots, "
+        ".morelink, .moreless, span.list, a"
+    ):
         junk.extract()
-    text = re.sub(r"\s+", " ", hidden.get_text(" ", strip=True))
+    text = re.sub(r"\s+", " ", clone.get_text(" ", strip=True))
     text = re.sub(r"(more>>|<<\s*less)\s*$", "", text, flags=re.I).strip()
     return text[:800] or None
 

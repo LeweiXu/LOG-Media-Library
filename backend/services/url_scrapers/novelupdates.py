@@ -116,6 +116,13 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
         if text:
             genres.append(text)
 
+    # Full synopsis lives in #editdescription (paragraphs joined by <p> breaks).
+    description: Optional[str] = None
+    desc_tag = soup.select_one("#editdescription")
+    if desc_tag:
+        desc_text = re.sub(r"\s+", " ", desc_tag.get_text(" ", strip=True)).strip()
+        description = desc_text[:800] or None
+
     # Overall rating shown as e.g. "4.3 / 5" — normalise to a 0–10 scale.
     external_rating: Optional[float] = None
     rating_match = re.search(r"(\d(?:\.\d+)?)\s*/\s*5", soup.get_text(" ", strip=True))
@@ -134,7 +141,7 @@ async def fetch(client, url: str) -> Optional[SearchResult]:
         total=total,
         external_id=series_id,
         source="novelupdates",
-        description=None,
+        description=description,
         external_url=f"https://www.novelupdates.com/series/{slug}/",
         genres=", ".join(genres) or None,
         external_rating=external_rating,

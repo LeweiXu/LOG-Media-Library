@@ -594,13 +594,15 @@ function scrapeNuSearchResults() {
       if (rm) external_rating = Math.round(parseFloat(rm[1]) * 2 * 10) / 10;
     }
 
-    // Synopsis: NU keeps the full text in a hidden ".testhide" block; strip the
+    // Synopsis: the visible first paragraph is a bare text node in
+    // ".search_body_nu" and the continuation lives in a hidden ".testhide"
+    // block, so take the whole body and strip its structural children +
     // "more>>/<<less" toggles. Fall back to a genres/updated summary.
     let description = '';
-    const hidden = box.querySelector('.search_body_nu .testhide');
-    if (hidden) {
-      const clone = hidden.cloneNode(true);
-      clone.querySelectorAll('.morelink, .moreless, span.list, a').forEach((e) => e.remove());
+    const body = box.querySelector('.search_body_nu');
+    if (body) {
+      const clone = body.cloneNode(true);
+      clone.querySelectorAll('.search_title, .search_stats, .search_genre, .dots, .morelink, .moreless, span.list, a').forEach((e) => e.remove());
       description = clone.textContent.replace(/\s+/g, ' ').replace(/(more>>|<<\s*less)\s*$/i, '').trim();
     }
     if (!description) {
@@ -822,11 +824,15 @@ function scrapeNovelUpdates() {
   const ratingMatch = document.body.textContent.match(/(\d(?:\.\d+)?)\s*\/\s*5/);
   if (ratingMatch) external_rating = Math.round(parseFloat(ratingMatch[1]) * 2 * 10) / 10;
 
+  // Full synopsis lives in #editdescription.
+  const descEl = document.querySelector('#editdescription');
+  const description = descEl ? descEl.textContent.replace(/\s+/g, ' ').trim() : '';
+
   return {
     title, medium, origin, year, cover_url, total, external_id,
     source: 'novelupdates',
     external_url: `https://www.novelupdates.com/series/${slug}/`,
-    genres, external_rating, status: 'planned',
+    genres, external_rating, description: description || null, status: 'planned',
   };
 }
 
