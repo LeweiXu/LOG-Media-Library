@@ -442,7 +442,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   return (
     <div className="stats-layout">
       <div className="settings-page">
-        <div className="page-head" style={{ marginBottom: 20, borderBottom: 'none', paddingBottom: 0 }}>
+        <div className="page-head" style={{ marginBottom: 16 }}>
           <div className="page-head-left">
             <span className="page-title">Console</span>
             <span className="page-desc">library tools & settings</span>
