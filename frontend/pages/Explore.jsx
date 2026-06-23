@@ -26,6 +26,36 @@ const REC_PAGE_SIZE = 30;
 //   medium -> { sources: string[], items, affinity, personalised }
 const exploreCache = {};
 
+// In-flight FULL explore fetches (Reroll/Refresh, or any cache miss), keyed by
+// effectiveMedium — module scope, not component state. This is the slow
+// multi-provider scan the loading message tells users they can leave the page
+// during, so the request must never be tied to (or cancelled by) any one
+// component instance: navigating away and back just remounts the page, which
+// then finds the same promise here and joins it (showing the loading skeleton
+// the whole time) instead of starting a duplicate scan or rendering stale
+// cached data as if the reroll had been silently dropped.
+const exploreFullFetchInFlight = {};
+// When each in-flight full fetch actually started (module scope, alongside the
+// promise above) — lets a remounted page compute the real elapsed time instead
+// of restarting the "Ns elapsed" counter from 0 just because it's a new mount.
+const exploreFullFetchStartedAt = {};
+
+function fetchExploreFull(effectiveMedium, { seed, refreshFlag, want }) {
+  const existing = exploreFullFetchInFlight[effectiveMedium];
+  if (existing) return existing;
+  exploreFullFetchStartedAt[effectiveMedium] = Date.now();
+  const promise = getExplore({
+    medium: effectiveMedium, limit: EXPLORE_FETCH_LIMIT, seed, refresh: refreshFlag, sources: want,
+  }).finally(() => {
+    if (exploreFullFetchInFlight[effectiveMedium] === promise) {
+      delete exploreFullFetchInFlight[effectiveMedium];
+      delete exploreFullFetchStartedAt[effectiveMedium];
+    }
+  });
+  exploreFullFetchInFlight[effectiveMedium] = promise;
+  return promise;
+}
+
 export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [items,        setItems]        = useState([]);
@@ -35,15 +65,6 @@ export default function Explore() {
   const [error,        setError]        = useState('');
   const [scanSeconds,  setScanSeconds]  = useState(0);
   const exploreRequestSeq = useRef(0);
-
-  // Tick a seconds counter while a scan is running so the long source fan-out
-  // shows progress (and reassures the user they don't have to wait on the page).
-  useEffect(() => {
-    if (!loading) { setScanSeconds(0); return; }
-    setScanSeconds(0);
-    const t = setInterval(() => setScanSeconds(s => s + 1), 1000);
-    return () => clearInterval(t);
-  }, [loading]);
 
   // Medium filter — restored from the URL (?medium=) on load and kept in sync
   // there, so a reload (or a shared link) lands on the same filtered view.
@@ -104,6 +125,22 @@ export default function Explore() {
   // Confirm dialog before a reroll that scans every medium (the slow path).
   const [confirmReroll, setConfirmReroll] = useState(false);
 
+  // Tick a seconds counter while a scan is running so the long source fan-out
+  // shows progress. Derived from the in-flight fetch's real start time (module
+  // scope, see `exploreFullFetchStartedAt` above) rather than this component's
+  // own mount time, so switching away and back mid-scan shows the actual
+  // elapsed time instead of restarting the count from 0.
+  useEffect(() => {
+    if (!loading) { setScanSeconds(0); return; }
+    const tick = () => {
+      const startedAt = exploreFullFetchStartedAt[effectiveMedium];
+      setScanSeconds(startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [loading, effectiveMedium]);
+
   // Keep the medium filter in the URL (?medium=) so a reload restores it.
   useEffect(() => {
     setSearchParams(prev => {
@@ -133,9 +170,15 @@ export default function Explore() {
     try {
       const want = [...availableSet];
       const cached = exploreCache[effectiveMedium];
+      // A full (cache-busting) fetch already running for this medium — e.g. a
+      // Reroll started before the user navigated away and came back. Treat that
+      // exactly like a cache miss below (join it, stay in "loading") instead of
+      // rendering the stale pre-reroll cache just because this mount's own
+      // `force`/`refreshFlag` happen to be false.
+      const fullInFlight = !!exploreFullFetchInFlight[effectiveMedium];
       // Reuse the cache only when the bias settings still match; a Personalize /
       // dimension change invalidates it and forces a fresh ranked fetch.
-      const incremental = !force && !refreshFlag && cached
+      const incremental = !force && !refreshFlag && !fullInFlight && cached
         && cached.personalize === personalize && cached.by === exploreBy;
 
       let recs, affinity, personalised;
@@ -152,9 +195,11 @@ export default function Explore() {
           recs = mergeResults(recs, data.items || []);
         }
       } else {
-        const data = await getExplore({
-          medium: effectiveMedium, limit: EXPLORE_FETCH_LIMIT, seed, refresh: refreshFlag, sources: want,
-        });
+        // Joins the shared in-flight promise if one is already running for this
+        // medium, rather than firing a second concurrent scan — the network
+        // request itself is never aborted by leaving the page, so any (re)mount
+        // just attaches to whatever's already in progress.
+        const data = await fetchExploreFull(effectiveMedium, { seed, refreshFlag, want });
         if (requestSeq !== exploreRequestSeq.current) return;
         recs = data.items || [];
         affinity = data.affinity || null;
@@ -430,7 +475,7 @@ export default function Explore() {
             <span className="page-title">Explore</span>
             {!searchActive && (
               <span className="page-desc">
-                {loading ? <span className="loading-dots">scanning{scanSeconds >= 2 ? ` ${scanSeconds}s` : ''}</span>
+                {loading ? <span className="loading-dots">scanning</span>
                          : `${visibleItems.length} suggestions`}
               </span>
             )}

@@ -438,19 +438,14 @@ async def explore_media(
     target_limit = max(limit, _MIN_RECOMMENDATIONS_PER_MEDIUM)
     owned = _owned_entry_keys(db, username)
 
-    if not refresh:
-        cached = _read_cache(db, username, medium, personalize, sources, combine_all)
-        if cached is not None:
-            return _finalise(db, username, profile, cached, limit, personalize)
-
-    rng = random.Random(seed) if seed is not None else random.Random()
-
     all_mediums = [
         "Anime", "Manga", "Film", "TV Show", "Game", "Book",
         "Light Novel", "Web Novel", "Comic", "Visual Novel",
     ]
 
-    # Decide which mediums to fetch.
+    # Decide which mediums would be queried — computed up front (independent of
+    # a cache hit) so the response cap below accounts for the real medium count
+    # whether this call fetches fresh or serves the cache.
     combined_view = not (medium and medium in VALID_MEDIUMS)
     if not combined_view:
         mediums_to_query = [medium]
@@ -472,6 +467,22 @@ async def explore_media(
     # Drop any medium with no available provider so we don't waste a fetch slot
     # on a medium whose results would all be filtered out.
     mediums_to_query = [m for m in mediums_to_query if _providers_for(m, sources)]
+
+    # Each queried medium independently targets `target_limit` items — the
+    # budget is never split across mediums (a prior version divided
+    # `target_limit` by the medium count, which starved every medium down to
+    # ~10 items in combined "All" mode). The response cap below scales with the
+    # medium count instead, so the combined "All" feed can surface hundreds of
+    # recommendations in total while a single-medium fetch still respects the
+    # caller's `limit`.
+    response_limit = target_limit * max(len(mediums_to_query), 1) if combined_view else limit
+
+    if not refresh:
+        cached = _read_cache(db, username, medium, personalize, sources, combine_all)
+        if cached is not None:
+            return _finalise(db, username, profile, cached, response_limit, personalize)
+
+    rng = random.Random(seed) if seed is not None else random.Random()
 
     # Neutral mode runs discovery without genre hints so nothing is steered
     # toward the user's tastes.
@@ -506,11 +517,7 @@ async def explore_media(
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         tasks = []
-        target_per_medium = (
-            target_limit
-            if len(mediums_to_query) == 1
-            else max(8, target_limit // max(len(mediums_to_query), 1))
-        )
+        target_per_medium = target_limit
         for med in mediums_to_query:
             medium_rng = random.Random(rng.randint(0, 2**31 - 1))
             tasks.append(
@@ -564,7 +571,7 @@ async def explore_media(
     to_cache = [i.model_copy(update={"matches": [], "in_library": False}) for i in items]
     _write_cache(db, username, medium, to_cache, personalize, sources, combine_all)
 
-    return _finalise(db, username, profile, items, limit, personalize)
+    return _finalise(db, username, profile, items, response_limit, personalize)
 
 
 def _finalise(
