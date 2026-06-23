@@ -250,6 +250,12 @@ DEFAULT_UI: dict[str, Any] = {
         "personalize": True,
         "hide_in_library": True,
         "by": "all",                     # "all" | "genre" | "medium" | "origin"
+        # When True (default) the "All" view is the union of every medium's
+        # recommendations, mixed together, and the left-sidebar medium acts as a
+        # pure filter over that one set. When False it falls back to the legacy
+        # behaviour where "All" is its own recommender over the user's top
+        # mediums and each medium is a separate fetch.
+        "combine_all": True,
     },
 }
 

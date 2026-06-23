@@ -26,9 +26,10 @@ Pipeline
 Caching
 ───────
 Results are cached per ``(username, medium)`` in the ``explore_cache`` table.
-Only the Refresh button on the Explore page invalidates a cache row — every
-other request reads from cache (re-filtering library titles live so that
-adding an entry on one tab doesn't show stale "available" items on another).
+Only the Reroll button on the Explore page invalidates a cache row (via
+``refresh=True``) — every other request reads from cache (re-filtering library
+titles live so that adding an entry on one tab doesn't show stale "available"
+items on another).
 
 Discovery providers live inline below — they hit known popular/trending
 endpoints rather than reusing the title-search code paths.
@@ -311,6 +312,9 @@ _BIAS_CAP_ORIGIN = 0.5
 _BIAS_CAP_ALL_GENRE  = 0.35
 _BIAS_CAP_ALL_MEDIUM = 0.25
 _BIAS_CAP_ALL_ORIGIN = 0.25
+# Combined "All" view: a strong medium bias so the user's most-consumed mediums
+# clearly lead the mixed feed (larger than the jitter amplitude on purpose).
+_BIAS_CAP_COMBINED_MEDIUM = 3.0
 _JITTER_AMPLITUDE    = 2.4
 _BIAS_MATCH_THRESHOLD = 0.25
 
@@ -334,12 +338,12 @@ def _scalar_bias(value: Optional[str], weights: dict[str, float], cap: float) ->
 # ── Per-(user, medium) result cache ───────────────────────────────────────────
 #
 # Stored in the ``explore_cache`` table. We only refresh on an explicit
-# request from the frontend (the Refresh button on the Explore page); every
+# request from the frontend (the Reroll button on the Explore page); every
 # other read returns the cached payload, after re-applying the live "in
 # library" filter so adding an entry on one tab doesn't leave it visible on
 # another.
 
-def _cache_key(medium: Optional[str], personalize: bool = True, sources: Optional[set[str]] = None) -> str:
+def _cache_key(medium: Optional[str], personalize: bool = True, sources: Optional[set[str]] = None, combine_all: bool = True) -> str:
     """Normalise a medium hint into the string used as the cache key.
 
     Empty string is the cache key for the "All" sidebar tab. Neutral
@@ -352,17 +356,22 @@ def _cache_key(medium: Optional[str], personalize: bool = True, sources: Optiona
     base = medium or ""
     if not personalize:
         base += "|n"
+    # The combined-vs-legacy "All" views both key off the empty medium but
+    # return different sets, so flag the legacy one to cache them apart. Only
+    # matters for the combined view (a specific medium ignores combine_all).
+    if not medium and not combine_all:
+        base += "|L"
     if sources:
         digest = hashlib.sha1(",".join(sorted(sources)).encode()).hexdigest()[:10]
         base += "|s" + digest
     return base
 
 
-def _read_cache(db: Session, username: str, medium: Optional[str], personalize: bool = True, sources: Optional[set[str]] = None) -> Optional[list[ExploreItem]]:
+def _read_cache(db: Session, username: str, medium: Optional[str], personalize: bool = True, sources: Optional[set[str]] = None, combine_all: bool = True) -> Optional[list[ExploreItem]]:
     row = db.execute(
         select(ExploreCache.items_json).where(
             ExploreCache.username == username,
-            ExploreCache.medium   == _cache_key(medium, personalize, sources),
+            ExploreCache.medium   == _cache_key(medium, personalize, sources, combine_all),
         )
     ).first()
     if not row:
@@ -375,9 +384,9 @@ def _read_cache(db: Session, username: str, medium: Optional[str], personalize: 
         return None
 
 
-def _write_cache(db: Session, username: str, medium: Optional[str], items: list[ExploreItem], personalize: bool = True, sources: Optional[set[str]] = None) -> None:
+def _write_cache(db: Session, username: str, medium: Optional[str], items: list[ExploreItem], personalize: bool = True, sources: Optional[set[str]] = None, combine_all: bool = True) -> None:
     payload = json.dumps([i.model_dump() for i in items])
-    key = _cache_key(medium, personalize, sources)
+    key = _cache_key(medium, personalize, sources, combine_all)
     existing = db.execute(
         select(ExploreCache).where(
             ExploreCache.username == username,
@@ -408,6 +417,7 @@ async def explore_media(
     medium:      Optional[str] = None,
     explore_by:  str           = "all",
     personalize: bool          = True,
+    combine_all: bool          = True,
     sources:     Optional[set[str]] = None,
     limit:       int           = 40,
     seed:        Optional[int] = None,
@@ -429,28 +439,35 @@ async def explore_media(
     owned = _owned_entry_keys(db, username)
 
     if not refresh:
-        cached = _read_cache(db, username, medium, personalize, sources)
+        cached = _read_cache(db, username, medium, personalize, sources, combine_all)
         if cached is not None:
             return _finalise(db, username, profile, cached, limit, personalize)
 
     rng = random.Random(seed) if seed is not None else random.Random()
 
+    all_mediums = [
+        "Anime", "Manga", "Film", "TV Show", "Game", "Book",
+        "Light Novel", "Web Novel", "Comic", "Visual Novel",
+    ]
+
     # Decide which mediums to fetch.
-    if medium and medium in VALID_MEDIUMS:
+    combined_view = not (medium and medium in VALID_MEDIUMS)
+    if not combined_view:
         mediums_to_query = [medium]
+    elif combine_all:
+        # New default "All": the union of every medium so the left-sidebar
+        # filter has the full set to slice. Ordering (below) still prioritises
+        # the user's most-consumed mediums when personalized.
+        mediums_to_query = list(all_mediums)
     else:
-        # When "all": personalized mode prefers the mediums the user already
-        # consumes; neutral mode always uses the full default mix for an even
-        # spread across mediums.
+        # Legacy "All": its own recommender over the user's top mediums;
+        # neutral mode uses the full default mix for an even spread.
         if personalize and profile.mediums:
             mediums_to_query = [m for m, _ in profile.mediums.most_common(3)]
         else:
             mediums_to_query = []
         if not mediums_to_query:
-            mediums_to_query = [
-                "Anime", "Manga", "Film", "TV Show", "Game", "Book",
-                "Light Novel", "Web Novel", "Comic", "Visual Novel",
-            ]
+            mediums_to_query = list(all_mediums)
 
     # Drop any medium with no available provider so we don't waste a fetch slot
     # on a medium whose results would all be filtered out.
@@ -478,6 +495,14 @@ async def explore_media(
         gcap = _BIAS_CAP_ALL_GENRE
         mcap = _BIAS_CAP_ALL_MEDIUM
         ocap = _BIAS_CAP_ALL_ORIGIN
+
+    # In the combined "All" view, the result mixes every medium, so order it so
+    # the user's most-consumed mediums float to the top (req: prioritise by
+    # medium consumption) while everything still shows. This medium bias is
+    # strong enough to dominate the gentle jitter, grouping preferred mediums up
+    # top without fully sorting by medium.
+    if personalize and combined_view and combine_all:
+        mcap = max(mcap, _BIAS_CAP_COMBINED_MEDIUM)
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         tasks = []
@@ -537,7 +562,7 @@ async def explore_media(
     # re-applied at read time, so we strip them before caching to keep the
     # row small and avoid serving stale "in library" tags.
     to_cache = [i.model_copy(update={"matches": [], "in_library": False}) for i in items]
-    _write_cache(db, username, medium, to_cache, personalize, sources)
+    _write_cache(db, username, medium, to_cache, personalize, sources, combine_all)
 
     return _finalise(db, username, profile, items, limit, personalize)
 

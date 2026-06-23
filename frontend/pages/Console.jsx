@@ -657,6 +657,9 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               <ChipToggle label="Hide owned" on={exp.hide_in_library !== false}
                 onClick={() => saveUi({ explore: { hide_in_library: !(exp.hide_in_library !== false) } })}
                 title="Hide titles already in your library" />
+              <ChipToggle label="Combine all mediums" on={exp.combine_all !== false}
+                onClick={() => saveUi({ explore: { combine_all: !(exp.combine_all !== false) } })}
+                title="'All' mixes every medium's recommendations into one feed and the sidebar just filters it. Turn off for the legacy per-medium recommenders." />
             </div>
           </Row>
         </Section>

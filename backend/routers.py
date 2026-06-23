@@ -497,6 +497,7 @@ async def explore(
         medium=medium or None,
         explore_by=explore_cfg.get("by") or "all",
         personalize=explore_cfg.get("personalize", True) is not False,
+        combine_all=explore_cfg.get("combine_all", True) is not False,
         sources=source_set,
         limit=limit,
         seed=seed or None,

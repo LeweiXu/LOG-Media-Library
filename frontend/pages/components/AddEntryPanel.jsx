@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates } from '../../api.jsx';
 import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, onCoverError } from '../../utils.jsx';
-import { SEARCH_SOURCES, SOURCE_LABEL, saveSources, resultToEntry, loadAvailableSources } from './searchSources.js';
+import { SEARCH_SOURCES, SOURCE_LABEL, resultToEntry, loadAvailableSources } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
 import CustomSelect from './CustomSelect.jsx';
@@ -81,7 +81,6 @@ export default function AddEntryPanel({
     setSelectedSources(prev => {
       const next = new Set(prev);
       next.has(value) ? next.delete(value) : next.add(value);
-      saveSources(next);
       return next;
     });
   }
@@ -92,7 +91,6 @@ export default function AddEntryPanel({
 
   function clearSourcesAndSearch() {
     setSelectedSources(new Set());
-    saveSources(new Set());
     setQuery('');
     resetResults();
     onSearch?.('');

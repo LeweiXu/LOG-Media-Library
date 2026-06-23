@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getExplore } from '../api.jsx';
 import { MEDIUMS, statusLabel, onCoverError } from '../utils.jsx';
-import { loadSavedSources, loadAvailableSources } from './components/searchSources.js';
+import { loadAvailableSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import AddEntryPanel from './components/AddEntryPanel.jsx';
@@ -45,9 +45,12 @@ export default function Explore() {
     return () => clearInterval(t);
   }, [loading]);
 
-  // Local medium filter — always starts unset ("All") and is never persisted to
-  // the URL or settings, so a reload always lands on the full mixed feed.
-  const [medium, setMedium] = useState('');
+  // Medium filter — restored from the URL (?medium=) on load and kept in sync
+  // there, so a reload (or a shared link) lands on the same filtered view.
+  const initialUrlMedium = useRef(searchParams.get('medium') || '');
+  const [medium, setMedium] = useState(
+    () => (MEDIUMS.includes(initialUrlMedium.current) ? initialUrlMedium.current : ''),
+  );
 
   // Per-card UI state — keyed by stable index because explore items have no DB id
   // until added. Tracks: 'idle' | 'adding' | 'added:<status>' | 'error:<msg>'
@@ -69,15 +72,10 @@ export default function Explore() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const quickAddDirty = useRef(false);
   // Selected search sources — drive BOTH the top search box and the
-  // recommendation filtering below. Empty set = all sources. Restored from the
-  // URL (?src=) on load so a reload keeps the search; falls back to saved prefs.
-  const initialUrlSources = useRef(searchParams.get('src'));
+  // recommendation filtering below. Empty set = all sources. Plain in-memory
+  // state (never persisted) so a page reload always starts unfiltered.
   const initialUrlQuery = useRef(searchParams.get('q') || '');
-  const [selectedSources, setSelectedSources] = useState(() => {
-    const raw = initialUrlSources.current;
-    if (raw != null) return new Set(raw.split(',').filter(Boolean));
-    return loadSavedSources();
-  });
+  const [selectedSources, setSelectedSources] = useState(() => new Set());
   // True while the top search/add section is showing results or a URL preview;
   // when true we hide the recommendations and show the search output instead.
   const [searchActive, setSearchActive] = useState(false);
@@ -95,16 +93,25 @@ export default function Explore() {
   const { prefs } = usePreferences();
   const personalize = prefs?.explore?.personalize !== false;
   const exploreBy = prefs?.explore?.by || 'all';
+  // New default: "All" is one combined feed across every medium and the left
+  // sidebar is a pure client-side filter over it. When off, fall back to the
+  // legacy behaviour where each medium (and "All") is its own server fetch.
+  const combineAll = prefs?.explore?.combine_all !== false;
+  // What the server actually fetches/caches: in combine mode it's always the
+  // mixed "" feed (the sidebar filters client-side), so changing `medium` never
+  // triggers a refetch. In legacy mode it tracks the selected medium.
+  const effectiveMedium = combineAll ? '' : medium;
+  // Confirm dialog before a reroll that scans every medium (the slow path).
+  const [confirmReroll, setConfirmReroll] = useState(false);
 
-  // Keep the selected sources in the URL (?src=) so a reload restores them.
+  // Keep the medium filter in the URL (?medium=) so a reload restores it.
   useEffect(() => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
-      if (selectedSources.size) next.set('src', [...selectedSources].join(','));
-      else next.delete('src');
+      if (medium) next.set('medium', medium); else next.delete('medium');
       return next;
     }, { replace: true });
-  }, [selectedSources, setSearchParams]);
+  }, [medium, setSearchParams]);
 
   // The active search term is recorded in the URL (?q=) by the panel on search.
   const handlePanelSearch = useCallback((q) => {
@@ -125,7 +132,7 @@ export default function Explore() {
     setLoading(true); setError(''); setCardState({});
     try {
       const want = [...availableSet];
-      const cached = exploreCache[medium];
+      const cached = exploreCache[effectiveMedium];
       // Reuse the cache only when the bias settings still match; a Personalize /
       // dimension change invalidates it and forces a fresh ranked fetch.
       const incremental = !force && !refreshFlag && cached
@@ -140,13 +147,13 @@ export default function Explore() {
         affinity = cached.affinity;
         personalised = cached.personalised;
         if (added.length) {
-          const data = await getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, seed, sources: added });
+          const data = await getExplore({ medium: effectiveMedium, limit: EXPLORE_FETCH_LIMIT, seed, sources: added });
           if (requestSeq !== exploreRequestSeq.current) return;
           recs = mergeResults(recs, data.items || []);
         }
       } else {
         const data = await getExplore({
-          medium, limit: EXPLORE_FETCH_LIMIT, seed, refresh: refreshFlag, sources: want,
+          medium: effectiveMedium, limit: EXPLORE_FETCH_LIMIT, seed, refresh: refreshFlag, sources: want,
         });
         if (requestSeq !== exploreRequestSeq.current) return;
         recs = data.items || [];
@@ -154,7 +161,7 @@ export default function Explore() {
         personalised = !!data.personalised;
       }
 
-      exploreCache[medium] = { sources: want, items: recs, affinity, personalised, personalize, by: exploreBy };
+      exploreCache[effectiveMedium] = { sources: want, items: recs, affinity, personalised, personalize, by: exploreBy };
       setItems(recs);
       setAffinity(affinity);
       setPersonalised(personalised);
@@ -162,8 +169,9 @@ export default function Explore() {
       // Goodreads shelves are usually reachable server-side, but if they're
       // WAF-blocked no Goodreads books come back. When Book recs are relevant,
       // Goodreads is an available source, and the extension is present, load the
-      // shelf first-party and merge the results in.
-      const bookRelevant = !medium || medium === 'Book';
+      // shelf first-party and merge the results in. (The combined feed always
+      // includes books, so effectiveMedium is "" there.)
+      const bookRelevant = !effectiveMedium || effectiveMedium === 'Book';
       if (extPresent && bookRelevant && availableSet.has('goodreads')
           && !recs.some(it => it.source === 'goodreads')) {
         const genre = (affinity?.top_genres || [])[0] || '';
@@ -171,7 +179,7 @@ export default function Explore() {
         if (requestSeq === exploreRequestSeq.current && extra.length) {
           setItems(prev => {
             const merged = mergeResults(prev, extra);
-            if (exploreCache[medium]) exploreCache[medium].items = merged;
+            if (exploreCache[effectiveMedium]) exploreCache[effectiveMedium].items = merged;
             return merged;
           });
         }
@@ -180,14 +188,14 @@ export default function Explore() {
       // NovelUpdates rankings are Cloudflare-blocked server-side, so if no
       // web-novel recs came back, NU is available, and the extension is present,
       // load a ranking page first-party (synopsis + cached covers) and merge in.
-      const webNovelRelevant = !medium || medium === 'Web Novel';
+      const webNovelRelevant = !effectiveMedium || effectiveMedium === 'Web Novel';
       if (extPresent && webNovelRelevant && availableSet.has('novelupdates')
           && !recs.some(it => it.source === 'novelupdates')) {
         const extra = await extensionNuExplore();
         if (requestSeq === exploreRequestSeq.current && extra.length) {
           setItems(prev => {
             const merged = mergeResults(prev, extra);
-            if (exploreCache[medium]) exploreCache[medium].items = merged;
+            if (exploreCache[effectiveMedium]) exploreCache[effectiveMedium].items = merged;
             return merged;
           });
         }
@@ -200,21 +208,61 @@ export default function Explore() {
       setLoading(false);
       setRefreshFlag(false);
     }
-  }, [medium, seed, refreshFlag, availableSet, extPresent, personalize, exploreBy]);
+  }, [effectiveMedium, seed, refreshFlag, availableSet, extPresent, personalize, exploreBy]);
 
   useEffect(() => {
     fetchExplore();
   }, [fetchExplore]);
 
-  // Reroll = bypass the server-side per-medium cache AND pick a new shuffle
-  // seed, so the page surfaces a different set of suggestions.
-  const handleReroll = () => {
+  // Reroll = bypass the server-side cache AND pick a new shuffle seed, so the
+  // page surfaces a different set of suggestions.
+  const doReroll = () => {
     setRefreshFlag(true);
     setSeed(newSeed());
   };
 
-  // Refresh = force a full re-query so "in library" tags pick up changes made
-  // elsewhere (bypasses the incremental per-source path).
+  // Only the "All" filter rerolls across every medium (the slow path), so warn
+  // first there; a single-medium reroll is quick, so just do it.
+  const rerollScansAllMediums = !medium;
+  const handleReroll = () => {
+    if (rerollScansAllMediums) setConfirmReroll(true);
+    else doReroll();
+  };
+
+  // The "All" reroll confirm is medium-specific, so drop it if the filter moves.
+  useEffect(() => { setConfirmReroll(false); }, [medium]);
+
+  // Reroll control for the right sidebar. The "this may take a while" confirm
+  // for the slow all-mediums reroll replaces the button inline (no modal).
+  const rerollControl = confirmReroll ? (
+    <div className="explore-reroll-confirm">
+      <span className="explore-reroll-confirm-msg">This may take a while.</span>
+      <div className="explore-reroll-confirm-actions">
+        <button type="button" className="btn"
+          onClick={() => { setConfirmReroll(false); doReroll(); }}>Confirm</button>
+        <button type="button" className="btn btn-outline"
+          onClick={() => setConfirmReroll(false)}>Cancel</button>
+      </div>
+    </div>
+  ) : (
+    <button type="button" className="quickadd-open-btn explore-reroll-btn"
+      onClick={handleReroll} disabled={loading}
+      title="Pull a fresh set of suggestions">
+      {loading ? 'Rerolling…' : 'Reroll'}
+    </button>
+  );
+
+  // Quick Add control — now rendered at the bottom of the sidebar, in the
+  // position Reroll used to occupy.
+  const quickAddControl = (
+    <button type="button" className="quickadd-open-btn" onClick={() => setQuickAddOpen(true)}>
+      Quick Add
+    </button>
+  );
+
+  // Force a full re-query so "in library" tags pick up changes made elsewhere
+  // (bypasses the incremental per-source path). Used by error-retry and after an
+  // add from the search panel.
   const handleRefresh = () => {
     fetchExplore({ force: true });
   };
@@ -225,19 +273,20 @@ export default function Explore() {
     fetchExplore({ force: true });
   };
 
-  // Recommendations are limited to the sitewide-available sources, then further
-  // narrowed by the per-session source selection (empty = all available). Keep
-  // each item's original index so per-card add/added state stays correct.
+  // Recommendations are limited to the sitewide-available sources. In combine
+  // mode the left-sidebar medium narrows the one mixed feed client-side (source
+  // selection no longer filters recs — it only scopes the search box). Keep each
+  // item's original index so per-card add/added state stays correct.
   const visibleItems = useMemo(() => {
     const withIdx = items
       .map((item, idx) => ({ item, idx }))
       .filter(({ item }) => availableSet.has(item.source));
-    if (selectedSources.size === 0) return withIdx;
-    return withIdx.filter(({ item }) => selectedSources.has(item.source));
-  }, [items, selectedSources, availableSet]);
+    if (combineAll && medium) return withIdx.filter(({ item }) => item.medium === medium);
+    return withIdx;
+  }, [items, availableSet, combineAll, medium]);
 
   // Reset to the first page whenever the filtered set changes underneath us.
-  useEffect(() => { setRecPage(1); }, [medium, selectedSources, items]);
+  useEffect(() => { setRecPage(1); }, [medium, items]);
 
   const recTotalPages = Math.max(1, Math.ceil(visibleItems.length / REC_PAGE_SIZE));
   const pagedItems = useMemo(
@@ -303,7 +352,7 @@ export default function Explore() {
     if (created) setAddedEntries(prev => ({ ...prev, [idx]: created }));
     // Keep the persisted pool in sync so the card stays "in library" if the user
     // navigates away and back (the incremental path reuses these cached items).
-    const cached = exploreCache[medium];
+    const cached = exploreCache[effectiveMedium];
     if (cached && cached.items[idx]) cached.items[idx].in_library = true;
     setPendingAdd(null);
   }
@@ -391,19 +440,9 @@ export default function Explore() {
               type="button"
               className="drawer-toggle"
               onClick={() => setDrawer(d => d === 'right' ? '' : 'right')}
-              aria-label="Toggle taste profile"
-              title="Taste"
+              aria-label="Toggle taste profile & actions"
+              title="Taste & actions"
             >⋯</button>
-            <button className="icon-btn" onClick={handleRefresh} disabled={loading}
-              title="Re-query the current suggestions (refreshes 'in library' tags)"
-              style={{ padding: '5px 10px' }}>
-              Refresh
-            </button>
-            <button className="icon-btn" onClick={handleReroll} disabled={loading}
-              title="Bypass cache and pull a fresh set of suggestions"
-              style={{ padding: '5px 10px' }}>
-              Reroll
-            </button>
           </div>
         </div>
 
@@ -445,8 +484,8 @@ export default function Explore() {
           <div className="state-block">
             <div className="state-title">No suggestions to surface.</div>
             <div className="state-detail">
-              {items.length > 0 && selectedSources.size > 0
-                ? 'No recommendations from the selected sources for this medium — clear some source filters or change the medium.'
+              {combineAll && medium && items.length > 0
+                ? 'Nothing for this medium in the current feed — pick another medium or reroll.'
                 : 'Try a different medium, or rate a few entries to teach the recommender.'}
             </div>
           </div>
@@ -537,13 +576,16 @@ export default function Explore() {
         )}
       </main>
 
-      {/* ── Right sidebar: affinity snapshot ───────────────────────────────── */}
+      {/* ── Right sidebar: affinity snapshot + actions ─────────────────────── */}
       <aside className="sidebar-right">
         <div className="panel-title">Your library</div>
         {!affinity || affinity.sample_size === 0 ? (
-          <p className="explore-affinity-empty">
-            Add a few entries to your library to bias what shows up here.
-          </p>
+          <>
+            <p className="explore-affinity-empty">
+              Add a few entries to your library to bias what shows up here.
+            </p>
+            {quickAddControl}
+          </>
         ) : (
           <>
             <div className="explore-affinity-meta">
@@ -583,6 +625,8 @@ export default function Explore() {
               </div>
             )}
 
+            {quickAddControl}
+
             <div className="explore-affinity-note">
               {personalised
                 ? 'Ranking nudges results toward your most-consumed genres, origins, and mediums. Change the bias dimension in Console → Explore.'
@@ -590,10 +634,7 @@ export default function Explore() {
             </div>
           </>
         )}
-        <button type="button" className="quickadd-open-btn" onClick={() => setQuickAddOpen(true)}
-          style={{ marginTop: 16 }}>
-          Quick Add
-        </button>
+        <div style={{ marginTop: 16 }}>{rerollControl}</div>
       </aside>
 
       {pendingAdd && (
@@ -628,6 +669,7 @@ export default function Explore() {
           onDeleted={handleDetailDeleted}
         />
       )}
+
     </div>
   );
 }

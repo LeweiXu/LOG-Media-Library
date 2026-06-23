@@ -2700,6 +2700,41 @@ input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
   border-color: var(--accent);
   background: var(--surface2);
 }
+.quickadd-open-btn:disabled {
+  color: var(--dim);
+  cursor: default;
+  opacity: 0.7;
+}
+.quickadd-open-btn:disabled:hover {
+  border-color: var(--border2);
+  background: var(--surface);
+}
+
+/* Inline "this may take a while" confirm that replaces the Reroll button.
+ * Same boxed footprint as the button it stands in for. */
+.explore-reroll-confirm {
+  margin-bottom: 18px;
+  padding: 8px 10px;
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.explore-reroll-confirm-msg {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+.explore-reroll-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+.explore-reroll-confirm-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
 
 .quickadd-head-right { display: flex; align-items: center; gap: 12px; }
 .quickadd-tally {

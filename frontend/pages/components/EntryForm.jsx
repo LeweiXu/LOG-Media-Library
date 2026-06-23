@@ -11,6 +11,13 @@ function toDateInput(iso) {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+// Year choices for the completed-date picker — current year back 100 years.
+const CURRENT_YEAR = new Date().getFullYear();
+const COMPLETION_YEAR_OPTIONS = Array.from({ length: 101 }, (_, i) => {
+  const y = String(CURRENT_YEAR - i);
+  return { value: y, label: y };
+});
+
 export function entryToForm(entry = null) {
   return {
     title:           entry?.title           || '',
@@ -228,34 +235,54 @@ export default function EntryForm({
       </div>
 
       {form.status === 'completed' && (
-        <div className="form-row" style={{ marginBottom: 14 }}>
-          <label className="form-label">Completed Date</label>
-          <div style={{ display: 'flex', gap: 8 }}>
+        <div className="form-row-2" style={{ marginBottom: 14 }}>
+          <div>
+            <label className="form-label">Completed Date</label>
             <input className="form-input" type="date" value={form.completed_at}
-              style={{ flex: 1 }}
               onChange={e => setField('completed_at', e.target.value)} />
-            <button
-              type="button"
-              className="icon-btn"
-              style={{ padding: '5px 10px' }}
-              title="Randomize day and month, keep year"
-              onClick={() => {
-                // Year comes from the existing value if present, otherwise the
-                // entry year, otherwise today.
-                const existing = form.completed_at ? new Date(form.completed_at) : null;
-                const year = (existing && !isNaN(existing))
-                  ? existing.getFullYear()
-                  : (parseInt(form.year, 10) || new Date().getFullYear());
-                const month  = Math.floor(Math.random() * 12) + 1;             // 1–12
-                const lastDay = new Date(year, month, 0).getDate();             // last day of that month
-                const day    = Math.floor(Math.random() * lastDay) + 1;        // 1–lastDay
-                const mm = String(month).padStart(2, '0');
-                const dd = String(day).padStart(2, '0');
-                setField('completed_at', `${year}-${mm}-${dd}`);
-              }}
-            >
-              Randomize
-            </button>
+          </div>
+          <div>
+            <label className="form-label">Completion Year</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <CustomSelect
+                value={form.completed_at?.slice(0, 4) || ''}
+                options={COMPLETION_YEAR_OPTIONS}
+                onChange={year => {
+                  // Keep the existing month/day when only the year changes;
+                  // default to Jan 1 if there's no valid date yet.
+                  const rest = (form.completed_at && form.completed_at.length >= 10)
+                    ? form.completed_at.slice(4)
+                    : '-01-01';
+                  setField('completed_at', `${year}${rest}`);
+                }}
+                placeholder="Year"
+                maxVisible={6}
+                ariaLabel="Completion year"
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="icon-btn"
+                style={{ padding: '5px 10px', flex: 'none' }}
+                title="Randomize day and month, keep year"
+                onClick={() => {
+                  // Year comes from the existing value if present, otherwise the
+                  // entry year, otherwise today.
+                  const existing = form.completed_at ? new Date(form.completed_at) : null;
+                  const year = (existing && !isNaN(existing))
+                    ? existing.getFullYear()
+                    : (parseInt(form.year, 10) || new Date().getFullYear());
+                  const month  = Math.floor(Math.random() * 12) + 1;             // 1–12
+                  const lastDay = new Date(year, month, 0).getDate();             // last day of that month
+                  const day    = Math.floor(Math.random() * lastDay) + 1;        // 1–lastDay
+                  const mm = String(month).padStart(2, '0');
+                  const dd = String(day).padStart(2, '0');
+                  setField('completed_at', `${year}-${mm}-${dd}`);
+                }}
+              >
+                Randomize
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates, createEntry } from '../../api.jsx';
 import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, onCoverError } from '../../utils.jsx';
-import { SEARCH_SOURCES, SOURCE_LABEL, loadSavedSources, saveSources, resultToEntry, loadAvailableSources } from './searchSources.js';
+import { SEARCH_SOURCES, SOURCE_LABEL, resultToEntry, loadAvailableSources } from './searchSources.js';
 import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
@@ -11,7 +11,7 @@ import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../exte
 export default function AddEntryModal({ onClose, onCreated, initialEntry = null, initialTab = 'search', hideTabs = false }) {
   const [tab,             setTab]             = useState(initialTab);
   const [query,           setQuery]           = useState('');
-  const [selectedSources, setSelectedSources] = useState(() => loadSavedSources());
+  const [selectedSources, setSelectedSources] = useState(() => new Set());
   const [extended,        setExtended]        = useState(false);
   const [searching,       setSearching]       = useState(false);
   const [results,         setResults]         = useState(null);
@@ -43,7 +43,6 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
     setSelectedSources(prev => {
       const next = new Set(prev);
       next.has(value) ? next.delete(value) : next.add(value);
-      saveSources(next);
       return next;
     });
   }
@@ -199,7 +198,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
                       <button
                         type="button"
                         className="source-select-clear"
-                        onClick={() => { setSelectedSources(new Set()); saveSources(new Set()); }}
+                        onClick={() => setSelectedSources(new Set())}
                       >
                         ✕ Clear ({selectedSources.size})
                       </button>

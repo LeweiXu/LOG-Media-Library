@@ -45,25 +45,7 @@ export const DEFAULT_SOURCES = [
   'comicvine',    // comic
 ];
 
-const LS_SOURCES_KEY = 'search_sources';
 const LS_AVAILABLE_KEY = 'available_sources';
-
-// Per-session source *selection* within a picker (which available sources to
-// actually query). Empty = use all available sources.
-export function loadSavedSources() {
-  try {
-    const raw = localStorage.getItem(LS_SOURCES_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr);
-    }
-  } catch (_) { /* ignore */ }
-  return new Set();
-}
-
-export function saveSources(set) {
-  localStorage.setItem(LS_SOURCES_KEY, JSON.stringify([...set]));
-}
 
 // Sitewide set of sources that are *available* to pick (Console setting).
 // Defaults to the curated one-per-medium list above.

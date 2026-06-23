@@ -49,6 +49,7 @@ export const DEFAULT_UI = {
     personalize: true,
     hide_in_library: true,
     by: 'all',
+    combine_all: true,
   },
 };
 
