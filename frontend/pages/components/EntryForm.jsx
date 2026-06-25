@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { getCustomLists, fetchChapterCount, fetchImdbDetail } from '../../api.jsx';
-import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl } from '../../utils.jsx';
+import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl, roundToStep } from '../../utils.jsx';
+import { usePreferences, DEFAULT_UI } from '../../preferences.jsx';
 import CustomListField from './CustomListField.jsx';
 import CustomSelect from './CustomSelect.jsx';
+import NumberStepper from './NumberStepper.jsx';
 
 function toDateInput(iso) {
   if (!iso) return '';
@@ -66,6 +68,8 @@ export default function EntryForm({
   showDelete = false,
 }) {
   const isEdit = Boolean(entry?.id);
+  const { prefs } = usePreferences();
+  const ratingStep = prefs.rating_step ?? DEFAULT_UI.rating_step;
   const [form, setFormState] = useState(() => entryToForm(entry));
   const [customLists, setCustomLists] = useState([]);
   const [lastListWarning, setLastListWarning] = useState(false);
@@ -166,7 +170,10 @@ export default function EntryForm({
     setSaving(true); setErr('');
     setLastListWarning(false);
     try {
-      await onSubmit(form);
+      // Snap the rating to the configured granularity before saving (covers a
+      // typed value the user never blurred out of).
+      const rating = form.rating === '' ? '' : String(roundToStep(form.rating, ratingStep));
+      await onSubmit({ ...form, rating });
     } catch (ex) {
       setErr(ex.message);
     } finally {
@@ -326,9 +333,10 @@ export default function EntryForm({
       <div className="form-row-2" style={{ marginBottom: 14 }}>
         <div>
           <label className="form-label">Rating (0-10)</label>
-          <input className="form-input" type="number" min="0" max="10" step="0.5"
-            value={form.rating} placeholder="-"
-            onChange={e => setField('rating', e.target.value)} />
+          <NumberStepper className="form-stepper" value={form.rating} step={ratingStep}
+            min={0} max={10} placeholder="-" ariaLabel="Rating"
+            onChange={v => setField('rating', v)}
+            onCommit={() => setField('rating', form.rating === '' ? '' : String(roundToStep(form.rating, ratingStep)))} />
         </div>
         <div>
           <label className="form-label">Source Rating</label>

@@ -194,6 +194,25 @@ function Section({ title, desc, danger, children }) {
   );
 }
 
+// A collapsible tool card (Tools tab). Collapsed by default; the body only mounts
+// once expanded, so a panel's on-mount work (DedupPanel's duplicate scan, ListsPanel's
+// library load, an import/cache SSE stream) runs only when the user opens the card,
+// and aborts when they collapse it. Reuses the section header's toggle styling.
+function ToolCard({ title, desc, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="settings-section">
+      <button type="button" className="settings-section-head settings-section-toggle"
+        aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        <span className="sh-title">{title}</span>
+        {desc && <span className="sh-desc">{desc}</span>}
+        <span className="sh-toggle-ind" aria-hidden="true">{open ? '[ - ]' : '[ + ]'}</span>
+      </button>
+      {open && <div className="settings-section-body">{children}</div>}
+    </section>
+  );
+}
+
 // A single setting line: label/description on the left, control on the right.
 // `stack` drops the control onto its own full-width line below the label.
 function Row({ title, desc, stack, children }) {
@@ -484,21 +503,21 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
           </>
         )}
 
-        {/* ── Library tools (uncollapsed) ── */}
+        {/* ── Library tools — each a collapsed card; opening one mounts (and runs) it ── */}
         <p className="console-group-label">Library Tools</p>
-        <Section title="Manage Lists" desc="build, rename or delete custom lists">
+        <ToolCard title="Manage Lists" desc="build, rename or delete custom lists">
           <div className="console-tool-body">
             <ListsPanel initialTab="manage" existingLists={customLists}
               onCreated={reloadLists} onRenamed={reloadLists} onDeleted={reloadLists} />
           </div>
-        </Section>
-        <Section title="Find Duplicates" desc="merge entries that share a title + medium">
+        </ToolCard>
+        <ToolCard title="Find Duplicates" desc="merge entries that share a title + medium">
           <div className="console-tool-body"><DedupPanel /></div>
-        </Section>
-        <Section title="Cache Covers (server)" desc="download & store uncached covers on the server">
+        </ToolCard>
+        <ToolCard title="Cache Covers (server)" desc="download & store uncached covers on the server">
           <div className="console-tool-body"><CacheCoversPanel /></div>
-        </Section>
-        <Section title="Cache Covers (extension)"
+        </ToolCard>
+        <ToolCard title="Cache Covers (extension)"
           desc="resync covers first-party via the browser extension">
           <div className="console-tool-body">
             {extPresent
@@ -507,19 +526,19 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
                   Requires the Logarium browser extension.
                 </p>}
           </div>
-        </Section>
+        </ToolCard>
 
-        {/* ── Import / Export (uncollapsed) ── */}
+        {/* ── Import / Export ── */}
         <p className="console-group-label">Import / Export</p>
-        <Section title="Import — CSV" desc="import a Logarium CSV with duplicate resolution">
+        <ToolCard title="Import — CSV" desc="import a Logarium CSV with duplicate resolution">
           <div className="console-tool-body"><ImportPanel onImported={reloadLists} /></div>
-        </Section>
-        <Section title="Import — Auto-search" desc="upload a list of titles; metadata is fetched automatically">
+        </ToolCard>
+        <ToolCard title="Import — Auto-search" desc="upload a list of titles; metadata is fetched automatically">
           <div className="console-tool-body"><ImportAutoPanel onImported={reloadLists} /></div>
-        </Section>
-        <Section title="Import — MAL XML" desc="import a MyAnimeList anime/manga export">
+        </ToolCard>
+        <ToolCard title="Import — MAL XML" desc="import a MyAnimeList anime/manga export">
           <div className="console-tool-body"><ImportMalPanel onImported={reloadLists} /></div>
-        </Section>
+        </ToolCard>
         <Section title="Export" desc="download your library as CSV">
           <Row title="Export CSV" desc="A full snapshot of every entry, importable back into Logarium.">
             <button type="button" className="btn" onClick={exportCSV}>Export CSV</button>
@@ -584,6 +603,15 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
 
         {/* ── Library ── */}
         <Section title="Library">
+          <Row title="Rating granularity" desc="Step size for rating up/down; ratings snap to this on save.">
+            <RowSelect value={ui.rating_step ?? DEFAULT_UI.rating_step}
+              options={[
+                { value: 0.1, label: '0.1' },
+                { value: 0.5, label: '0.5 (halves)' },
+                { value: 1, label: '1.0 (whole)' },
+              ]}
+              onChange={v => saveUi({ rating_step: Number(v) })} ariaLabel="Rating granularity" />
+          </Row>
           <Row title="Default sort" desc="Sort order applied when you open the library.">
             <RowSelect value={lib.default_sort}
               options={LIBRARY_SORT_FIELDS.map(f => ({ value: f.key, label: f.label }))}

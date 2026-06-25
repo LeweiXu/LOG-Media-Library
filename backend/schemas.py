@@ -206,6 +206,9 @@ _VALID_EXPLORE_BY = {"all", "genre", "medium", "origin"}
 # Canonical defaults for the single UI-preferences document. The frontend reads
 # a complete document (defaults deep-merged with the user's stored overrides).
 DEFAULT_UI: dict[str, Any] = {
+    # Granularity for rating entry/editing across the app: the up/down step size
+    # and the grid ratings snap to on save. One of 0.1, 0.5, 1.0.
+    "rating_step": 1.0,
     "library": {
         "default_mode": "view",          # "view" | "manage"
         "default_sort": "updated_at",

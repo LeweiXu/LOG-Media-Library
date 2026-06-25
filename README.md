@@ -40,7 +40,8 @@ medium, so a film and a web novel are filtered, sorted, and counted the same way
   habits by where the work comes from, not just what format it is).
 - **Status**: `current`, `planned`, `completed`, `on_hold`, `dropped`.
 - **Progress**: current vs. total episodes / chapters / pages.
-- **Rating**: 0 to 10, with half-point granularity.
+- **Rating**: 0 to 10, with configurable granularity (0.1, 0.5, or 1.0 — set on
+  the Console page, default 1.0).
 - Plus year, free-text notes, a cover image, and provenance (which external
   source the metadata came from).
 

@@ -9,6 +9,16 @@ export const MEDIUMS = [
 
 export const RATING_OPTIONS = Array.from({ length: 11 }, (_, i) => i);
 
+// Snap a rating to the chosen granularity grid (0.1 / 0.5 / 1.0), clamped to 0-10.
+// Passes through empty/blank so an unset rating stays unset.
+export const roundToStep = (v, step) => {
+  if (v === '' || v == null) return v;
+  const n = Number(v);
+  if (Number.isNaN(n)) return v;
+  const r = Math.round(n / step) * step;
+  return Math.min(10, Math.max(0, parseFloat(r.toFixed(2))));
+};
+
 export const ORIGINS = ['Japanese', 'Korean', 'Chinese', 'Western', 'Other'];
 
 export const STATUS_LABELS = {

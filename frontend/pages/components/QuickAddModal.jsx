@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getExplore, createEntry, getCustomLists } from '../../api.jsx';
-import { MEDIUMS, STATUSES, RATING_OPTIONS, statusLabel, onCoverError } from '../../utils.jsx';
+import { MEDIUMS, STATUSES, RATING_OPTIONS, statusLabel, onCoverError, roundToStep } from '../../utils.jsx';
+import { usePreferences, DEFAULT_UI } from '../../preferences.jsx';
 import CustomListField from './CustomListField.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
@@ -46,6 +47,7 @@ function defaultForm(item) {
  * consumed before they started using the app.
  */
 export default function QuickAddModal({ onClose, onCreated, medium: initialMedium = '' }) {
+  const { prefs } = usePreferences();
   // Multi-select medium filter. Empty set = all mediums.
   const [mediums, setMediums] = useState(() => new Set(initialMedium ? [initialMedium] : []));
   const [pool,     setPool]     = useState([]);
@@ -148,6 +150,8 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
     if (k === 'total' && next.status === 'completed') next.progress = v;
     return next;
   });
+
+  const ratingStep = prefs.rating_step ?? DEFAULT_UI.rating_step;
 
   function toggleMedium(m) {
     setMediums(prev => {
@@ -355,21 +359,43 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
 
                 <div className="form-row" style={{ marginBottom: 14 }}>
                   <label className="form-label">Rating</label>
-                  <div className="quickadd-seg quickadd-rating-seg">
-                    {RATING_OPTIONS.map(n => {
-                      const on = form.rating !== '' && Number(form.rating) === n;
-                      // Clicking the active value clears it (rating is optional).
+                  <div className="quickadd-rating-row">
+                    <div className="quickadd-seg quickadd-rating-seg">
+                      {RATING_OPTIONS.map(n => {
+                        // Highlight the integer base so a cell stays lit at e.g. 8.5.
+                        const base = form.rating !== '' ? Math.floor(Number(form.rating)) : null;
+                        const on = base === n;
+                        const isWhole = on && Number(form.rating) === n;
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            className={'quickadd-seg-btn' + (on ? ' is-on' : '')}
+                            // Click the lit whole value to clear; else snap to the integer.
+                            onClick={() => setField('rating', isWhole ? '' : String(n))}
+                          >
+                            {n}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {ratingStep < 1 && (() => {
+                      // Keyboard-free way to reach fractional ratings: each click adds
+                      // the granularity, rolling into the next cell; label shows the
+                      // running fractional offset (+.5 …), resetting on a whole number.
+                      const frac = form.rating === '' ? 0 : Number(form.rating) - Math.floor(Number(form.rating));
+                      const label = frac > 0 ? `+${frac.toFixed(1).slice(1)}` : '+';
                       return (
-                        <button
-                          key={n}
-                          type="button"
-                          className={'quickadd-seg-btn' + (on ? ' is-on' : '')}
-                          onClick={() => setField('rating', on ? '' : String(n))}
-                        >
-                          {n}
+                        <button type="button" className="quickadd-rating-incr"
+                          title={`Add ${ratingStep} to the rating`}
+                          onClick={() => {
+                            const curr = form.rating === '' ? 0 : Number(form.rating);
+                            setField('rating', String(Math.min(10, roundToStep(curr + ratingStep, ratingStep))));
+                          }}>
+                          {label}
                         </button>
                       );
-                    })}
+                    })()}
                   </div>
                 </div>
 

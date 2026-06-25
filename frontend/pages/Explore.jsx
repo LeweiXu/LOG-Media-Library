@@ -14,6 +14,14 @@ import { usePreferences } from '../preferences.jsx';
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it.
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
 
+// Stable identity for an explore item (mirrors the backend's de-dupe key) —
+// used for the React list key and to key per-card UI state (add/added/error)
+// instead of array index. Index isn't safe once a per-medium reroll can splice
+// just one medium's slice out of `items` and append a fresh batch: indices of
+// every *other*, untouched card would shift and silently pick up the wrong
+// card state.
+const itemKey = (item) => `${(item.title || '').toLowerCase().trim()}|${item.medium || ''}`;
+
 // Fetch a large candidate pool so that filtering recommendations by source
 // still leaves enough to fill the grid; the page itself paginates client-side.
 const EXPLORE_FETCH_LIMIT = 120;
@@ -73,13 +81,18 @@ export default function Explore() {
     () => (MEDIUMS.includes(initialUrlMedium.current) ? initialUrlMedium.current : ''),
   );
 
-  // Per-card UI state — keyed by stable index because explore items have no DB id
-  // until added. Tracks: 'idle' | 'adding' | 'added:<status>' | 'error:<msg>'
+  // Per-card UI state — keyed by `itemKey()` (title+medium) because explore
+  // items have no DB id until added. Tracks: 'idle' | 'adding' | 'added:<status>' | 'error:<msg>'
   const [cardState, setCardState] = useState({});
   const [pendingAdd, setPendingAdd] = useState(null);
-  // Entries created during this Explore session, keyed by card idx. Lets the
+  // Entries created during this Explore session, keyed by `itemKey()`. Lets the
   // user click an "added" card to inspect/edit/delete it via EntryDetailModal.
   const [addedEntries, setAddedEntries] = useState({});
+  // Mediums currently being individually rerolled (Reroll button while a
+  // specific medium filter is selected) — lets several mediums reroll in
+  // parallel, independent of the global `loading` flag used by "Reroll All".
+  const [rerollingMediums, setRerollingMediums] = useState(() => new Set());
+  const [mediumRerollError, setMediumRerollError] = useState('');
   const [detailEntry,  setDetailEntry]  = useState(null);
   // Bumped on every Refresh — also flips refreshFlag so the next fetch
   // bypasses the server-side per-medium cache.
@@ -259,23 +272,63 @@ export default function Explore() {
     fetchExplore();
   }, [fetchExplore]);
 
-  // Reroll = bypass the server-side cache AND pick a new shuffle seed, so the
-  // page surfaces a different set of suggestions.
+  // Reroll All = bypass the server-side cache AND pick a new shuffle seed, so
+  // the page surfaces a different set of suggestions across every medium.
   const doReroll = () => {
     setRefreshFlag(true);
     setSeed(newSeed());
   };
 
-  // Only the "All" filter rerolls across every medium (the slow path), so warn
-  // first there; a single-medium reroll is quick, so just do it.
+  // Reroll a single medium within the combined pool: fetch a fresh, full-quota
+  // batch for just that medium (the backend's single-medium path, independent
+  // of the combined "" feed's own cache/in-flight key) and splice it in,
+  // leaving every other medium's cards untouched. Several mediums can run
+  // this in parallel since `fetchExploreFull` tracks in-flight work per key.
+  async function doRerollMedium(targetMedium) {
+    setMediumRerollError('');
+    setRerollingMediums(prev => new Set(prev).add(targetMedium));
+    try {
+      const want = [...availableSet];
+      const data = await fetchExploreFull(targetMedium, { seed: newSeed(), refreshFlag: true, want });
+      const fresh = data.items || [];
+      setItems(prev => {
+        const merged = [...prev.filter(it => it.medium !== targetMedium), ...fresh];
+        // Keep the combined-feed cache (always keyed by effectiveMedium, "" in
+        // combine mode) in sync so a later remount/incremental fetch doesn't
+        // resurrect the stale pre-reroll slice for this medium.
+        const combinedCache = exploreCache[effectiveMedium];
+        if (combinedCache) combinedCache.items = merged;
+        return merged;
+      });
+    } catch (e) {
+      setMediumRerollError(e.message || String(e));
+    } finally {
+      setRerollingMediums(prev => {
+        const next = new Set(prev);
+        next.delete(targetMedium);
+        return next;
+      });
+    }
+  }
+
+  // In combine mode, a medium filter scopes Reroll to just that medium (fast,
+  // no confirm needed) — only "All" runs the slow every-medium scan, so that's
+  // the only one gated behind a "this may take a while" confirm. Outside
+  // combine mode, `effectiveMedium` already tracks the sidebar filter, so the
+  // existing per-medium `doReroll` path is already correctly scoped.
   const rerollScansAllMediums = !medium;
   const handleReroll = () => {
-    if (rerollScansAllMediums) setConfirmReroll(true);
+    if (medium && combineAll) doRerollMedium(medium);
+    else if (rerollScansAllMediums) setConfirmReroll(true);
     else doReroll();
   };
 
   // The "All" reroll confirm is medium-specific, so drop it if the filter moves.
   useEffect(() => { setConfirmReroll(false); }, [medium]);
+
+  // Busy/label state for whichever reroll this button currently represents.
+  const thisRerollBusy = medium && combineAll ? rerollingMediums.has(medium) : loading;
+  const rerollLabel = medium ? `Reroll ${medium}` : 'Reroll All';
 
   // Reroll control for the right sidebar. The "this may take a while" confirm
   // for the slow all-mediums reroll replaces the button inline (no modal).
@@ -290,11 +343,14 @@ export default function Explore() {
       </div>
     </div>
   ) : (
-    <button type="button" className="quickadd-open-btn explore-reroll-btn"
-      onClick={handleReroll} disabled={loading}
-      title="Pull a fresh set of suggestions">
-      {loading ? 'Rerolling…' : 'Reroll'}
-    </button>
+    <>
+      <button type="button" className="quickadd-open-btn explore-reroll-btn"
+        onClick={handleReroll} disabled={thisRerollBusy}
+        title={medium ? `Pull a fresh set of ${medium} suggestions` : 'Pull a fresh set of suggestions for every medium'}>
+        {thisRerollBusy ? 'Rerolling…' : rerollLabel}
+      </button>
+      {mediumRerollError && <div className="explore-reroll-error">{mediumRerollError}</div>}
+    </>
   );
 
   // Quick Add control — now rendered at the bottom of the sidebar, in the
@@ -320,15 +376,21 @@ export default function Explore() {
 
   // Recommendations are limited to the sitewide-available sources. In combine
   // mode the left-sidebar medium narrows the one mixed feed client-side (source
-  // selection no longer filters recs — it only scopes the search box). Keep each
-  // item's original index so per-card add/added state stays correct.
+  // selection no longer filters recs — it only scopes the search box). A medium
+  // currently being individually rerolled is hidden entirely (from "All" too)
+  // until its fresh batch lands, rather than showing the stale pre-reroll cards.
   const visibleItems = useMemo(() => {
-    const withIdx = items
-      .map((item, idx) => ({ item, idx }))
-      .filter(({ item }) => availableSet.has(item.source));
-    if (combineAll && medium) return withIdx.filter(({ item }) => item.medium === medium);
-    return withIdx;
-  }, [items, availableSet, combineAll, medium]);
+    const withKey = items
+      .map(item => ({ item, key: itemKey(item) }))
+      .filter(({ item }) => availableSet.has(item.source) && !rerollingMediums.has(item.medium));
+    if (combineAll && medium) return withKey.filter(({ item }) => item.medium === medium);
+    return withKey;
+  }, [items, availableSet, combineAll, medium, rerollingMediums]);
+
+  // True when the grid is empty *because* a reroll is in progress for every
+  // medium currently in view (e.g. filtered to exactly the medium being
+  // rerolled) — show the loading skeleton instead of "no suggestions" then.
+  const visibleMediumRerolling = visibleItems.length === 0 && rerollingMediums.size > 0;
 
   // Reset to the first page whenever the filtered set changes underneath us.
   useEffect(() => { setRecPage(1); }, [medium, items]);
@@ -359,27 +421,27 @@ export default function Explore() {
     };
   }
 
-  function openAddModal(idx, item, statusValue) {
+  function openAddModal(key, item, statusValue) {
     setPendingAdd({
-      idx,
+      key,
       status: statusValue,
       entry: entryFromExploreItem(item, statusValue),
     });
   }
 
-  function handleCardClick(idx, item, owned) {
+  function handleCardClick(key, item, owned) {
     if (owned) {
-      const added = addedEntries[idx];
+      const added = addedEntries[key];
       if (added) setDetailEntry(added);
       return;
     }
-    openAddModal(idx, item, 'planned');
+    openAddModal(key, item, 'planned');
   }
 
-  function handleCardKeyDown(e, idx, item, owned) {
+  function handleCardKeyDown(e, key, item, owned) {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     if (owned) {
-      const added = addedEntries[idx];
+      const added = addedEntries[key];
       if (added) {
         e.preventDefault();
         setDetailEntry(added);
@@ -387,18 +449,21 @@ export default function Explore() {
       return;
     }
     e.preventDefault();
-    openAddModal(idx, item, 'planned');
+    openAddModal(key, item, 'planned');
   }
 
   function handleEntryCreated(created) {
     if (!pendingAdd) return;
-    const idx = pendingAdd.idx;
-    setCardState(s => ({ ...s, [idx]: `added:${created?.status || pendingAdd.status}` }));
-    if (created) setAddedEntries(prev => ({ ...prev, [idx]: created }));
+    const key = pendingAdd.key;
+    setCardState(s => ({ ...s, [key]: `added:${created?.status || pendingAdd.status}` }));
+    if (created) setAddedEntries(prev => ({ ...prev, [key]: created }));
     // Keep the persisted pool in sync so the card stays "in library" if the user
     // navigates away and back (the incremental path reuses these cached items).
     const cached = exploreCache[effectiveMedium];
-    if (cached && cached.items[idx]) cached.items[idx].in_library = true;
+    if (cached) {
+      const target = cached.items.find(it => itemKey(it) === key);
+      if (target) target.in_library = true;
+    }
     setPendingAdd(null);
   }
 
@@ -420,15 +485,15 @@ export default function Explore() {
     // Find which card(s) the deleted entry was attached to, then clear both
     // the added-entry record and the matching `added:<status>` cardState so
     // the card returns to a clickable state.
-    const idxsToClear = Object.keys(addedEntries).filter(k => addedEntries[k]?.id === id);
+    const keysToClear = Object.keys(addedEntries).filter(k => addedEntries[k]?.id === id);
     setAddedEntries(prev => {
       const next = { ...prev };
-      for (const k of idxsToClear) delete next[k];
+      for (const k of keysToClear) delete next[k];
       return next;
     });
     setCardState(prev => {
       const next = { ...prev };
-      for (const k of idxsToClear) delete next[k];
+      for (const k of keysToClear) delete next[k];
       return next;
     });
     setDetailEntry(null);
@@ -475,8 +540,9 @@ export default function Explore() {
             <span className="page-title">Explore</span>
             {!searchActive && (
               <span className="page-desc">
-                {loading ? <span className="loading-dots">scanning</span>
-                         : `${visibleItems.length} suggestions`}
+                {loading || visibleMediumRerolling
+                  ? <span className="loading-dots">scanning</span>
+                  : `${visibleItems.length} suggestions`}
               </span>
             )}
           </div>
@@ -525,7 +591,16 @@ export default function Explore() {
           </div>
         )}
 
-        {!error && !loading && visibleItems.length === 0 && (
+        {!error && !loading && visibleMediumRerolling && (
+          <div className="skeleton-page" aria-label={`Rerolling ${medium || 'medium'}`}>
+            <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.6, marginBottom: 12 }}>
+              Rerolling {medium || [...rerollingMediums].join(', ')}…
+            </div>
+            <SkeletonExploreGrid cards={6} />
+          </div>
+        )}
+
+        {!error && !loading && !visibleMediumRerolling && visibleItems.length === 0 && (
           <div className="state-block">
             <div className="state-title">No suggestions to surface.</div>
             <div className="state-detail">
@@ -538,8 +613,8 @@ export default function Explore() {
 
         {!error && !loading && visibleItems.length > 0 && (
         <div className="explore-grid">
-          {pagedItems.map(({ item, idx }) => {
-            const state = cardState[idx] || 'idle';
+          {pagedItems.map(({ item, key }) => {
+            const state = cardState[key] || 'idle';
             const isAdded = state.startsWith('added:');
             const isError = state.startsWith('error:');
             const errMsg  = isError ? state.slice('error:'.length) : '';
@@ -549,16 +624,16 @@ export default function Explore() {
             // entry (i.e. the user added it during this Explore session and
             // we can open its detail modal). Pre-existing in_library cards
             // stay decorative.
-            const interactive = !owned || !!addedEntries[idx];
+            const interactive = !owned || !!addedEntries[key];
             const hasMatches  = personalised && item.matches && item.matches.length > 0;
 
             return (
-              <article key={`${item.source}:${item.external_id || item.title}:${idx}`}
+              <article key={key}
                        className={'explore-card' + (owned ? ' is-owned' : '') + (interactive ? '' : ' not-interactive')}
                        role={interactive ? 'button' : undefined}
                        tabIndex={interactive ? 0 : undefined}
-                       onClick={() => handleCardClick(idx, item, owned)}
-                       onKeyDown={e => handleCardKeyDown(e, idx, item, owned)}>
+                       onClick={() => handleCardClick(key, item, owned)}
+                       onKeyDown={e => handleCardKeyDown(e, key, item, owned)}>
                 <div className="explore-cover">
                   {item.cover_url
                     ? <img src={item.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />

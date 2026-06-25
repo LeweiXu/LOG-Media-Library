@@ -950,6 +950,7 @@ html.light .skeleton-pie::after {
   font-size: 11px;
   letter-spacing: -0.05em;
   flex-shrink: 0;
+  margin-left: auto;
 }
 .settings-section-toggle[aria-expanded="false"] .sh-toggle-ind { color: var(--dim); }
 
@@ -1422,6 +1423,62 @@ html.light .skeleton-pie::after {
 }
 
 .inline-select:focus { border-color: var(--accent); }
+
+/* ── Number stepper (rating / progress inline + form edits) ───────────────── */
+/* Themed replacement for <input type=number>: the input fills its container and
+   a narrow column of ▲/▼ buttons steps by the field's granularity. width:100%
+   so it never overflows a table cell (the old fixed-64px input shifted the table). */
+.num-stepper {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.num-stepper:focus-within { border-color: var(--accent); }
+.num-stepper-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 5px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+/* Hide the browser's own spinner — the ▲/▼ buttons replace it. */
+.num-stepper-input::-webkit-outer-spin-button,
+.num-stepper-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.num-stepper-arrows {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+}
+.num-stepper-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex: 1;
+  padding: 0;
+  background: var(--surface);
+  border: none;
+  color: var(--dim);
+  font-size: 7px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.num-stepper-arrow:first-child { border-bottom: 1px solid var(--border); }
+.num-stepper-arrow:hover { color: var(--accent); background: var(--surface2); }
+
+/* Form-sized variant: matches .form-input height/font when used inside a form row. */
+.num-stepper.form-stepper .num-stepper-input { font-size: 12px; padding: 7px 10px; }
+.num-stepper.form-stepper .num-stepper-arrow { width: 20px; }
 
 /* ── Statistics page ─────────────────────────────────────────────────────── */
 .statistics-page {
@@ -2736,6 +2793,16 @@ input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
   justify-content: center;
 }
 
+/* Inline error under the Reroll button when a single-medium reroll fails —
+ * kept local to the sidebar control rather than the page-wide error block, so
+ * the rest of the grid (every other medium) stays visible. */
+.explore-reroll-error {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--red);
+  text-align: center;
+}
+
 .quickadd-head-right { display: flex; align-items: center; gap: 12px; }
 .quickadd-tally {
   font-size: 10px;
@@ -2848,6 +2915,26 @@ a.quickadd-title:hover { color: var(--accent); }
    throughout the app). */
 .quickadd-rating-seg .quickadd-seg-btn { padding: 9px 2px; letter-spacing: 0; }
 .quickadd-rating-seg .quickadd-seg-btn.is-on { color: var(--amber); }
+
+/* Rating row: cells + the fraction increment button sit on one line. */
+.quickadd-rating-row { display: flex; gap: 8px; align-items: stretch; }
+.quickadd-rating-row .quickadd-rating-seg { flex: 1; }
+/* The increment button steps the selected rating by the configured granularity
+   (0.1 / 0.5); its label shows the running fractional offset (+.5 …). */
+.quickadd-rating-incr {
+  flex: 0 0 auto;
+  min-width: 44px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--amber);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  padding: 0 8px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.quickadd-rating-incr:hover { border-color: var(--amber); background: var(--surface); }
 
 /* Status: active text follows the canonical per-status colour. */
 .quickadd-seg-btn.is-on.status-current   { color: var(--accent); }
