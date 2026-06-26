@@ -1,8 +1,9 @@
 """
-Copies all entries from user 'lingwei' to user 'demo_user'.
+Copies demo-visible data from user 'lingwei' to user 'demo_user'.
 Steps:
-  1. Delete all existing entries for 'demo_user'
-  2. For each entry belonging to 'lingwei', insert a copy with username='demo_user'
+  1. Reset demo_user settings to defaults while preserving login credentials
+  2. Delete all existing entries and Explore cache rows for 'demo_user'
+  3. Copy entries and Explore cache rows from 'lingwei' to 'demo_user'
 
 Run directly:   python demo_script.py
 Schedule via cron (see README or comments below).
@@ -11,6 +12,7 @@ Schedule via cron (see README or comments below).
 import sys
 import os
 import logging
+from copy import deepcopy
 
 # Resolve the backend/ directory and make it the cwd so that pydantic-settings
 # finds .env, and sibling modules (config, db, models) are importable regardless
@@ -23,6 +25,7 @@ from sqlalchemy import create_engine, delete, insert, literal, select
 from sqlalchemy.orm import sessionmaker
 from config import get_settings
 from models import Entry, ExploreCache, User
+from schemas import DEFAULT_UI
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,8 +39,8 @@ DATABASE_URL = settings.DATABASE_URL
 SOURCE_USER = "lingwei"
 DEST_USER = "demo_user"
 
-USER_SETTINGS_EXCLUDE = {"username", "email", "hashed_password"}
 ENTRY_COPY_EXCLUDE = {"id", "username"}
+CACHE_COPY_EXCLUDE = {"id", "username"}
 
 
 def _copyable_entry_columns() -> list[str]:
@@ -45,8 +48,13 @@ def _copyable_entry_columns() -> list[str]:
     return [col.name for col in Entry.__table__.columns if col.name not in ENTRY_COPY_EXCLUDE]
 
 
+def _copyable_cache_columns() -> list[str]:
+    """Columns copied cache-row-for-cache-row; generated ids and owners are replaced."""
+    return [col.name for col in ExploreCache.__table__.columns if col.name not in CACHE_COPY_EXCLUDE]
+
+
 def _sync_demo_user(session) -> None:
-    """Ensure demo_user exists without overwriting its login credentials."""
+    """Ensure demo_user exists and reset its settings to canonical defaults."""
     source = session.get(User, SOURCE_USER)
     if source is None:
         raise RuntimeError(f"Source user {SOURCE_USER!r} does not exist")
@@ -61,11 +69,10 @@ def _sync_demo_user(session) -> None:
         session.add(dest)
         log.info("Created missing destination user '%s'.", DEST_USER)
 
-    # Keep demo browsing/settings behavior in line with the source account, but
-    # deliberately leave email/password alone.
-    for col in User.__table__.columns:
-        if col.name not in USER_SETTINGS_EXCLUDE:
-            setattr(dest, col.name, getattr(source, col.name))
+    dest.backup_freq = "never"
+    dest.last_backup_at = None
+    dest.ui_preferences = deepcopy(DEFAULT_UI)
+    log.info("Reset settings for '%s' to defaults.", DEST_USER)
 
 
 def sync_demo_entries(db_url: str) -> None:
@@ -98,6 +105,19 @@ def sync_demo_entries(db_url: str) -> None:
                 )
             )
             log.info("Copied %d entries from '%s' to '%s'.", result.rowcount, SOURCE_USER, DEST_USER)
+
+            # 3. Copy Explore cache so the demo account can serve cached
+            # recommendations immediately without inheriting source settings.
+            copy_cols = _copyable_cache_columns()
+            insert_cols = [*copy_cols, "username"]
+            select_cols = [getattr(ExploreCache, col) for col in copy_cols]
+            result = session.execute(
+                insert(ExploreCache).from_select(
+                    insert_cols,
+                    select(*select_cols, literal(DEST_USER)).where(ExploreCache.username == SOURCE_USER),
+                )
+            )
+            log.info("Copied %d explore cache rows from '%s' to '%s'.", result.rowcount, SOURCE_USER, DEST_USER)
 
 
 if __name__ == "__main__":

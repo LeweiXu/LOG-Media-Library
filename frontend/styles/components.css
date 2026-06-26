@@ -498,6 +498,16 @@ html.light .skeleton-pie::after {
 .settings-msg-error   { color: var(--red);   background: rgba(224,86,86,0.1); }
 .settings-msg-success { color: var(--green); background: rgba(62,207,106,0.1); }
 
+.settings-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.settings-import-actions .settings-msg {
+  margin-bottom: 0;
+}
+
 .settings-choice-grid {
   display: grid;
   gap: 10px;

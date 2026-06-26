@@ -347,6 +347,86 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
     } catch (err) { alert(`Export failed: ${err.message}`); }
   }
 
+  const settingsFileRef = useRef(null);
+  const [settingsImportMsg, setSettingsImportMsg] = useState('');
+  const [settingsImportErr, setSettingsImportErr] = useState('');
+
+  async function exportSettingsFile() {
+    try {
+      const current = await getSettings();
+      const payload = {
+        type: 'logarium-settings',
+        version: 1,
+        exported_at: new Date().toISOString(),
+        settings: {
+          backup_freq: current.backup_freq || 'never',
+          ui: current.ui || DEFAULT_UI,
+        },
+        available_sources: [...loadAvailableSources()],
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement('a'), {
+        href: url,
+        download: 'logarium-settings.json',
+      });
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSettingsImportMsg('');
+      setSettingsImportErr(`Settings export failed: ${err.message}`);
+    }
+  }
+
+  async function importSettingsFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setSettingsImportMsg('');
+    setSettingsImportErr('');
+    try {
+      const parsed = JSON.parse(await file.text());
+      const settingsDoc = parsed.settings && typeof parsed.settings === 'object'
+        ? parsed.settings
+        : parsed;
+      const patch = {};
+      if (typeof settingsDoc.backup_freq === 'string') patch.backup_freq = settingsDoc.backup_freq;
+      if (settingsDoc.ui && typeof settingsDoc.ui === 'object' && !Array.isArray(settingsDoc.ui)) {
+        patch.ui = settingsDoc.ui;
+      }
+
+      const importedSources = Array.isArray(parsed.available_sources)
+        ? parsed.available_sources
+        : Array.isArray(parsed.availableSources)
+          ? parsed.availableSources
+          : null;
+      const hasSettings = Object.keys(patch).length > 0;
+      if (!hasSettings && !importedSources) {
+        throw new Error('File does not contain Logarium settings.');
+      }
+
+      let saved = null;
+      if (hasSettings) {
+        saved = await updateSettings(patch);
+        setBackupFreq(saved.backup_freq || 'never');
+        setUi(saved.ui || DEFAULT_UI);
+        uiReadyRef.current = true;
+        scalarsReadyRef.current = true;
+        await reloadPrefs();
+      }
+
+      if (importedSources) {
+        const validSources = new Set(SEARCH_SOURCES.map(source => source.value));
+        const nextSources = new Set(importedSources.filter(source => validSources.has(source)));
+        saveAvailableSources(nextSources);
+        setAvailableSources(nextSources);
+      }
+      setSettingsImportMsg('Settings imported.');
+    } catch (err) {
+      setSettingsImportErr(`Settings import failed: ${err.message}`);
+    }
+  }
+
   // ── backup_freq is the only remaining scalar setting (a backend concern). ──
   const [backupFreq,     setBackupFreq]     = useState('never');
   const [scalarsLoaded,  setScalarsLoaded]  = useState(false);
@@ -581,9 +661,25 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         <ToolCard title="Import — MAL XML" desc="import a MyAnimeList anime/manga export">
           <div className="console-tool-body"><ImportMalPanel onImported={reloadLists} /></div>
         </ToolCard>
-        <Section title="Export" desc="download your library as CSV">
+        <Section title="Import - Settings">
+          <Row title="Import settings" desc="Restore a Logarium settings JSON file. Library entries are not changed.">
+            <div className="settings-import-actions">
+              <input ref={settingsFileRef} type="file" accept=".json,application/json"
+                className="hidden-file" onChange={importSettingsFile} />
+              <button type="button" className="btn" onClick={() => settingsFileRef.current?.click()}>
+                Import Settings
+              </button>
+              {settingsImportMsg && <span className="settings-msg settings-msg-success">{settingsImportMsg}</span>}
+              {settingsImportErr && <span className="settings-msg settings-msg-error">{settingsImportErr}</span>}
+            </div>
+          </Row>
+        </Section>
+        <Section title="Export" desc="download library data or Console settings">
           <Row title="Export CSV" desc="A full snapshot of every entry, importable back into Logarium.">
             <button type="button" className="btn" onClick={exportCSV}>Export CSV</button>
+          </Row>
+          <Row title="Export settings" desc="Download UI preferences, backup frequency, and available source selections.">
+            <button type="button" className="btn" onClick={exportSettingsFile}>Export Settings</button>
           </Row>
         </Section>
         </>

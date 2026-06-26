@@ -271,6 +271,13 @@ Important service boundaries:
 - `cover_cache_service.py`: cover upload/cache/full-cover serving.
 - `backup_service.py` and `email_service.py`: optional SMTP email backup.
 
+Backend scripts:
+
+- `backend/scripts/demo_script.py` refreshes `demo_user` from `lingwei` for demo
+  data. It preserves demo login credentials, resets demo settings to
+  `schemas.DEFAULT_UI`/`backup_freq="never"`, and copies entries plus Explore
+  cache rows from the source account.
+
 ### Data Models
 
 `User`:
@@ -353,6 +360,9 @@ Settings shape:
   when a medium is hidden; the backend applies this list to `/entries`,
   `/custom-lists`, and `/stats`, while frontend selectors/search results hide
   the same mediums.
+- Console's settings import/export uses this API for `{ backup_freq, ui }` and
+  also serializes `localStorage.available_sources`, the one settings value that
+  is not server-backed.
 
 ### Entries
 
@@ -525,8 +535,9 @@ Routes live in `frontend/app.jsx`:
 - Merged settings and library tools page.
 - Contains extension download/update UI, theme/accent controls, per-page layout
   settings, visible-medium selection, Explore settings, search-source
-  availability, password change, backup controls, import/export, custom lists,
-  duplicates, cover caching, Quick Add, resync, and data wipe tools.
+  availability, password change, backup controls, entry/settings import/export,
+  custom lists, duplicates, cover caching, Quick Add, resync, and data wipe
+  tools.
 - Former modals are now mostly inline/collapsible `*Panel` components.
 
 `LandingPage.jsx`:
@@ -735,6 +746,9 @@ visible-medium toggles also update this local source set using
 `SOURCE_MEDIUMS`/`DEFAULT_SOURCES_BY_MEDIUM`: disabling a medium removes a
 source only when none of that source's supported mediums remain visible, while
 re-enabling a medium restores that medium's default source(s).
+Settings export/import includes this localStorage value alongside the backend
+settings document so source-selection settings round-trip with the rest of the
+Console settings.
 
 Per-medium source defaults:
 
