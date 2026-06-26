@@ -1,363 +1,938 @@
-# LOG — Media Tracker: Project Context
+# LOGARIUM Project Context
 
-Provide this file to your LLM at the start of each session. For UI work, also
-include `frontend/styles.css` and the relevant files under `frontend/styles/`.
+Last refreshed from the current repository and recent git history on 2026-06-26.
 
----
-
-## 1. What This Project Is
-
-LOG is a full-stack media tracker for films, TV, anime, games, books, manga, light novels, web novels, comics, and visual novels.
-
-Current state:
-- Multi-user app (register/login with JWT bearer auth)
-- Public frontend deployment on Vercel
-- FastAPI + PostgreSQL backend
-- Per-user libraries (all entry queries are scoped by authenticated username)
+Use this file as the long-form handoff for future LLM sessions. Also provide
+`AGENTS.md` and any files directly involved in the task. For frontend styling
+work, include `frontend/styles.css` plus the relevant files under
+`frontend/styles/`.
 
 ---
 
-## 2. Tech Stack
+## 1. What Logarium Is
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 18, Vite, React Router, plain CSS |
-| Backend | Python 3.11+, FastAPI |
-| Database | PostgreSQL + SQLAlchemy 2 ORM + Alembic |
-| Charts | Recharts |
-| HTTP | Browser `fetch`, backend `httpx` |
-| Auth | JWT (`python-jose`), password hashing (`passlib` bcrypt_sha256) |
+Logarium is a full-stack personal media tracker. It tracks one unified library
+across:
 
-Default local ports:
-- Frontend: `3000`
-- Backend: `6443`
+- Film
+- TV Show
+- Anime
+- Book
+- Manga
+- Light Novel
+- Web Novel
+- Comic
+- Game
+- Visual Novel
+
+The application is multi-user. Users register/login, receive a JWT bearer token,
+and all library data is scoped server-side by `username`.
+
+The current product shape:
+
+- React 18 + Vite frontend.
+- FastAPI backend.
+- PostgreSQL with SQLAlchemy 2 ORM and Alembic migrations.
+- Plain CSS, now split into purpose-specific files under `frontend/styles/`.
+- Browser extension for source-page capture and first-party cover uploads.
+- Search aggregation across multiple external providers.
+- Explore/recommendation page based on library affinity and available sources.
+- Import/export, duplicate finding, custom lists, cover caching, and optional
+  email backup tools in Console.
 
 ---
 
-## 3. Current Repository Structure
+## 2. Recent Git History Snapshot
+
+The recent history explains why the repo currently looks the way it does:
+
+- `f0109f3 refactor frontend`
+  - Split the large `frontend/styles.css` into `frontend/styles/*.css`.
+  - Kept `frontend/styles.css` as the import entrypoint.
+  - Moved static inline styles out of Library/Dashboard/component code.
+  - Moved `context.md` to `public/context.md`.
+  - Removed `ARCHITECTURE.md`; this context file now carries the living
+    architecture notes.
+- `b45ff5e revert Dashboard and Library pages to deployed version`
+  - Restored Dashboard/Library behavior before the final CSS refactor.
+- `231d88b rework table column sizing into standard + fixed modes`
+  - Important for table layout: Library has normal and fixed-title table modes.
+  - Be careful not to regress column sizing or title-cell behavior.
+- `dc91738 move inline styles to CSS and document target architecture`
+  - Initial pass extracting inline styles and documenting the intended CSS
+    direction.
+- `0f902ce redesign console tools page, fix Explore reroll bug`
+  - Console tools were redesigned into inline/collapsible tool sections.
+  - Added `NumberStepper`.
+  - Improved Explore refresh/reroll behavior.
+- `6155c46 improve Explore page behaviour`
+  - Added/improved Explore preference behavior, including `combine_all`.
+- `2fcbcb0 allow specific source selection sitewide`
+  - Added sitewide available-source selection via `searchSources.js`.
+- `c102ec2 add console page`
+  - Settings merged into Console.
+  - Former modal tools were converted into inline `*Panel` components.
+
+When investigating behavior, prefer the current code over older context. Recent
+frontend commits moved quickly and some older docs may be stale.
+
+---
+
+## 3. Repository Layout
 
 ```text
 logarium/
-├── README.md
-├── CLAUDE.md            # agent guidance (architecture + conventions)
 ├── AGENTS.md
+├── README.md
 ├── CLOUDFLARE.md
-├── context.md           # this file
-├── dev.sh               # boots backend + frontend together
+├── dev.sh
+├── public/
+│   ├── context.md              # this file
+│   └── test_novelupdates.py    # targeted scraper check
 ├── backend/
 │   ├── main.py
 │   ├── run.py
 │   ├── config.py
-│   ├── constants.py
+│   ├── constants.py            # canonical status/medium/origin/source constants
 │   ├── db.py
 │   ├── models.py
-│   ├── schemas.py
-│   ├── routers.py        # single thin APIRouter
+│   ├── schemas.py              # Pydantic schemas + DEFAULT_UI
+│   ├── routers.py              # single thin APIRouter
 │   ├── requirements.txt
 │   ├── README.md
 │   ├── alembic.ini
-│   ├── alembic/          # env.py + versions/ (migrations are source of truth)
+│   ├── alembic/
+│   │   └── versions/           # migrations are database history/source of truth
 │   ├── scripts/
 │   │   └── init_db.py
 │   └── services/
 │       ├── auth_service.py
 │       ├── entry_service.py
 │       ├── stats_service.py
-│       ├── search_service.py        # provider fan-out
-│       ├── explore_service.py       # recommendations + consumption profile
-│       ├── import_service.py        # CSV/JSON preview→confirm + SSE auto-import
-│       ├── import_mal_service.py    # MyAnimeList XML import
+│       ├── search_service.py
+│       ├── explore_service.py
+│       ├── import_service.py
+│       ├── import_mal_service.py
 │       ├── export_service.py
-│       ├── url_import_service.py     # add-by-URL (+ url_scrapers/)
-│       ├── cover_cache_service.py    # server-side + extension cover caching
-│       ├── backup_service.py         # periodic email backups
+│       ├── url_import_service.py
+│       ├── cover_cache_service.py
+│       ├── backup_service.py
 │       ├── email_service.py
+│       ├── url_scrapers/
 │       └── search_providers/
-│           ├── __init__.py           # provider registry
+│           ├── __init__.py
 │           ├── utils.py
-│           ├── tmdb.py  imdb.py  anilist.py  jikan.py  kitsu.py  mangadex.py
-│           ├── mangaupdates.py  novelupdates.py
-│           ├── igdb.py  rawg.py  vndb.py
-│           └── google_books.py  open_library.py  comicvine.py  goodreads.py
+│           ├── tmdb.py
+│           ├── imdb.py
+│           ├── anilist.py
+│           ├── jikan.py
+│           ├── kitsu.py
+│           ├── mangadex.py
+│           ├── mangaupdates.py
+│           ├── novelupdates.py
+│           ├── igdb.py
+│           ├── rawg.py
+│           ├── google_books.py
+│           ├── open_library.py
+│           ├── comicvine.py
+│           ├── goodreads.py
+│           └── vndb.py
 ├── frontend/
-│   ├── index.html  index.jsx  app.jsx
-│   ├── api.jsx           # all network calls (reads VITE_API_BASE)
-│   ├── utils.jsx         # status/medium/origin enums + helpers
-│   ├── preferences.jsx   # PreferencesProvider + ui_preferences doc (DEFAULT_UI)
+│   ├── index.html
+│   ├── index.jsx
+│   ├── app.jsx                 # routes, topbar, auth shell, theme/accent
+│   ├── api.jsx                 # all frontend API calls
+│   ├── utils.jsx               # frontend enums/helpers mirrored with backend
+│   ├── preferences.jsx         # PreferencesProvider + frontend DEFAULT_UI
 │   ├── extensionBridge.js
 │   ├── hooks.jsx
-│   ├── styles.css        # CSS entrypoint: imports frontend/styles/*.css
-│   ├── design.css        # older design reference
+│   ├── design.css              # older design reference
+│   ├── styles.css              # stable CSS import entrypoint
 │   ├── styles/
-│   │   ├── tokens.css              # theme/accent/chart CSS variables
-│   │   ├── base.css                # reset, body, links, scrollbars
-│   │   ├── shell.css               # app shell, topbar, sidebars, buttons
-│   │   ├── components.css          # shared UI: tables, modals, forms, skeletons
-│   │   ├── library-dashboard.css   # Library/Dashboard-specific helpers
-│   │   ├── statistics-explore.css  # Statistics, Landing, Explore styles
-│   │   ├── responsive.css          # mobile/drawer/table responsive rules
-│   │   ├── tools-add-custom.css    # Console tools, add/quick-add/import styles
-│   │   └── light.css               # light-theme overrides, imported last
-│   ├── vite.config.js  vercel.json  package.json
+│   │   ├── tokens.css
+│   │   ├── base.css
+│   │   ├── shell.css
+│   │   ├── components.css
+│   │   ├── library-dashboard.css
+│   │   ├── statistics-explore.css
+│   │   ├── responsive.css
+│   │   ├── tools-add-custom.css
+│   │   └── light.css
 │   └── pages/
-│       ├── Dashboard.jsx  Library.jsx  Explore.jsx  Statistics.jsx
-│       ├── Console.jsx    # settings + library tools (after Statistics)
+│       ├── Dashboard.jsx
+│       ├── Library.jsx
+│       ├── Explore.jsx
+│       ├── Statistics.jsx
+│       ├── Console.jsx
 │       ├── LandingPage.jsx
 │       └── components/
 │           ├── AuthModal.jsx
-│           ├── AddEntryModal.jsx  AddEntryPanel.jsx  QuickAddModal.jsx
-│           ├── EntryForm.jsx  EntryFormModal.jsx  EntryDetailModal.jsx  ConfirmEntryModal.jsx
-│           ├── ListChips.jsx  ListsPanel.jsx  ListsModal.jsx  InlineListSelect.jsx  CustomListField.jsx
-│           ├── DedupPanel.jsx  CacheCoversPanel.jsx  ResyncPanel.jsx
-│           ├── ImportPanel.jsx  ImportAutoPanel.jsx  ImportMalPanel.jsx
-│           ├── ExtensionInstallHint.jsx  ExtensionDownloadSection.jsx  ExtensionUpdateLink.jsx
-│           ├── CustomSelect.jsx  Skeletons.jsx  terminal.jsx
-│           └── searchSources.js   # provider list + available-sources selection
-├── extension/           # Manifest V3 browser extension (Chrome + Firefox)
-└── public/              # misc scripts / notes (e.g. test_novelupdates.py)
+│           ├── AddEntryModal.jsx
+│           ├── AddEntryPanel.jsx
+│           ├── QuickAddModal.jsx
+│           ├── EntryForm.jsx
+│           ├── EntryFormModal.jsx
+│           ├── EntryDetailModal.jsx
+│           ├── ConfirmEntryModal.jsx
+│           ├── ListChips.jsx
+│           ├── ListsPanel.jsx
+│           ├── ListsModal.jsx
+│           ├── InlineListSelect.jsx
+│           ├── CustomListField.jsx
+│           ├── DedupPanel.jsx
+│           ├── CacheCoversPanel.jsx
+│           ├── ResyncPanel.jsx
+│           ├── ImportPanel.jsx
+│           ├── ImportAutoPanel.jsx
+│           ├── ImportMalPanel.jsx
+│           ├── ExtensionInstallHint.jsx
+│           ├── ExtensionDownloadSection.jsx
+│           ├── ExtensionUpdateLink.jsx
+│           ├── CustomSelect.jsx
+│           ├── NumberStepper.jsx
+│           ├── Skeletons.jsx
+│           ├── terminal.jsx
+│           └── searchSources.js
+└── extension/
+    ├── package.json
+    ├── scripts/release.js
+    ├── public/
+    ├── src/
+    ├── dist/
+    └── dist-artifacts/
 ```
 
-> The `*Panel` components are the inline bodies rendered inside Console's
-> collapsible tool sections; most were extracted from former modals.
+Notes:
+
+- `context.md` intentionally lives under `public/` now.
+- `ARCHITECTURE.md` was deleted in the current frontend refactor commit.
+- `frontend/pages/components/*Panel.jsx` files are inline Console tool bodies,
+  mostly extracted from older modal implementations.
 
 ---
 
-## 4. Data Model (Current)
+## 4. Local Commands
 
-Main tables/models:
+Frontend:
 
-### User
-- `username` (PK), `email` (unique), `hashed_password`
-- Settings: `backup_freq`, `last_backup_at`, and a single `ui_preferences`
-  JSON document (see §6). Older scalar preference columns remain for server-side
-  consumers; the JSON doc is the client-facing view.
+```bash
+cd frontend
+npm install
+npm start
+npm run build
+npm run preview
+```
 
-### Entry
-- Core: `id`, `title`, `medium`, `origin`, `year`, `status`, `rating`, `progress`, `total`, `notes`
-- Metadata: `cover_url`, `external_id`, `source`, `external_url`, `genres`, `external_rating`
-- Timestamps: `created_at`, `updated_at`, `completed_at`
-- Ownership: `username` (FK to users.username)
+Backend:
 
-### ExploreCache
-- Per-`(username, key)` cache of ranked explore results. The `key` packs the
-  medium tab plus flags for neutral mode and a hash of the available-source set;
-  it is `VARCHAR(50)`, so keep cache keys short.
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+python main.py
+```
 
-Canonical sets (validated in backend constants/schemas, mirrored in `frontend/utils.jsx`):
+Useful checks:
+
+```bash
+cd frontend && npm run build
+git diff --check
+```
+
+Default ports:
+
+- Frontend dev server: `3000`
+- Backend API: `6443`
+
+---
+
+## 5. Backend Architecture
+
+The backend uses one central `APIRouter` in `backend/routers.py`. Route handlers
+should stay thin. Business logic belongs in `backend/services/`.
+
+Important service boundaries:
+
+- `auth_service.py`: user lookup, password hashing, token creation, current-user
+  dependency.
+- `entry_service.py`: entry CRUD, filtering, sorting, duplicate checks, custom
+  lists, batch updates/deletes.
+- `search_service.py`: provider dispatch, fan-out/dedup/ranking for backend
+  search.
+- `explore_service.py`: recommendation generation, user affinity profile,
+  library-title filtering, Explore cache reads/writes.
+- `stats_service.py`: aggregate statistics for the Statistics page.
+- `import_service.py`: CSV import preview/confirm and auto-search SSE import.
+- `import_mal_service.py`: MAL XML import SSE and confirm flow.
+- `export_service.py`: CSV export.
+- `url_import_service.py` and `url_scrapers/`: add-by-URL support.
+- `cover_cache_service.py`: cover upload/cache/full-cover serving.
+- `backup_service.py` and `email_service.py`: optional SMTP email backup.
+
+### Data Models
+
+`User`:
+
+- `username`: primary key, indexed.
+- `email`: unique, indexed.
+- `hashed_password`.
+- `backup_freq`: real backend column, used by backup scheduling/behavior.
+- `last_backup_at`.
+- `ui_preferences`: JSON document for all client-facing layout/preferences.
+
+`Entry`:
+
+- Core fields: `id`, `title`, `medium`, `origin`, `year`, `status`, `rating`,
+  `progress`, `total`, `notes`.
+- External metadata: `cover_url`, `external_id`, `source`, `external_url`,
+  `genres`, `external_rating`.
+- Custom grouping: `custom_list`.
+- Timestamps: `created_at`, `updated_at`, `completed_at`.
+- Ownership: `username` FK to `users.username`.
+
+`ExploreCache`:
+
+- Per-`(username, medium)` cache.
+- `medium` is `""` for the all-medium Explore tab.
+- `items_json` stores already-ranked `ExploreItem` dicts.
+- Refresh on the Explore page bypasses/overwrites the row.
+- Library-title filtering is still applied live after cache read.
+- Current DB constraint: `UniqueConstraint("username", "medium")`.
+
+### Canonical Values
+
+`backend/constants.py` is the backend source of truth:
+
 - Status: `current`, `planned`, `completed`, `on_hold`, `dropped`
-- Medium: Film, TV Show, Anime, Book, Manga, Light Novel, Web Novel, Comic, Game, Visual Novel
-- Origin: Japanese, Korean, Chinese, Western, Other
+- Medium: `Film`, `TV Show`, `Anime`, `Book`, `Manga`, `Light Novel`,
+  `Web Novel`, `Comic`, `Game`, `Visual Novel`
+- Origin: `Japanese`, `Korean`, `Chinese`, `Western`, `Other`, `""`
+
+Schemas normalize common aliases before validation:
+
+- `movie` -> `Film`
+- `tv` -> `TV Show`
+- `vn` -> `Visual Novel`
+- `manhwa`/`manhua` -> `Manga`
+- origin aliases such as `jp`, `kr`, `cn`, `us`, `uk`, etc.
+
+Keep frontend option lists in sync with these values.
 
 ---
 
-## 5. Backend API Contract (Current)
+## 6. Backend API Contract
 
-All routes except health and auth require `Authorization: Bearer <token>`.
+Health and some cover serving are public. Most routes require:
+
+```text
+Authorization: Bearer <token>
+```
 
 ### Health
-- `GET /` -> `{"status": "ok"}`
 
-### Auth & settings
-- `POST /auth/register` -> create account
-- `POST /auth/login` -> OAuth2 password form, returns bearer token
-- `POST /auth/change-password` -> authenticated password change
-- `GET /auth/me/settings` -> `{ backup_freq, ui }` (UI doc deep-merged with defaults)
-- `PUT /auth/me/settings` -> partial update; `ui` is deep-merged into the stored doc
+- `GET /` -> health payload.
+
+### Auth and Settings
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/change-password`
+- `GET /auth/me/settings`
+- `PUT /auth/me/settings`
+
+Settings shape:
+
+- Read response: `{ backup_freq, ui }`
+- `ui` is default-merged server-side with `schemas.DEFAULT_UI`.
+- PUT accepts partial patches.
+- `backup_freq` remains a scalar backend column.
+- `ui` patches are deep-merged into `User.ui_preferences`.
+- `ui.mediums.visible` controls visible media types. Entries are not deleted
+  when a medium is hidden; the backend applies this list to `/entries`,
+  `/custom-lists`, and `/stats`, while frontend selectors/search results hide
+  the same mediums.
 
 ### Entries
-- `GET /entries` -> list with filters/pagination
-  - Query params: `status`, `medium`, `origin`, `title`, `sort`, `order`, `limit`, `offset`
-  - Response shape: `{ items, total, limit, offset }`
-- `GET /entries/{id}` -> single entry (user-scoped)
-- `POST /entries` -> create
-- `PUT /entries/{id}` -> partial update (`exclude_unset=True`)
-- `DELETE /entries/{id}` -> delete one
-- `DELETE /entries` -> delete all entries for current user
 
-### Batch / duplicates
-- `PUT /entries/batch` -> bulk field update for a list of ids
-- `DELETE /entries/batch` -> bulk delete
-- `GET /entries/duplicates` -> groups of entries sharing (title, medium)
-- `POST /entries/check-duplicates` -> which of the given title/year/medium triples already exist
+- `GET /entries`
+  - Params: `status`, `medium`, `origin`, `title`, `custom_list`,
+    `custom_list_empty`, `external_url`, `sort`, `order`, `limit`, `offset`.
+  - Response: `{ items, total, limit, offset }`.
+  - Applies `ui.mediums.visible` before counting and pagination.
+- `GET /entries/{entry_id}`
+- `POST /entries`
+- `PUT /entries/{entry_id}`
+- `DELETE /entries`
+- `DELETE /entries/{entry_id}`
+
+Batch/duplicate routes:
+
+- `POST /entries/batch`
+- `POST /entries/batch-delete`
+- `GET /entries/duplicates`
+- `POST /entries/check-duplicates`
+
+Important: batch routes are POST routes, not PUT/DELETE.
+
+### Custom Lists
+
+- `GET /custom-lists`
+- `PUT /custom-lists/{name:path}`
+- `DELETE /custom-lists/{name:path}`
+
+`name:path` allows list names that contain path-like characters. The frontend
+uses `encodeURIComponent(name)`.
+
+Custom-list summaries also apply `ui.mediums.visible`, so list counts only
+reflect currently visible entries.
 
 ### Search
-- `GET /search?title=...&source=...` (optionally `sources=a,b,c`)
-- `source` optional; omitted -> fan out across providers, deduplicate/rank (capped at 10)
-- `GET /search/from-url?url=...` -> add-by-URL: scrape a supported source page to a
-  prefilled entry. Usually one result, but some pages resolve to **many** (a
-  Goodreads `/series/<id>` URL -> one result per numbered book)
-- `GET /search/chapter-count?title=...` -> on-demand MangaUpdates chapter total (ongoing manga)
-- `GET /search/imdb-detail?id=tt...` -> on-demand IMDb detail (rating, episode count,
-  year, cover, genres); used to enrich an IMDb-sourced Film/TV entry when adding
 
-### Explore (recommendations)
-- `GET /explore?medium=&limit=&seed=&refresh=&sources=a,b,c`
-- Returns `{ items, affinity, personalised }`. Honours the user's `ui.explore`
-  (`by` dimension + `personalize`); `sources` restricts which providers are drawn
-  from. Results cached per `(user, medium, personalize, sources-hash)`.
+- `GET /search?title=&source=&limit=`
+- `GET /search/from-url?url=`
+- `GET /search/chapter-count?title=`
+- `GET /search/imdb-detail?id=`
 
-### Custom lists
-- `GET /custom-lists` -> `[{ name, count, updated_at }]`
-- `PUT /custom-lists/{name}` -> rename; `DELETE /custom-lists/{name}` -> clear
+`/search` accepts one optional `source`. If `source` is omitted, the backend
+searches its default/fan-out path. The frontend also supports multiple selected
+sources by issuing parallel single-source requests and deduplicating/ranking
+client-side in `frontend/api.jsx`.
+
+`/search/from-url` supports direct source-page scraping. It usually returns one
+result, but can return multiple results for some pages, such as a Goodreads
+series URL.
+
+### Explore
+
+- `GET /explore?medium=&limit=&seed=&refresh=&sources=`
+
+Behavior:
+
+- Reads `ui.explore` from the authenticated user's settings.
+- `sources` is a comma-separated available-source set from the frontend.
+- `refresh=true` bypasses and overwrites the per-user/per-medium cache.
+- Response: `{ items, affinity, personalised }`.
 
 ### Covers
-- `POST /covers/upload` -> store cover bytes (used by the extension for
-  Cloudflare-gated images); cached covers served back from `COVER_CACHE_DIR`
-- `GET /covers/cache` -> SSE stream that server-side caches uncached covers
+
+- `POST /covers/upload`
+- `GET /covers/full?url=`
+- `POST /covers/cache-all`
+
+`/covers/upload` is used by the browser extension. The extension fetches image
+bytes first-party and uploads them so Cloudflare-gated covers can be cached.
+
+`/covers/full` is public because image tags cannot send auth headers and cached
+covers are not treated as sensitive.
+
+`/covers/cache-all` is an authenticated SSE stream that server-side caches every
+not-yet-cached cover it can fetch. Cloudflare-gated sources may fail server-side
+and require the extension path.
 
 ### Stats
-- `GET /stats` -> aggregate counts, avg ratings, medium/origin breakdowns,
-  per-month activity, completion-by-medium, rating distribution/comparison,
-  backlog age, release-year profile, completion streaks
+
+- `GET /stats`
+
+Returns aggregate counts, ratings, medium/origin breakdowns, monthly activity,
+completion rates, backlog age, rating comparisons, release-year stats, and
+streak data. The aggregate is filtered by `ui.mediums.visible` server-side.
 
 ### Import/Export
-- `GET /entries/export` -> CSV export for authenticated user
-- `POST /entries/import/preview` -> classify uploaded CSV rows (`to_import`, `exact_duplicates`, `conflicts`)
-- `POST /entries/import/confirm` -> apply selected creates/updates
-- `POST /entries/import/auto` -> SSE stream that auto-searches metadata row-by-row
-- `POST /entries/import/mal` -> SSE stream importing a MyAnimeList XML export (+ confirm step for conflicts)
+
+- `GET /entries/export`
+- `POST /entries/import/preview`
+- `POST /entries/import/confirm`
+- `POST /entries/import/auto`
+- `POST /entries/import/mal`
+- `POST /entries/import/mal/confirm`
+
+Auto import and MAL import are SSE-style streaming endpoints.
 
 ### Backup
-- `GET /backup/status` -> `{ configured, backup_freq, last_backup_at, email }`
-- `POST /backup/run` -> email a backup now (requires SMTP configured)
 
-> Endpoint paths above are indicative; the live contract is the source of truth —
-> see `routers.py` and the interactive docs at `/docs`.
+- `GET /backup/status`
+- `POST /backup/run`
 
----
-
-## 6. Frontend Behavior (Current)
-
-- React Router routes in `app.jsx`: `/dashboard`, `/library`, `/explore`,
-  `/statistics`, `/console`. Legacy redirects: `/manage` -> `/library?mode=manage`,
-  `/settings` -> `/console`. Unauthenticated users see `LandingPage` / `AuthModal`.
-- Global auth state in localStorage (`auth_token`, `auth_username`).
-- Theme is a light/dark class on the root **plus** a user-selectable accent colour
-  (`data-accent` on `<html>`); the landing page is always dark/blue.
-- Top-level pages:
-  - Dashboard: current/recent sections, quick status changes, sidebar filters, activity view
-  - Library: full table, sorting/filtering, pagination, inline edits, custom-list
-    chips, and a right-sidebar "Multi-select" toggle that swaps Sort for bulk
-    batch-edit tools (the former Manage page)
-  - Explore: personalised recommendations with a "bias on/off" affinity sidebar
-  - Statistics: Recharts visualizations and breakdowns
-  - Console: merged settings + library tools — a browser-extension download
-    section at the top (shown only when the extension is missing or out of date),
-    theme/accent, per-page layout, Explore bias & personalisation, available
-    search sources, change password, periodic backup, plus collapsible inline
-    tools (custom lists, duplicate finder, cover caching, CSV/auto/MAL import,
-    CSV export, data wipe). The "Install Extension" button was removed from other
-    pages; the Dashboard shows only an "Update Extension" link (→ Console) when an
-    installed copy is out of date.
-- **UI preferences** live in a single `ui_preferences` JSON document
-  (`frontend/preferences.jsx` `usePreferences`, mirrored by `schemas.DEFAULT_UI`);
-  per-page layout reads from it. Don't add parallel localStorage prefs (the
-  search-source availability selection in `searchSources.js` is a deliberate
-  pre-existing exception).
-- **CSS architecture:** `frontend/styles.css` is only the stable import
-  entrypoint, used by both the main app and the extension popup. Add rules to the
-  purpose-specific files in `frontend/styles/` and preserve import order. Keep
-  page-specific selectors in their page files and shared primitives/utilities in
-  `components.css`, `shell.css`, or `base.css`.
-- **Inline style convention:** static presentation belongs in CSS classes.
-  Runtime-calculated values may be passed from JSX only as CSS custom properties
-  (examples: progress widths, chart bar heights, dashboard split ratios,
-  skeleton sizes, swatch colors). `CustomSelect` is the intentional exception:
-  its portaled menu uses measured inline `left/top/width/maxHeight` geometry.
+Backup requires SMTP config. If SMTP is not configured, the frontend should
+disable or clearly gate backup actions.
 
 ---
 
-## 7. Search Provider Notes
+## 7. Frontend Architecture
 
-Search is provider-based and asynchronous. Providers currently wired (15):
-- IMDb, TMDB, AniList, Jikan, Kitsu
-- NovelUpdates, MangaDex, MangaUpdates
-- IGDB, RAWG
-- Goodreads, Google Books, Open Library, ComicVine
-- VNDB
+The frontend is a React 18 + Vite app.
 
-Backend combines provider results, deduplicates similar title/medium pairs, and
-ranks by source priority (exact title matches first). See README → "How Each
-Source Works" for the per-source access mechanism, keys, and quirks. Highlights:
-- **IMDb** (no key, default Film/TV): suggestion API for search, GraphQL for
-  detail (real rating + episode count, fetched on add via `/search/imdb-detail`)
-  and for Explore. IMDb title pages are AWS-WAF-walled and unused.
-- **Goodreads** (no key, default Books): `auto_complete` JSON for search, page
-  `__NEXT_DATA__`/`ld+json` scrape for detail + **whole-series add** (a
-  `/series/<id>` URL → one entry per numbered book), genre shelves for Explore.
-  `/search` is WAF-walled and unused.
-- **NovelUpdates** (no key): HTML scrape behind Cloudflare; intermittently
-  blocked server-side, so the extension provides a silent first-party fallback.
-- Ratings out of 5 (Goodreads, NovelUpdates) are normalised ×2 to 0–10.
+### Routes
 
-**Available sources.** The Add-Entry and Explore source pickers only offer the
-sources enabled in Console -> Search Sources (sitewide; localStorage
-`available_sources` in `frontend/pages/components/searchSources.js`). The default
-`DEFAULT_SOURCES` is roughly one provider per medium — **IMDb (film/TV)**, Jikan
-(anime/manga) with MangaUpdates as a manga backup, NovelUpdates (light/web novel),
-RAWG (games), VNDB (visual novels), **Goodreads (books)**, ComicVine (comics) —
-chosen to avoid duplicate hits across overlapping sources (e.g. AniList vs Jikan).
+Routes live in `frontend/app.jsx`:
 
-**Explore recommender.** `explore_service.py` reuses the providers' trending /
-popular endpoints per medium, restricted to the available sources, drops owned
-titles, and ranks by popularity plus an optional bias toward the user's
-consumption profile (off when `ui.explore.personalize` is false). Results are
-cached per `(user, medium)`, so leaving a slow scan and returning shows the
-finished set. The Explore page also keeps a per-medium client cache so toggling a
-source only queries the newly-added source instead of a full reroll; if Goodreads
-shelves are blocked, the extension loads them first-party and merges them in.
+- `/`: logged-out landing page; authenticated users redirect to Dashboard.
+- `/dashboard`
+- `/library`
+- `/explore`
+- `/statistics`
+- `/console`
+- `/manage`: redirects to `/library?mode=manage`.
+- `/settings`: redirects to `/console`.
+- `*`: redirects based on auth state.
+
+### Top-Level Pages
+
+`Dashboard.jsx`:
+
+- Shows current, planned, completed/recent, and activity views.
+- Supports quick status/progress/rating interactions.
+- Can send filters to Library through `onFilterChange`.
+- Uses CSS variables for dynamic split and tiny chart/progress values.
+
+`Library.jsx`:
+
+- Main table for full library view.
+- Supports filters, sorting, pagination, inline edits, quick actions, custom
+  lists, and manage/multi-select mode.
+- Manage mode replaces the old separate Manage page.
+- Table formatting is sensitive. Preserve:
+  - Standard vs fixed-title table modes.
+  - Title-column sizing rules.
+  - `library-table` and `is-fixed-title` class behavior.
+  - `SortTh` active state and sort indicator behavior.
+  - Pagination/action rows and manage/batch controls.
+
+`Explore.jsx`:
+
+- Recommendation surface.
+- Uses available search sources and user Explore preferences.
+- Supports personalized/neutral ranking behavior, hide-in-library behavior, and
+  source restrictions.
+- Hidden mediums are removed from the sidebar, recommendation cards, and
+  affinity-medium tags client-side.
+- `combine_all` determines whether all-medium recommendations are mixed from all
+  medium-specific sets or fetched via legacy separate behavior.
+
+`Statistics.jsx`:
+
+- Recharts-based visualizations and summary cards.
+- Section visibility and ranges are preference-driven.
+- Uses CSS variables for dynamic tooltip/swatch/bar widths/colors/opacities.
+
+`Console.jsx`:
+
+- Merged settings and library tools page.
+- Contains extension download/update UI, theme/accent controls, per-page layout
+  settings, visible-medium selection, Explore settings, search-source
+  availability, password change, backup controls, import/export, custom lists,
+  duplicates, cover caching, Quick Add, resync, and data wipe tools.
+- Former modals are now mostly inline/collapsible `*Panel` components.
+
+`LandingPage.jsx`:
+
+- Logged-out marketing/login surface.
+- The logged-out app shell is forced to dark/blue without overwriting the
+  authenticated user's saved theme/accent.
+
+### Auth and App State
+
+- Token stored in `localStorage.auth_token`.
+- Username stored in `localStorage.auth_username`.
+- API base is `import.meta.env.VITE_API_BASE`.
+- `app.jsx` performs a health check every 30 seconds.
+- Theme is a root `light` class.
+- Accent is `document.documentElement.dataset.accent`.
+- Theme/accent are persisted only while authenticated.
+
+### Preferences
+
+Preferences are centralized in `frontend/preferences.jsx` and mirrored by
+`backend/schemas.py` `DEFAULT_UI`.
+
+Current `DEFAULT_UI` shape:
+
+- `rating_step`
+- `mediums`
+  - `visible`
+- `library`
+  - `default_mode`
+  - `default_sort`
+  - `entries_per_page`
+  - `fix_title`
+  - `quick_actions`
+  - `columns.view`
+  - `columns.manage`
+- `dashboard`
+  - row counts
+  - split percentage
+  - columns for current/planned/completed tables
+- `statistics`
+  - ranges
+  - section toggles
+- `explore`
+  - `default_medium`
+  - `personalize`
+  - `hide_in_library`
+  - `by`
+  - `combine_all`
+
+Important behavior:
+
+- The backend always returns a default-merged UI doc.
+- Frontend settings load uses retry/backoff so a cold backend does not look like
+  a preference reset.
+- Failed settings loads do not clear the current document.
+- Settings self-heal on focus/online if a prior load failed.
+- Avoid adding new localStorage preferences unless there is a strong reason.
+- Deliberate exception: available search sources currently live in
+  `localStorage.available_sources` via `searchSources.js`.
 
 ---
 
-## 8. Conventions That Matter for Edits
+## 8. CSS Architecture
 
-- Backend architecture is service-oriented: router handlers delegate to `services/*`.
-- Entry ownership checks are enforced in routers for read/update/delete.
-- `completed_at` is auto-managed when status changes to/from `completed`.
-- Frontend components call API helpers from `frontend/api.jsx` (not ad-hoc fetches in random files).
-- Utilities/constants for statuses/medium/origin and list normalization live in `frontend/utils.jsx`.
-- Frontend styling uses plain CSS only. Prefer existing classes/utilities and
-  CSS variables over inline presentation. Be especially careful around
-  `.media-table`, `col-*`, `manage-entry-table`, `action-cell`, and
-  `data-mobile-show`; those selectors control desktop/mobile table formatting.
+Plain CSS is the project convention. Do not add Tailwind, styled-components, or
+CSS-in-JS without an intentional broader migration.
 
----
+`frontend/styles.css` is now the stable import entrypoint:
 
-## 9. Environment Variables
+```css
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
-Primary backend env vars:
-
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/mediatracker
-CORS_ORIGINS=http://localhost:3000,https://logarium.vercel.app
-HOST=0.0.0.0
-PORT=6443
-
-SECRET_KEY=replace-with-strong-secret
-JWT_ALGORITHM=HS256
-
-TMDB_API_KEY=
-IGDB_CLIENT_ID=
-IGDB_CLIENT_SECRET=
-GOOGLE_BOOKS_API_KEY=
-RAWG_API_KEY=
-COMICVINE_API_KEY=
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/shell.css';
+@import './styles/components.css';
+@import './styles/library-dashboard.css';
+@import './styles/statistics-explore.css';
+@import './styles/responsive.css';
+@import './styles/tools-add-custom.css';
+@import './styles/light.css';
 ```
 
-Frontend expects:
+Keep this import order unless there is a specific cascade reason to change it:
 
-```env
-VITE_API_BASE=http://localhost:6443
-```
+1. `tokens.css`
+   - Theme, accent, chart, spacing, and color variables.
+2. `base.css`
+   - Reset, body, links, scrollbars.
+3. `shell.css`
+   - App shell, topbar, page layout, sidebars, buttons.
+4. `components.css`
+   - Shared primitives: tables, badges, progress/rating, cards, stats, logs,
+     skeletons, modals, forms, chips, toggles.
+5. `library-dashboard.css`
+   - Library and Dashboard-specific helpers.
+6. `statistics-explore.css`
+   - Statistics, Explore, Landing, drawer preamble/comment styles.
+7. `responsive.css`
+   - Mobile, drawer, and responsive table behavior.
+8. `tools-add-custom.css`
+   - Console tools, add/custom/import panels, CustomSelect, batch edit.
+9. `light.css`
+   - Light theme overrides. Imported last intentionally.
+
+### CSS Variable Rules
+
+Use CSS variables for:
+
+- Theme/accent tokens.
+- Shared dimensions, colors, borders, surfaces, and shadows.
+- Dynamic values that must still be controlled by CSS selectors.
+
+Allowed inline `style={{ ... }}` cases:
+
+- Passing dynamic CSS custom properties, e.g.:
+  - `--progress-pct`
+  - `--completion-pct`
+  - `--dash-current-fr`
+  - `--dash-planned-fr`
+  - `--bar-height`
+  - `--tooltip-color`
+  - `--pie-swatch`
+  - `--bar-width`
+  - `--bar-color`
+  - `--bar-opacity`
+  - `--rating-bar-width`
+  - `--tool-progress-pct`
+  - `--skeleton-width`
+  - `--skeleton-height`
+  - `--select-fit-width`
+- Measured portal geometry in `CustomSelect.jsx` (`menuPosition`).
+
+Avoid static inline CSS. Move static declarations into the appropriate CSS file.
+
+### Table Formatting Warning
+
+Library and Dashboard table styles are easy to regress. Before changing table
+CSS, inspect:
+
+- `Library.jsx`
+- `Dashboard.jsx`
+- `frontend/styles/components.css`
+- `frontend/styles/library-dashboard.css`
+- `frontend/styles/responsive.css`
+
+Preserve:
+
+- Header and body alignment.
+- Fixed-title mode.
+- Manage/multi-select table behavior.
+- Inline editable cell hit areas.
+- Compact progress/rating controls.
+- Responsive behavior on narrow screens.
+
+Run `npm run build` after table/UI work. If possible, also inspect in browser at
+desktop and mobile widths.
 
 ---
 
-## 10. Known Gaps / Near-Term TODOs
+## 9. Search Providers and Source Selection
 
-Items still partially implemented or planned:
-- Periodic email backups now have a real scheduler (`backup_service`), gated on
-  SMTP being configured.
-- Custom-list sharing is intentionally deferred (no backend foundation yet).
-- Search/source UX continues to be refined (availability selection and ranking).
-- The search-source availability selection is localStorage-only (per-device), not
-  synced via the `ui_preferences` document.
+Backend keyword-search providers currently registered in
+`backend/services/search_providers/__init__.py`:
+
+- `tmdb`
+- `imdb`
+- `anilist`
+- `jikan`
+- `kitsu`
+- `mangadex`
+- `mangaupdates`
+- `novelupdates`
+- `igdb`
+- `rawg`
+- `google_books`
+- `open_library`
+- `comicvine`
+- `goodreads`
+- `vndb`
+
+Frontend source metadata lives in
+`frontend/pages/components/searchSources.js`.
+
+`SEARCH_SOURCES` includes the keyword-searchable providers. `SOURCE_LABEL` also
+includes URL-only labels:
+
+- `jjwxc`
+- `qidian`
+
+Default available sources are curated to reduce overlapping duplicates:
+
+- `imdb`
+- `jikan` (default for anime, manga, and light novels)
+- `mangaupdates`
+- `novelupdates` (default for web novels)
+- `rawg`
+- `vndb`
+- `goodreads`
+- `comicvine`
+
+Available sources are stored in `localStorage.available_sources`. This is a
+known exception to the otherwise server-backed UI preferences model. Console's
+visible-medium toggles also update this local source set using
+`SOURCE_MEDIUMS`/`DEFAULT_SOURCES_BY_MEDIUM`: disabling a medium removes a
+source only when none of that source's supported mediums remain visible, while
+re-enabling a medium restores that medium's default source(s).
+
+Per-medium source defaults:
+
+- Film and TV Show: `imdb`
+- Anime: `jikan`
+- Manga: `jikan`, with `mangaupdates` as a backup
+- Light Novel: `jikan`
+- Web Novel: `novelupdates`
+- Book: `goodreads`
+- Comic: `comicvine`
+- Game: `rawg`
+- Visual Novel: `vndb`
+
+### URL Source Inference
+
+`backend/constants.py` maps URL host fragments to canonical sources. Current
+recognized domains include:
+
+- `themoviedb.org` -> `tmdb`
+- `anilist.co` -> `anilist`
+- `myanimelist.net` -> `jikan`
+- `kitsu.io` -> `kitsu`
+- `novelupdates.com` -> `novelupdates`
+- `mangadex.org` -> `mangadex`
+- `igdb.com` -> `igdb`
+- `rawg.io` -> `rawg`
+- `books.google.com` -> `google_books`
+- `openlibrary.org` -> `open_library`
+- `comicvine.gamespot.com` -> `comicvine`
+- `mangaupdates.com` / `baka-updates.com` -> `mangaupdates`
+- `vndb.org` -> `vndb`
+
+Some URL scrapers support sources beyond keyword search, notably `jjwxc` and
+`qidian`.
+
+---
+
+## 10. Browser Extension
+
+The `extension/` directory contains a Manifest V3 browser extension. It supports
+Chrome/Chromium and Firefox packaging.
+
+Important roles:
+
+- Detect supported media pages.
+- Bridge page/source data into Logarium.
+- Fetch covers first-party and upload bytes to `/covers/upload`.
+- Help with Cloudflare-gated covers that the backend cannot fetch directly.
+
+Useful files:
+
+- `extension/package.json`
+- `extension/public/manifest.json`
+- `extension/public/background.js`
+- `extension/public/bridge.js`
+- `extension/src/lib/site.js`
+- `extension/src/lib/scrapers.js`
+- `extension/scripts/release.js`
+
+Release script behavior:
+
+- Bumps extension version in manifest/package files.
+- Builds browser artifacts.
+- Removes/prunes old build files/artifacts.
+- Strips `VITE_API_BASE` from the environment so `.env.production` wins.
+- Reads AMO credentials from `.env` for Firefox signing when used.
+
+---
+
+## 11. Frontend Maintainability Rules
+
+General:
+
+- Keep React components in PascalCase files.
+- Use camelCase for frontend functions and state.
+- Preserve two-space indentation in JSX and CSS.
+- Keep network calls centralized in `frontend/api.jsx`.
+- Keep shared enums/helpers in `frontend/utils.jsx`.
+- Keep reusable UI inside `frontend/pages/components/`.
+- Prefer existing CSS classes and variables over new one-off styles.
+
+Styling:
+
+- Add new variables to `tokens.css` when they are reusable theme/design tokens.
+- Add shared component rules to `components.css`.
+- Add app-shell/page-frame/topbar/sidebar/button shell rules to `shell.css`.
+- Add Library/Dashboard-specific rules to `library-dashboard.css`.
+- Add Explore/Statistics/Landing-specific rules to `statistics-explore.css`.
+- Add Console tools/add/import/custom-select rules to `tools-add-custom.css`.
+- Add responsive overrides to `responsive.css`.
+- Add light-mode-only overrides to `light.css`.
+- Avoid static inline style props.
+- Prefer CSS custom properties for dynamic numeric/color values.
+
+Preferences:
+
+- If adding a new persistent UI preference, update both:
+  - `backend/schemas.py` `DEFAULT_UI`
+  - `frontend/preferences.jsx` `DEFAULT_UI`
+- Ensure the backend can deep-merge partial patches correctly.
+- Avoid introducing a second preference storage location unless unavoidable.
+
+Backend:
+
+- Keep route handlers thin.
+- Put reusable behavior in services.
+- Preserve graceful fallback behavior for external providers.
+- External APIs and scrapers can fail; frontend/backend should degrade cleanly.
+- Validate/normalize constrained values through schemas/constants.
+
+Data:
+
+- Never bypass user scoping.
+- Entry queries and mutations must be scoped to `current_user.username`.
+- Be careful with destructive actions:
+  - `DELETE /entries` wipes all entries for a user.
+  - Console data-wipe UI should remain explicit and confirmation-gated.
+
+---
+
+## 12. Environment and Configuration
+
+Frontend:
+
+- `VITE_API_BASE` is required for API calls.
+
+Backend:
+
+- Database URL/config is handled through backend config/environment.
+- JWT/auth settings live in backend config/environment.
+- SMTP settings gate backup functionality.
+- Provider API keys may be needed for some search providers.
+
+Security rules:
+
+- Do not commit secrets, API keys, SMTP credentials, auth secrets, or database
+  URLs.
+- Keep secrets in backend `.env` files and deployment variables.
+- Preserve graceful behavior when optional providers or SMTP are not configured.
+
+---
+
+## 13. Testing and Verification
+
+There is no formal test runner configured yet.
+
+Recommended checks by change type:
+
+- Frontend/CSS/React:
+  - `cd frontend && npm run build`
+  - `git diff --check`
+  - Manual browser inspection for table/layout work.
+- Backend:
+  - Start the API.
+  - Verify affected routes through `http://localhost:6443/docs`.
+  - Run migrations with `alembic upgrade head` when DB schema changes.
+- Scrapers:
+  - Use targeted scripts such as `public/test_novelupdates.py` where relevant.
+- Extension:
+  - Use extension package scripts in `extension/package.json`.
+  - Check generated artifacts only when release work is requested.
+
+---
+
+## 14. Known Gaps and Cautions
+
+- No formal automated test suite exists yet.
+- External search providers can break due to API changes, auth/rate limits, HTML
+  changes, Cloudflare, or missing credentials.
+- `frontend/design.css` is an older reference file, not the active style
+  architecture.
+- `frontend/styles.css` should stay as the CSS import entrypoint. Do not move
+  rules back into it unless they are imports or truly global one-liners.
+- Search-source availability is still localStorage-backed, unlike most UI
+  preferences.
+- `frontend/api.jsx` has a client-side source priority list for multi-source
+  search dedup/ranking; if backend provider ranking changes, consider syncing it.
+- Cover caching has two paths:
+  - Server-side `/covers/cache-all`.
+  - Extension upload `/covers/upload`.
+  Keep both behavior paths in mind when debugging missing covers.
+- Explore cache is keyed only by `(username, medium)` in the current model. If
+  source sets or personalization settings change, verify whether refresh/cache
+  behavior is still desired.
+- Library/Dashboard table CSS is high risk for visual regressions. Treat table
+  layout changes as UI-sensitive work.
+
+---
+
+## 15. Quick Source-of-Truth Pointers
+
+- Routes/API: `backend/routers.py`
+- Models: `backend/models.py`
+- Pydantic schemas and UI defaults: `backend/schemas.py`
+- Canonical values/source URL map: `backend/constants.py`
+- Frontend API client: `frontend/api.jsx`
+- Frontend app routes/theme shell: `frontend/app.jsx`
+- Frontend UI preferences: `frontend/preferences.jsx`
+- Search source list/defaults: `frontend/pages/components/searchSources.js`
+- CSS entrypoint: `frontend/styles.css`
+- CSS tokens: `frontend/styles/tokens.css`
+- Shared components CSS: `frontend/styles/components.css`
+- Library/Dashboard CSS: `frontend/styles/library-dashboard.css`
+- Responsive CSS: `frontend/styles/responsive.css`

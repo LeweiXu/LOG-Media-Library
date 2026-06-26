@@ -86,7 +86,7 @@ def _completion_streaks(completed_months: set[str], now: datetime) -> tuple[int,
     return current, longest
 
 
-def get_stats(db: Session, username: str) -> StatsResponse:
+def get_stats(db: Session, username: str, visible_mediums: set[str] | None = None) -> StatsResponse:
     entries = list(
         db.execute(
             select(Entry)
@@ -94,6 +94,11 @@ def get_stats(db: Session, username: str) -> StatsResponse:
             .order_by(Entry.id)
         ).scalars()
     )
+    if visible_mediums is not None:
+        entries = [
+            entry for entry in entries
+            if not entry.medium or entry.medium in visible_mediums
+        ]
     now = datetime.now(timezone.utc)
 
     status_counts = Counter(entry.status for entry in entries)

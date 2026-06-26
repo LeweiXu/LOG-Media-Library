@@ -677,6 +677,12 @@ input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
 .quickadd-head-right { display: flex; align-items: center; gap: 12px; }
+.quickadd-inline {
+  width: 100%;
+}
+.quickadd-body {
+  width: 100%;
+}
 .quickadd-tally {
   font-size: 10px;
   letter-spacing: 0.05em;
@@ -694,8 +700,11 @@ input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .quickadd-source-label { margin-bottom: 0; }
 .quickadd-clear { margin-left: 10px; }
 
-/* Mediums: 4 per row in the wide modal. */
-.quickadd-medium-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* Mediums: 5 columns / 2 rows on desktop. */
+.quickadd-medium-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 900px) {
+  .quickadd-medium-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 640px) {
   .quickadd-medium-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

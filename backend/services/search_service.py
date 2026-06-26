@@ -11,7 +11,7 @@ Source → Provider mapping:
   imdb          → IMDb (Film & TV — default)
   tmdb          → TMDB (Film & TV)
   anilist       → AniList (Anime & Manga)
-  jikan         → MyAnimeList via Jikan (Anime & Manga)
+  jikan         → MyAnimeList via Jikan (Anime, Manga, Light Novel default)
   kitsu         → Kitsu (Anime & Manga)
   novelupdates  → NovelUpdates (Web Novel, Light Novel)
   mangadex      → MangaDex (Manga, Comic)
@@ -68,9 +68,9 @@ logger = logging.getLogger(__name__)
 # Provider preference order when two results look like duplicates.
 # Lower index = higher trust for cover quality / metadata completeness.
 _SOURCE_PRIORITY = [
+    "jikan",        # MAL data — preferred over AniList for anime & manga
     "novelupdates", # best web novel metadata, highly curated
     "vndb",         # best visual novel metadata, highly curated
-    "jikan",        # MAL data — preferred over AniList for anime & manga
     "imdb",         # best film/TV metadata + authoritative ratings
     "tmdb",         # film/TV fallback (covers, overviews)
     "igdb",         # best game metadata
@@ -184,7 +184,7 @@ _MEDIUM_PROVIDERS: dict[str, list] = {
     "TV Show":      [search_imdb, search_tmdb],
     "Anime":        [search_jikan, search_anilist, search_kitsu],
     "Manga":        [search_jikan, search_anilist, search_mangadex, search_mangaupdates],
-    "Light Novel":  [search_novelupdates, search_jikan, search_anilist, search_google_books, search_open_library],
+    "Light Novel":  [search_jikan, search_novelupdates, search_anilist, search_google_books, search_open_library],
     "Web Novel":    [search_novelupdates, search_google_books, search_open_library],
     "Book":         [search_goodreads, search_google_books, search_open_library],
     "Game":         [search_igdb, search_rawg],

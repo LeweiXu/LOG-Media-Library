@@ -1,14 +1,17 @@
 import { useState, useMemo } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates, createEntry } from '../../api.jsx';
-import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, onCoverError } from '../../utils.jsx';
+import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, onCoverError, visibleMediumSetFromPrefs } from '../../utils.jsx';
 import { SEARCH_SOURCES, SOURCE_LABEL, resultToEntry, loadAvailableSources } from './searchSources.js';
 import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
 import { Tabs, SelectRow } from './terminal.jsx';
 import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
+import { usePreferences } from '../../preferences.jsx';
 
 export default function AddEntryModal({ onClose, onCreated, initialEntry = null, initialTab = 'search', hideTabs = false }) {
+  const { prefs } = usePreferences();
+  const visibleMediumSet = useMemo(() => visibleMediumSetFromPrefs(prefs), [prefs]);
   const [tab,             setTab]             = useState(initialTab);
   const [query,           setQuery]           = useState('');
   const [selectedSources, setSelectedSources] = useState(() => new Set());
@@ -61,7 +64,8 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
           return;
         }
         const data = await fetchByUrl(query.trim());
-        const found = Array.isArray(data) ? data : [];
+        const found = (Array.isArray(data) ? data : [])
+          .filter(item => !item.medium || visibleMediumSet.has(item.medium));
         if (found.length === 0) {
           setSearchErr("Couldn't read that page — it may be unavailable or its layout changed. Try manual entry.");
           return;
@@ -72,7 +76,8 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
       const sources = (selectedSources.size ? [...selectedSources] : availableList.map(s => s.value))
         .filter(v => availableSet.has(v));
       const data = await searchMedia(query.trim(), sources, extended);
-      let list = Array.isArray(data) ? data : data?.results ?? [];
+      let list = (Array.isArray(data) ? data : data?.results ?? [])
+        .filter(item => !item.medium || visibleMediumSet.has(item.medium));
       setResults(list);
       await runDupCheck(list);
 
@@ -84,7 +89,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
         try {
           const nu = await extensionNuSearch(query.trim());
           if (nu.length) {
-            list = mergeResults(list, nu);
+            list = mergeResults(list, nu).filter(item => !item.medium || visibleMediumSet.has(item.medium));
             setResults(list);
             await runDupCheck(list);
           }

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getCustomLists, fetchChapterCount, fetchImdbDetail } from '../../api.jsx';
-import { MEDIUMS, ORIGINS, STATUSES, statusLabel, inferSourceFromUrl, roundToStep } from '../../utils.jsx';
+import { ORIGINS, STATUSES, statusLabel, inferSourceFromUrl, roundToStep, visibleMediumsFromPrefs } from '../../utils.jsx';
 import { usePreferences, DEFAULT_UI } from '../../preferences.jsx';
 import CustomListField from './CustomListField.jsx';
 import CustomSelect from './CustomSelect.jsx';
@@ -69,6 +69,7 @@ export default function EntryForm({
 }) {
   const isEdit = Boolean(entry?.id);
   const { prefs } = usePreferences();
+  const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
   const ratingStep = prefs.rating_step ?? DEFAULT_UI.rating_step;
   const [form, setFormState] = useState(() => entryToForm(entry));
   const [customLists, setCustomLists] = useState([]);
@@ -214,10 +215,10 @@ export default function EntryForm({
             value={form.medium}
             options={[
               { value: '', label: '-' },
-              ...MEDIUMS.map(medium => ({ value: medium, label: medium })),
+              ...visibleMediums.map(medium => ({ value: medium, label: medium })),
             ]}
             onChange={value => setField('medium', value)}
-            maxVisible={MEDIUMS.length + 1}
+            maxVisible={visibleMediums.length + 1}
             ariaLabel="Medium"
           />
         </div>

@@ -8,6 +8,12 @@ export const DEFAULT_UI = {
   // Granularity for rating entry/editing across the app: the up/down step size
   // and the grid ratings snap to on save. One of 0.1, 0.5, 1.0.
   rating_step: 1.0,
+  mediums: {
+    visible: [
+      'Film', 'TV Show', 'Anime', 'Book', 'Manga',
+      'Light Novel', 'Web Novel', 'Comic', 'Game', 'Visual Novel',
+    ],
+  },
   library: {
     default_mode: 'view',
     default_sort: 'updated_at',

@@ -4,7 +4,7 @@ import {
   getEntries, updateEntry, deleteEntry,
   getCustomLists, batchUpdateEntries, batchDeleteEntries,
 } from '../api.jsx';
-import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError } from '../utils.jsx';
+import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError, visibleMediumsFromPrefs } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
@@ -78,6 +78,8 @@ export default function Library({ initialFilters = {} }) {
 
   const { prefs, loaded: prefsLoaded, updateUi } = usePreferences();
   const libPrefs = prefs.library || DEFAULT_UI.library;
+  const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
+  const visibleMediumSet = useMemo(() => new Set(visibleMediums), [visibleMediums]);
 
   // ── Mode: 'view' (everyday edit) | 'manage' (bulk). URL/nav > saved default. ──
   const initialMode = (() => {
@@ -183,6 +185,10 @@ export default function Library({ initialFilters = {} }) {
       : listFilter ? { custom_list: listFilter }
       : {}
   ), [listFilter]);
+
+  useEffect(() => {
+    if (mediumFilter && !visibleMediumSet.has(mediumFilter)) setMediumFilter('');
+  }, [mediumFilter, visibleMediumSet]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(''); }
@@ -636,7 +642,7 @@ export default function Library({ initialFilters = {} }) {
             {(() => {
               const meta = BULK_FIELDS.find(f => f.key === bulkField);
               if (meta.kind === 'medium' || meta.kind === 'origin') {
-                const opts = meta.kind === 'medium' ? MEDIUMS : ORIGINS;
+                const opts = meta.kind === 'medium' ? visibleMediums : ORIGINS;
                 return (
                   <CustomSelect
                     className="inline-select batch-select"
@@ -705,7 +711,7 @@ export default function Library({ initialFilters = {} }) {
         <div className="sidebar-section">
           <span className="sidebar-label">Medium</span>
           <div className={`sidebar-item${mediumFilter === '' ? ' active' : ''}`} onClick={() => setMediumFilter('')}>All</div>
-          {MEDIUMS.map(m => (
+          {visibleMediums.map(m => (
             <div key={m} className={`sidebar-item${mediumFilter === m ? ' active' : ''}`} onClick={() => setMediumFilter(m)}>
               {m}
               {loading

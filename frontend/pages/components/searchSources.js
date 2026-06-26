@@ -26,19 +26,50 @@ export const SOURCE_LABEL = {
   qidian: 'Qidian',
 };
 
+export const SOURCE_MEDIUMS = {
+  imdb:         ['Film', 'TV Show'],
+  tmdb:         ['Film', 'TV Show'],
+  anilist:      ['Anime', 'Manga', 'Light Novel'],
+  jikan:        ['Anime', 'Manga', 'Light Novel'],
+  kitsu:        ['Anime', 'Manga'],
+  novelupdates: ['Light Novel', 'Web Novel'],
+  mangadex:     ['Manga', 'Comic'],
+  mangaupdates: ['Manga'],
+  igdb:         ['Game'],
+  rawg:         ['Game'],
+  goodreads:    ['Book'],
+  google_books: ['Book', 'Light Novel', 'Web Novel'],
+  open_library: ['Book', 'Light Novel', 'Web Novel'],
+  comicvine:    ['Comic'],
+  vndb:         ['Visual Novel'],
+};
+
+export const DEFAULT_SOURCES_BY_MEDIUM = {
+  Film:           ['imdb'],
+  'TV Show':     ['imdb'],
+  Anime:          ['jikan'],
+  Manga:          ['jikan', 'mangaupdates'],
+  'Light Novel':  ['jikan'],
+  'Web Novel':    ['novelupdates'],
+  Book:           ['goodreads'],
+  Comic:          ['comicvine'],
+  Game:           ['rawg'],
+  'Visual Novel': ['vndb'],
+};
+
 // Curated sitewide default for which sources are *available* to search: roughly
 // one provider per medium so the Add/Explore pickers don't offer overlapping
 // sources that return the same titles (e.g. AniList vs MyAnimeList for anime).
-// MyAnimeList (jikan) covers anime + manga, with MangaUpdates kept as a manga
+// MyAnimeList (jikan) covers anime, manga, and light novels, with MangaUpdates kept as a manga
 // backup; IMDb covers film/TV (authoritative ratings + episode counts);
-// NovelUpdates covers light/web novels; Goodreads covers books (richer metadata +
+// NovelUpdates covers web novels; Goodreads covers books (richer metadata +
 // reliable ratings than Google Books). Users edit the available set in
 // Console → Search Sources.
 export const DEFAULT_SOURCES = [
   'imdb',         // film, tv
-  'jikan',        // anime, manga (MyAnimeList)
+  'jikan',        // anime, manga, light novel (MyAnimeList)
   'mangaupdates', // manga backup
-  'novelupdates', // light novel, web novel
+  'novelupdates', // web novel
   'rawg',         // game
   'vndb',         // visual novel
   'goodreads',    // book

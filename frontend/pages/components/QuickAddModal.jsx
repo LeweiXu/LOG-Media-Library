@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getExplore, createEntry, getCustomLists } from '../../api.jsx';
-import { MEDIUMS, STATUSES, RATING_OPTIONS, statusLabel, onCoverError, roundToStep } from '../../utils.jsx';
+import { STATUSES, RATING_OPTIONS, statusLabel, onCoverError, roundToStep, visibleMediumsFromPrefs } from '../../utils.jsx';
 import { usePreferences, DEFAULT_UI } from '../../preferences.jsx';
 import CustomListField from './CustomListField.jsx';
 import CustomSelect from './CustomSelect.jsx';
@@ -46,10 +46,13 @@ function defaultForm(item) {
  * status / progress / rating / list and add — purpose-built for logging media
  * consumed before they started using the app.
  */
-export default function QuickAddModal({ onClose, onCreated, medium: initialMedium = '' }) {
+export default function QuickAddModal({ onClose, onCreated, medium: initialMedium = '', inline = false }) {
   const { prefs } = usePreferences();
+  const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
   // Multi-select medium filter. Empty set = all mediums.
-  const [mediums, setMediums] = useState(() => new Set(initialMedium ? [initialMedium] : []));
+  const [mediums, setMediums] = useState(() => new Set(
+    initialMedium && visibleMediums.includes(initialMedium) ? [initialMedium] : [],
+  ));
   const [pool,     setPool]     = useState([]);
   const [dismissed, setDismissed] = useState(() => new Set());
   const [loading,  setLoading]  = useState(true);
@@ -93,7 +96,7 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
     const seq = ++requestSeq.current;
     setLoading(true); setError('');
     try {
-      const targets = mediums.size ? [...mediums] : [''];
+          const targets = mediums.size ? [...mediums] : [''];
       const batches = await Promise.all(
         targets.map(m => getExplore({ medium: m, limit: POOL_LIMIT, seed, refresh }).catch(() => ({ items: [] }))),
       );
@@ -108,14 +111,15 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
           merged.push(it);
         }
       }
-      setPool(merged);
+      const visibleSet = new Set(visibleMediums);
+      setPool(merged.filter(item => !item.medium || visibleSet.has(item.medium)));
     } catch (e) {
       if (seq !== requestSeq.current) return;
       setError(e.message);
     } finally {
       if (seq === requestSeq.current) { setLoading(false); setRefresh(false); }
     }
-  }, [mediums, seed, refresh]);
+  }, [mediums, seed, refresh, visibleMediums]);
 
   useEffect(() => { fetchPool(); }, [fetchPool]);
 
@@ -152,6 +156,10 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
   });
 
   const ratingStep = prefs.rating_step ?? DEFAULT_UI.rating_step;
+
+  useEffect(() => {
+    setMediums(prev => new Set([...prev].filter(medium => visibleMediums.includes(medium))));
+  }, [visibleMediums]);
 
   function toggleMedium(m) {
     setMediums(prev => {
@@ -212,15 +220,16 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
     setSeed(newSeed());
   }
 
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal modal-wide quickadd-modal">
+  const body = (
+    <div className={inline ? 'quickadd-inline' : ''}>
+      {!inline && (
         <div className="modal-header">
           <span className="modal-title">Quick Add — backfill your library</span>
           <button className="icon-btn" onClick={onClose}>✕</button>
         </div>
+      )}
 
-        <div className="modal-body">
+        <div className={inline ? 'quickadd-body' : 'modal-body'}>
           <div className="source-select quickadd-mediums">
             <div className="source-select-head">
               <span className="form-label quickadd-source-label">
@@ -241,7 +250,7 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
               </span>
             </div>
             <div className="source-grid quickadd-medium-grid">
-              {MEDIUMS.map(m => {
+              {visibleMediums.map(m => {
                 const on = mediums.has(m);
                 return (
                   <button key={m} type="button" className={`source-chip${on ? ' is-on' : ''}`}
@@ -434,6 +443,15 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
             </>
           )}
         </div>
+      </div>
+  );
+
+  if (inline) return body;
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal modal-wide quickadd-modal">
+        {body}
       </div>
     </div>
   );

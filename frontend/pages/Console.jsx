@@ -7,7 +7,13 @@ import { MEDIUMS } from '../utils.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import { useExtensionPresent, useExtensionStatus } from '../extensionBridge.js';
 import CustomSelect from './components/CustomSelect.jsx';
-import { SEARCH_SOURCES, loadAvailableSources, saveAvailableSources } from './components/searchSources.js';
+import {
+  DEFAULT_SOURCES_BY_MEDIUM,
+  SEARCH_SOURCES,
+  SOURCE_MEDIUMS,
+  loadAvailableSources,
+  saveAvailableSources,
+} from './components/searchSources.js';
 import ListsPanel from './components/ListsPanel.jsx';
 import DedupPanel from './components/DedupPanel.jsx';
 import CacheCoversPanel from './components/CacheCoversPanel.jsx';
@@ -16,6 +22,7 @@ import ImportPanel from './components/ImportPanel.jsx';
 import ImportAutoPanel from './components/ImportAutoPanel.jsx';
 import ImportMalPanel from './components/ImportMalPanel.jsx';
 import ExtensionDownloadSection from './components/ExtensionDownloadSection.jsx';
+import QuickAddModal from './components/QuickAddModal.jsx';
 
 const LIBRARY_SORT_FIELDS = [
   { key: 'title', label: 'Title' }, { key: 'medium', label: 'Medium' },
@@ -275,6 +282,8 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   const dash = ui.dashboard || DEFAULT_UI.dashboard;
   const statp = ui.statistics || DEFAULT_UI.statistics;
   const exp = ui.explore || DEFAULT_UI.explore;
+  const visibleMediums = ui.mediums?.visible ?? DEFAULT_UI.mediums.visible;
+  const visibleMediumSet = new Set(visibleMediums);
 
   // ── Library tools state ──
   const extPresent = useExtensionPresent();
@@ -301,6 +310,31 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
       saveAvailableSources(next);
       return next;
     });
+  }
+
+  function toggleVisibleMedium(value) {
+    const next = new Set(visibleMediums);
+    const enabling = !next.has(value);
+    enabling ? next.add(value) : next.delete(value);
+    const patch = { mediums: { visible: MEDIUMS.filter(medium => next.has(medium)) } };
+    if (exp.default_medium && !next.has(exp.default_medium)) {
+      patch.explore = { default_medium: null };
+    }
+    setAvailableSources(prev => {
+      const nextSources = new Set(prev);
+      if (enabling) {
+        (DEFAULT_SOURCES_BY_MEDIUM[value] || []).forEach(source => nextSources.add(source));
+      } else {
+        for (const [source, mediums] of Object.entries(SOURCE_MEDIUMS)) {
+          if (mediums.includes(value) && mediums.every(medium => !next.has(medium))) {
+            nextSources.delete(source);
+          }
+        }
+      }
+      saveAvailableSources(nextSources);
+      return nextSources;
+    });
+    saveUi(patch);
   }
 
   async function exportCSV() {
@@ -530,6 +564,11 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
                 </p>}
           </div>
         </ToolCard>
+        <ToolCard title="Quick Add" desc="backfill consumed media from recommendations">
+          <div className="console-tool-body">
+            <QuickAddModal inline onCreated={reloadLists} />
+          </div>
+        </ToolCard>
 
         {/* ── Import / Export ── */}
         <p className="console-group-label">Import / Export</p>
@@ -565,6 +604,37 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
           </Row>
           <Row title="Accent colour" desc="Highlight for buttons, selections, progress bars and links." stack>
             <AccentSwatches value={accent || 'blue'} onChange={a => onAccentChange?.(a)} />
+          </Row>
+        </Section>
+
+        {/* ── Media & Search Sources ── */}
+        <Section title="Media & Search Sources">
+          <Row
+            title="Visible mediums"
+            desc="Hidden mediums stay in your library data, but disappear from frontend views and selectors."
+            stack>
+            <div className="settings-chip-row">
+              {MEDIUMS.map(medium => (
+                <ChipToggle
+                  key={medium}
+                  label={medium}
+                  on={visibleMediumSet.has(medium)}
+                  onClick={() => toggleVisibleMedium(medium)}
+                />
+              ))}
+            </div>
+          </Row>
+          <Row
+            title="Available sources"
+            desc="Which providers the Add Entry and Explore source pickers offer."
+            stack>
+            <div className="settings-chip-row">
+              {SEARCH_SOURCES.map(s => (
+                <ChipToggle key={s.value} label={s.label}
+                  on={availableSources.has(s.value)}
+                  onClick={() => toggleSource(s.value)} />
+              ))}
+            </div>
           </Row>
         </Section>
 
@@ -671,9 +741,9 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         <Section title="Explore">
           <Row title="Default medium">
             <RowSelect value={exp.default_medium || ''}
-              options={[{ value: '', label: 'All' }, ...MEDIUMS.map(m => ({ value: m, label: m }))]}
+              options={[{ value: '', label: 'All' }, ...visibleMediums.map(m => ({ value: m, label: m }))]}
               onChange={v => saveUi({ explore: { default_medium: v || null } })}
-              maxVisible={MEDIUMS.length + 1} ariaLabel="Default medium" />
+              maxVisible={visibleMediums.length + 1} ariaLabel="Default medium" />
           </Row>
           <Row title="Explore by">
             <RowSelect value={exp.by}
@@ -691,22 +761,6 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               <ChipToggle label="Combine all mediums" on={exp.combine_all !== false}
                 onClick={() => saveUi({ explore: { combine_all: !(exp.combine_all !== false) } })}
                 title="'All' mixes every medium's recommendations into one feed and the sidebar just filters it. Turn off for the legacy per-medium recommenders." />
-            </div>
-          </Row>
-        </Section>
-
-        {/* ── Search Sources ── */}
-        <Section title="Search Sources">
-          <Row
-            title="Available sources"
-            desc="Which providers the Add Entry and Explore source pickers offer."
-            stack>
-            <div className="settings-chip-row">
-              {SEARCH_SOURCES.map(s => (
-                <ChipToggle key={s.value} label={s.label}
-                  on={availableSources.has(s.value)}
-                  onClick={() => toggleSource(s.value)} />
-              ))}
             </div>
           </Row>
         </Section>

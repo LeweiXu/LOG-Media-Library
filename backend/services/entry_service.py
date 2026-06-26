@@ -51,6 +51,12 @@ def _apply_filters(q, *, status, medium, origin, title, custom_list, custom_list
     return q
 
 
+def _apply_visible_mediums(q, visible_mediums: set[str] | None):
+    if visible_mediums is None:
+        return q
+    return q.where(or_(Entry.medium.is_(None), Entry.medium.in_(visible_mediums)))
+
+
 # ── Read ──────────────────────────────────────────────────────────────────────
 
 def get_entries(
@@ -68,11 +74,13 @@ def get_entries(
     order:  str = "desc",
     limit:  int = 40,
     offset: int = 0,
+    visible_mediums: set[str] | None = None,
 ) -> EntryListResponse:
     sort_col = SORTABLE_COLUMNS.get(sort, Entry.updated_at)
     direction = asc if order == "asc" else desc
 
     base_q = select(Entry).where(Entry.username == username)
+    base_q = _apply_visible_mediums(base_q, visible_mediums)
     base_q = _apply_filters(
         base_q,
         status=status,
@@ -110,12 +118,15 @@ def get_entry_by_id(db: Session, entry_id: int) -> Optional[Entry]:
     return db.get(Entry, entry_id)
 
 
-def get_custom_lists(db: Session, username: str) -> list[dict]:
+def get_custom_lists(db: Session, username: str, visible_mediums: set[str] | None = None) -> list[dict]:
     latest_updated = func.max(Entry.updated_at).label("updated_at")
-    rows = db.execute(
+    q = (
         select(Entry.custom_list, func.count(Entry.id), latest_updated)
         .where(Entry.username == username, Entry.custom_list.is_not(None), Entry.custom_list != "")
-        .group_by(Entry.custom_list)
+    )
+    q = _apply_visible_mediums(q, visible_mediums)
+    rows = db.execute(
+        q.group_by(Entry.custom_list)
         .order_by(desc(latest_updated), asc(Entry.custom_list))
     ).all()
     return [{"name": name, "count": count, "updated_at": updated_at} for name, count, updated_at in rows]

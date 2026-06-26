@@ -157,6 +157,12 @@ def _settings_payload(user: User) -> UserSettings:
     out.ui = deep_merge_ui(user.ui_preferences)
     return out
 
+
+def _visible_mediums(user: User) -> set[str] | None:
+    ui = deep_merge_ui(user.ui_preferences)
+    visible = ui.get("mediums", {}).get("visible")
+    return set(visible) if isinstance(visible, list) else None
+
 @router.get("/auth/me/settings", response_model=UserSettings)
 def get_settings(
     current_user: User = Depends(auth_service.get_current_user),
@@ -300,6 +306,7 @@ def list_entries(
         order=order,
         limit=limit,
         offset=offset,
+        visible_mediums=_visible_mediums(current_user),
     )
 
 @router.get("/entries/duplicates", response_model=list[DuplicateGroup])
@@ -394,7 +401,7 @@ def list_custom_lists(
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    return entry_service.get_custom_lists(db, current_user.username)
+    return entry_service.get_custom_lists(db, current_user.username, _visible_mediums(current_user))
 
 
 @router.put("/custom-lists/{name:path}", response_model=list[CustomListRead])
@@ -410,7 +417,7 @@ def rename_custom_list(
         old_name=name,
         new_name=payload.new_name,
     )
-    return entry_service.get_custom_lists(db, current_user.username)
+    return entry_service.get_custom_lists(db, current_user.username, _visible_mediums(current_user))
 
 
 @router.delete("/custom-lists/{name:path}", response_model=list[CustomListRead])
@@ -420,7 +427,7 @@ def clear_custom_list(
     current_user: User = Depends(auth_service.get_current_user),
 ):
     entry_service.clear_custom_list(db, current_user.username, name)
-    return entry_service.get_custom_lists(db, current_user.username)
+    return entry_service.get_custom_lists(db, current_user.username, _visible_mediums(current_user))
 
 # ── Search endpoint ───────────────────────────────────────────────────────────
 
@@ -560,4 +567,4 @@ def stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    return get_stats(db, username=current_user.username)
+    return get_stats(db, username=current_user.username, visible_mediums=_visible_mediums(current_user))

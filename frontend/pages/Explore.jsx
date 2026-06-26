@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getExplore } from '../api.jsx';
-import { MEDIUMS, statusLabel, onCoverError } from '../utils.jsx';
+import { MEDIUMS, statusLabel, onCoverError, visibleMediumsFromPrefs } from '../utils.jsx';
 import { loadAvailableSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import AddEntryPanel from './components/AddEntryPanel.jsx';
-import QuickAddModal from './components/QuickAddModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { useExtensionPresent, extensionGoodreadsExplore, extensionNuExplore, mergeResults } from '../extensionBridge.js';
 import { usePreferences } from '../preferences.jsx';
@@ -100,11 +99,6 @@ export default function Explore() {
   const [refreshFlag, setRefreshFlag] = useState(false);
   // Mobile drawer state — '', 'left', or 'right'.
   const [drawer, setDrawer] = useState('');
-  // Quick-add (backfill) modal toggle. We don't re-query mid-session on each add
-  // (the background reshuffle looked jarring) — instead reconcile once on close
-  // if anything was added, so recs drop the now-owned titles.
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const quickAddDirty = useRef(false);
   // Selected search sources — drive BOTH the top search box and the
   // recommendation filtering below. Empty set = all sources. Plain in-memory
   // state (never persisted) so a page reload always starts unfiltered.
@@ -125,6 +119,8 @@ export default function Explore() {
   // returns, so a change must bust the per-medium cache and re-fetch — otherwise
   // toggling Personalize wouldn't show until a reload.
   const { prefs } = usePreferences();
+  const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
+  const visibleMediumSet = useMemo(() => new Set(visibleMediums), [visibleMediums]);
   const personalize = prefs?.explore?.personalize !== false;
   const exploreBy = prefs?.explore?.by || 'all';
   // New default: "All" is one combined feed across every medium and the left
@@ -156,12 +152,16 @@ export default function Explore() {
 
   // Keep the medium filter in the URL (?medium=) so a reload restores it.
   useEffect(() => {
+    if (medium && !visibleMediumSet.has(medium)) {
+      setMedium('');
+      return;
+    }
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (medium) next.set('medium', medium); else next.delete('medium');
       return next;
     }, { replace: true });
-  }, [medium, setSearchParams]);
+  }, [medium, setSearchParams, visibleMediumSet]);
 
   // The active search term is recorded in the URL (?q=) by the panel on search.
   const handlePanelSearch = useCallback((q) => {
@@ -353,14 +353,6 @@ export default function Explore() {
     </>
   );
 
-  // Quick Add control — now rendered at the bottom of the sidebar, in the
-  // position Reroll used to occupy.
-  const quickAddControl = (
-    <button type="button" className="quickadd-open-btn" onClick={() => setQuickAddOpen(true)}>
-      Quick Add
-    </button>
-  );
-
   // Force a full re-query so "in library" tags pick up changes made elsewhere
   // (bypasses the incremental per-source path). Used by error-retry and after an
   // add from the search panel.
@@ -382,10 +374,14 @@ export default function Explore() {
   const visibleItems = useMemo(() => {
     const withKey = items
       .map(item => ({ item, key: itemKey(item) }))
-      .filter(({ item }) => availableSet.has(item.source) && !rerollingMediums.has(item.medium));
+      .filter(({ item }) => (
+        availableSet.has(item.source)
+        && (!item.medium || visibleMediumSet.has(item.medium))
+        && !rerollingMediums.has(item.medium)
+      ));
     if (combineAll && medium) return withKey.filter(({ item }) => item.medium === medium);
     return withKey;
-  }, [items, availableSet, combineAll, medium, rerollingMediums]);
+  }, [items, availableSet, visibleMediumSet, combineAll, medium, rerollingMediums]);
 
   // True when the grid is empty *because* a reroll is in progress for every
   // medium currently in view (e.g. filtered to exactly the medium being
@@ -514,7 +510,7 @@ export default function Explore() {
           >
             <span>All</span>
           </div>
-          {MEDIUMS.map(m => (
+          {visibleMediums.map(m => (
             <div
               key={m}
               className={'sidebar-item' + (medium === m ? ' active' : '')}
@@ -704,7 +700,6 @@ export default function Explore() {
             <p className="explore-affinity-empty">
               Add a few entries to your library to bias what shows up here.
             </p>
-            {quickAddControl}
           </>
         ) : (
           <>
@@ -738,14 +733,12 @@ export default function Explore() {
               <div className="explore-affinity-block">
                 <div className="explore-affinity-label">Top mediums</div>
                 <div className="explore-tag-list">
-                  {affinity.top_mediums.map(m => (
+                  {affinity.top_mediums.filter(m => visibleMediumSet.has(m)).map(m => (
                     <span key={m} className="explore-tag">{m}</span>
                   ))}
                 </div>
               </div>
             )}
-
-            {quickAddControl}
 
             <div className="explore-affinity-note">
               {personalised
@@ -764,20 +757,6 @@ export default function Explore() {
           hideTabs
           onClose={() => setPendingAdd(null)}
           onCreated={handleEntryCreated}
-        />
-      )}
-
-      {quickAddOpen && (
-        <QuickAddModal
-          medium={medium}
-          onClose={() => {
-            setQuickAddOpen(false);
-            if (quickAddDirty.current) {
-              quickAddDirty.current = false;
-              fetchExplore();
-            }
-          }}
-          onCreated={() => { quickAddDirty.current = true; }}
         />
       )}
 

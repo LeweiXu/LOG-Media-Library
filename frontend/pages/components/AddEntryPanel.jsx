@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { searchMedia, fetchByUrl, checkDuplicates } from '../../api.jsx';
-import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, onCoverError } from '../../utils.jsx';
+import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, onCoverError, mediumIsVisible, visibleMediumSetFromPrefs } from '../../utils.jsx';
 import { SEARCH_SOURCES, SOURCE_LABEL, resultToEntry, loadAvailableSources } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
+import { usePreferences } from '../../preferences.jsx';
 
 /**
  * Always-on search / add section that sits at the top of the unified Explore
@@ -24,6 +25,8 @@ export default function AddEntryPanel({
   initialQuery = '',
   onSearch,
 }) {
+  const { prefs } = usePreferences();
+  const visibleMediumSet = useMemo(() => visibleMediumSetFromPrefs(prefs), [prefs]);
   const [query,     setQuery]     = useState(initialQuery || '');
   const [searching, setSearching] = useState(false);
   const [searchErr, setSearchErr] = useState('');
@@ -62,14 +65,14 @@ export default function AddEntryPanel({
   const detectedSource = urlMode ? inferSourceFromUrl(query.trim()) : '';
 
   // Apply the left-sidebar medium filter to whatever results are showing.
-  const matchesMedium = (item) => !medium || item.medium === medium;
+  const matchesMedium = (item) => mediumIsVisible(item.medium, prefs) && (!medium || item.medium === medium);
   const shownResults = useMemo(
     () => (results || []).map((r, i) => ({ r, i })).filter(({ r }) => matchesMedium(r)),
-    [results, medium],
+    [results, medium, prefs],
   );
   const shownPreviews = useMemo(
     () => (previews || []).filter(matchesMedium),
-    [previews, medium],
+    [previews, medium, prefs],
   );
 
   // "Active" = this section is showing output that should replace the recs.
@@ -125,13 +128,14 @@ export default function AddEntryPanel({
           setSearchErr("Couldn't read that page — it may be unavailable or its layout changed. Try a title search.");
           return;
         }
-        setPreviews(found);
+        setPreviews(found.filter(item => !item.medium || visibleMediumSet.has(item.medium)));
         return;
       }
       const sources = (selectedSources.size ? [...selectedSources] : availableList.map(s => s.value))
         .filter(v => availableSet.has(v));
       const data = await searchMedia(q, sources, true);
-      let list = Array.isArray(data) ? data : data?.results ?? [];
+      let list = (Array.isArray(data) ? data : data?.results ?? [])
+        .filter(item => !item.medium || visibleMediumSet.has(item.medium));
       setResults(list);
       await runDupCheck(list);
 
@@ -142,7 +146,7 @@ export default function AddEntryPanel({
         try {
           const nu = await extensionNuSearch(q);
           if (nu.length) {
-            list = mergeResults(list, nu);
+            list = mergeResults(list, nu).filter(item => !item.medium || visibleMediumSet.has(item.medium));
             setResults(list);
             await runDupCheck(list);
           }

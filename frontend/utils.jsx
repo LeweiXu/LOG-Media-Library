@@ -7,6 +7,22 @@ export const MEDIUMS = [
   'Light Novel', 'Web Novel', 'Comic', 'Game', 'Visual Novel',
 ];
 
+export function visibleMediumsFromPrefs(prefs) {
+  const raw = prefs?.mediums?.visible;
+  if (!Array.isArray(raw)) return MEDIUMS;
+  const selected = new Set(raw);
+  return MEDIUMS.filter(medium => selected.has(medium));
+}
+
+export function visibleMediumSetFromPrefs(prefs) {
+  return new Set(visibleMediumsFromPrefs(prefs));
+}
+
+export function mediumIsVisible(medium, prefs) {
+  if (!medium) return true;
+  return visibleMediumSetFromPrefs(prefs).has(medium);
+}
+
 export const RATING_OPTIONS = Array.from({ length: 11 }, (_, i) => i);
 
 // Snap a rating to the chosen granularity grid (0.1 / 0.5 / 1.0), clamped to 0-10.
