@@ -1,6 +1,7 @@
 # LOG — Media Tracker: Project Context
 
-Provide this file (and `frontend/design.css`) to your LLM at the start of each session.
+Provide this file to your LLM at the start of each session. For UI work, also
+include `frontend/styles.css` and the relevant files under `frontend/styles/`.
 
 ---
 
@@ -85,7 +86,18 @@ logarium/
 │   ├── preferences.jsx   # PreferencesProvider + ui_preferences doc (DEFAULT_UI)
 │   ├── extensionBridge.js
 │   ├── hooks.jsx
-│   ├── styles.css  design.css
+│   ├── styles.css        # CSS entrypoint: imports frontend/styles/*.css
+│   ├── design.css        # older design reference
+│   ├── styles/
+│   │   ├── tokens.css              # theme/accent/chart CSS variables
+│   │   ├── base.css                # reset, body, links, scrollbars
+│   │   ├── shell.css               # app shell, topbar, sidebars, buttons
+│   │   ├── components.css          # shared UI: tables, modals, forms, skeletons
+│   │   ├── library-dashboard.css   # Library/Dashboard-specific helpers
+│   │   ├── statistics-explore.css  # Statistics, Landing, Explore styles
+│   │   ├── responsive.css          # mobile/drawer/table responsive rules
+│   │   ├── tools-add-custom.css    # Console tools, add/quick-add/import styles
+│   │   └── light.css               # light-theme overrides, imported last
 │   ├── vite.config.js  vercel.json  package.json
 │   └── pages/
 │       ├── Dashboard.jsx  Library.jsx  Explore.jsx  Statistics.jsx
@@ -242,6 +254,16 @@ All routes except health and auth require `Authorization: Bearer <token>`.
   per-page layout reads from it. Don't add parallel localStorage prefs (the
   search-source availability selection in `searchSources.js` is a deliberate
   pre-existing exception).
+- **CSS architecture:** `frontend/styles.css` is only the stable import
+  entrypoint, used by both the main app and the extension popup. Add rules to the
+  purpose-specific files in `frontend/styles/` and preserve import order. Keep
+  page-specific selectors in their page files and shared primitives/utilities in
+  `components.css`, `shell.css`, or `base.css`.
+- **Inline style convention:** static presentation belongs in CSS classes.
+  Runtime-calculated values may be passed from JSX only as CSS custom properties
+  (examples: progress widths, chart bar heights, dashboard split ratios,
+  skeleton sizes, swatch colors). `CustomSelect` is the intentional exception:
+  its portaled menu uses measured inline `left/top/width/maxHeight` geometry.
 
 ---
 
@@ -294,6 +316,10 @@ shelves are blocked, the extension loads them first-party and merges them in.
 - `completed_at` is auto-managed when status changes to/from `completed`.
 - Frontend components call API helpers from `frontend/api.jsx` (not ad-hoc fetches in random files).
 - Utilities/constants for statuses/medium/origin and list normalization live in `frontend/utils.jsx`.
+- Frontend styling uses plain CSS only. Prefer existing classes/utilities and
+  CSS variables over inline presentation. Be especially careful around
+  `.media-table`, `col-*`, `manage-entry-table`, `action-cell`, and
+  `data-mobile-show`; those selectors control desktop/mobile table formatting.
 
 ---
 

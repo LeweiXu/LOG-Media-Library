@@ -15,7 +15,6 @@ export default function CustomSelect({
   disabled = false,
   className = 'form-input',
   containerClassName = '',
-  style,
   menuClassName = '',
   maxVisible = 10,
   ariaLabel,
@@ -144,7 +143,6 @@ export default function CustomSelect({
       ].filter(Boolean).join(' ')}
       style={{
         ...(fitToOptions ? { '--select-fit-width': `calc(${maxOptionChars}ch + 30px)` } : {}),
-        ...(style || {}),
       }}>
       <button
         ref={triggerRef}

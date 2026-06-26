@@ -1,0 +1,62 @@
+/* ── Variables ───────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  --bg:      #0e0f11;
+  --surface: #161719;
+  --surface2:#1c1e20;
+  --border:  #252729;
+  --border2: #2e3033;
+  --text:    #c8cacc;
+  --dim:     #848890;
+  --bright:  #eceef0;
+
+  /* Accent is stored as RGB components so translucent fills can reuse it via
+     rgba(var(--accent-rgb), a). The user picks the accent in Settings; presets
+     below override --accent-rgb per [data-accent] on <html>. */
+  --accent-rgb: 74, 158, 255;
+  --accent:  rgb(var(--accent-rgb));
+  --green:   #3ecf6a;
+  --amber:   #f5a623;
+  --red:     #e05656;
+  --purple:  #a78bfa;
+
+  /* Categorical palette for charts (pies, per-medium bars, legends). Kept as
+     theme variables so light mode swaps in contrast-safe inks automatically. */
+  --chart-1: #4a9eff;
+  --chart-2: #3ecf6a;
+  --chart-3: #f5a623;
+  --chart-4: #e05656;
+  --chart-5: #a78bfa;
+  --chart-6: #38bdf8;
+  --chart-7: #fb923c;
+}
+
+/* ── Accent presets (dark) ───────────────────────────────────────────────────
+   Terminal-flavoured inks. Applied via data-accent on <html>; default (no
+   attribute or "blue") keeps the terminal blue defined in :root above. */
+:root[data-accent="green"]  { --accent-rgb: 62, 207, 106; }
+:root[data-accent="amber"]  { --accent-rgb: 245, 166, 35; }
+:root[data-accent="cyan"]   { --accent-rgb: 56, 189, 248; }
+:root[data-accent="purple"] { --accent-rgb: 167, 139, 250; }
+:root[data-accent="red"]    { --accent-rgb: 224, 86, 86; }
+
+/* ── Light terminal theme ────────────────────────────────────────────────── */
+html.light {
+  color-scheme: light;
+
+  /* Cool paper and phosphor-inspired ink retain the terminal hierarchy
+     without carrying dark-theme foreground colours onto white surfaces. */
+  --bg:       #f3f6f3;
+  --surface:  #ffffff;
+  --surface2: #e7ede8;
+  --border:   #c5d0c8;
+  --border2:  #98a89d;
+  --text:     #26352c;
+  --dim:      #52645a;
+  --bright:   #101a14;
+
+  /* Light mode swaps only the background/foreground palette — the accent,
+     semantic colours (--green/--amber/--red/--purple) and chart inks stay at
+     their vibrant dark-theme values so plots and highlights look identical. */
+}

@@ -194,28 +194,28 @@ export default function DashboardAlt({ onFilterChange }) {
     const pct = progressPercent(e);
     switch (col) {
       case 'medium':
-        return <td key={col} className="col-medium"><span style={{ color: 'var(--dim)' }}>{statusMode === 'badge' ? [e.medium, e.origin].filter(Boolean).join(' / ') : (e.medium ?? '—')}</span></td>;
+        return <td key={col} className="col-medium"><span className="col-dim">{statusMode === 'badge' ? [e.medium, e.origin].filter(Boolean).join(' / ') : (e.medium ?? '—')}</span></td>;
       case 'year':
-        return <td key={col} className="col-year"><span style={{ color: 'var(--dim)' }}>{e.year ?? '—'}</span></td>;
+        return <td key={col} className="col-year"><span className="col-dim">{e.year ?? '—'}</span></td>;
       case 'updated':
-        return <td key={col} className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>;
+        return <td key={col} className="col-updated"><span className="col-dim">{fmtDate(e.updated_at)}</span></td>;
       case 'completed':
-        return <td key={col} className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at || e.updated_at)}</span></td>;
+        return <td key={col} className="col-completed"><span className="col-dim">{fmtDate(e.completed_at || e.updated_at)}</span></td>;
       case 'progress': {
         const isEditingProg = editingProgress?.id === e.id;
         return (
           <td key={col} className="col-progress" onClick={ev => ev.stopPropagation()}>
             {isEditingProg ? (
-              <input className="inline-select" type="number" min="0" style={{ width: 64 }}
+              <input className="inline-select inline-number-sm" type="number" min="0"
                 value={editingProgress.value} autoFocus
                 onChange={ev => setEditingProgress({ id: e.id, value: ev.target.value })}
                 onKeyDown={ev => { if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value); if (ev.key === 'Escape') setEditingProgress(null); }}
                 onBlur={() => handleProgressSave(e.id, editingProgress.value)} />
             ) : (
-              <div className="progress-cell" title="Click to edit progress" style={{ cursor: 'text' }}
+              <div className="progress-cell is-editable" title="Click to edit progress"
                 onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
                 {progressLabel(e)}
-                {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ width: `${pct}%` }} /></div>}
+                {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ '--progress-pct': `${pct}%` }} /></div>}
               </div>
             )}
           </td>
@@ -226,13 +226,13 @@ export default function DashboardAlt({ onFilterChange }) {
         return (
           <td key={col} className="col-rating" onClick={ev => ev.stopPropagation()}>
             {isEditingRating ? (
-              <input className="inline-select" type="number" min="0" max="10" step="0.5" style={{ width: 64 }}
+              <input className="inline-select inline-number-sm" type="number" min="0" max="10" step="0.5"
                 value={editingRating.value} autoFocus
                 onChange={ev => setEditingRating({ id: e.id, value: ev.target.value })}
                 onKeyDown={ev => { if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value); if (ev.key === 'Escape') setEditingRating(null); }}
                 onBlur={() => handleRatingSave(e.id, editingRating.value)} />
             ) : (
-              <span className="rating-cell" title="Click to edit rating" style={{ cursor: 'text' }}
+              <span className="rating-cell is-editable" title="Click to edit rating"
                 onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
                 {e.rating != null ? e.rating : '—'}<span>/10</span>
               </span>
@@ -258,7 +258,7 @@ export default function DashboardAlt({ onFilterChange }) {
 
   function renderRow(e, table, statusMode) {
     return (
-      <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setDetailEntry(e)}>
+      <tr key={e.id} className="library-row-clickable" onClick={() => setDetailEntry(e)}>
         <td>
           <div className="cover-cell">
             <CoverThumb url={e.cover_url} title={e.title} />
@@ -358,7 +358,7 @@ export default function DashboardAlt({ onFilterChange }) {
           <div className="state-block">
             <div className="state-title">Connection Error</div>
             <div className="state-detail">{error}</div>
-            <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={load}>Retry</button>
+            <button className="btn btn-outline state-retry-btn" onClick={load}>Retry</button>
           </div>
         )}
 
@@ -366,12 +366,7 @@ export default function DashboardAlt({ onFilterChange }) {
           <div className="skeleton-page" aria-label="Loading dashboard">
             <div
               className="dash-pair-skeleton"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `${split}fr ${100 - split}fr`,
-                gap: '0 24px',
-                alignItems: 'start',
-              }}>
+              style={{ '--dash-current-fr': `${split}fr`, '--dash-planned-fr': `${100 - split}fr` }}>
               <div>
                 <div className="section-header">Current</div>
                 <SkeletonTable
@@ -409,7 +404,7 @@ export default function DashboardAlt({ onFilterChange }) {
           {/* Side-by-side layout for the two tables */}
             <div
               className="dash-pair"
-              style={{ display: 'grid', gridTemplateColumns: `${split}fr ${100 - split}fr`, gap: '0 24px', alignItems: 'start' }}>
+              style={{ '--dash-current-fr': `${split}fr`, '--dash-planned-fr': `${100 - split}fr` }}>
 
             {/* Current */}
             <div>
@@ -512,7 +507,7 @@ export default function DashboardAlt({ onFilterChange }) {
               {monthBarsData.slice(-7).map((m, i) => (
                 <div key={i} className="bar-col">
                   <div className="bar-fill"
-                    style={{ height: barsReady ? `${Math.round((m.count / maxBar) * 100)}%` : '0%' }} />
+                    style={{ '--bar-height': barsReady ? `${Math.round((m.count / maxBar) * 100)}%` : '0%' }} />
                   <span className="bar-label">{m.month ?? m.label ?? ''}</span>
                 </div>
               ))}
@@ -520,7 +515,7 @@ export default function DashboardAlt({ onFilterChange }) {
           </>
         )}
 
-        <p className="panel-title" style={{ marginTop: 18 }}>Activity Log</p>
+        <p className="panel-title dashboard-activity-title">Activity Log</p>
         {loading
           ? <SkeletonActivity rows={8} />
           : activity.length === 0

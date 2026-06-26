@@ -1,0 +1,938 @@
+/* Explore's Discover/Add toggle reuses the shared .mode-toggle rules above. */
+
+/* ── Batch edit panel (Manage right sidebar) ───────────────────────────────── */
+.batch-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.batch-hint {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  margin-bottom: 2px;
+}
+.batch-hint.is-active { color: var(--accent); }
+.batch-select { width: 100%; }
+.batch-select-control { width: 100%; }
+.batch-field-row { display: flex; gap: 6px; align-items: center; }
+.batch-field-control,
+.batch-field-input {
+  flex: 1;
+  min-width: 0;
+}
+.batch-actions { display: flex; gap: 6px; align-items: center; }
+.batch-error {
+  color: var(--red);
+  font-size: 11px;
+}
+
+/* Library right-sidebar Sort ↔ Batch swap region. Each panel keeps its natural
+   height (anchored where Sort sits); the batch panel just leaves a slightly
+   larger gap before the View section below. */
+.lib-sort-list { display: flex; flex-direction: column; gap: 2px; }
+.batch-desktop .batch-panel { margin-bottom: 24px; }
+
+/* Batch controls match the small topbar button size (no full-width stretch). */
+.batch-panel .batch-select { padding: 3px 9px; font-size: 11px; }
+.batch-panel .batch-actions .icon-btn { padding: 3px 9px; font-size: 11px; }
+/* The batch panel renders in the sidebar on desktop; the mobile copy in the
+   main column is hidden above the breakpoint. Scoped to a min-width query (not
+   a plain rule) so it never overrides the max-width:720 rule that reveals it on
+   mobile, regardless of source order. */
+@media (min-width: 721px) { .batch-mobile { display: none; } }
+
+/* Small Apply button — accent-coloured sibling to the small .icon-btn delete. */
+.icon-btn.accent { border-color: rgba(var(--accent-rgb), 0.5); color: var(--accent); }
+.icon-btn.accent:hover { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
+.icon-btn.danger { color: var(--red); border-color: rgba(224, 86, 86, 0.5); }
+.icon-btn.danger:hover { border-color: var(--red); background: rgba(224, 86, 86, 0.08); }
+/* Edit buttons: accent-tinted, with the border darkening to full accent on
+   hover — mirrors the danger button's hover emphasis. */
+.icon-btn.edit { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.5); }
+.icon-btn.edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
+
+.media-table .col-select { width: 34px; text-align: center; }
+@media (min-width: 721px) {
+  .media-table .manage-list-select { min-width: 0; }
+}
+/* Selected row gets a blue tint plus a continuous accent outline around the
+   whole entry. Inset box-shadows draw the border without nudging layout. */
+.media-table tr.row-selected td { background: rgba(var(--accent-rgb), 0.08); }
+.media-table tr.row-selected td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.media-table tr.row-selected td:first-child { box-shadow: inset 1px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.media-table tr.row-selected td:last-child { box-shadow: inset -1px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+
+/* Bracket-style [x]/[ ] toggle — matches the add-entry source chips. The box
+   turns accent when selected; the blue outline lives on the whole row. */
+.box-toggle {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0;
+  cursor: pointer;
+  padding: 2px 4px;
+  user-select: none;
+  transition: color 0.12s;
+  white-space: nowrap;
+}
+.box-toggle:hover  { color: var(--text); }
+.box-toggle.is-on  { color: var(--accent); }
+.box-toggle.is-on:hover { color: var(--accent); }
+
+/* ── Add-entry panel (Explore add mode) ────────────────────────────────────── */
+.add-panel { display: flex; flex-direction: column; gap: 8px; }
+.add-panel-search { margin-bottom: 4px; }
+.add-panel-search-row { display: flex; gap: 8px; align-items: stretch; }
+.add-panel-search-row .form-input { min-width: 0; }
+.add-panel-query { flex: 1; }
+.add-panel-clear-btn {
+  border-color: var(--border2);
+  color: var(--dim);
+}
+.add-url-mode-note {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.03em;
+  padding: 6px 0 0;
+}
+.add-source-select { margin-top: 10px; }
+.add-search-error { margin-top: 4px; }
+.text-red { color: var(--red); }
+.add-preview-status { width: 140px; }
+.add-extension-hint { margin-top: 10px; }
+.add-results-grid { margin-top: 12px; }
+.add-nu-searching {
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  padding: 10px 0;
+}
+
+.explore-recs-title {
+  margin-top: 18px;
+  margin-bottom: 18px;
+}
+
+.explore-recs > .explore-grid {
+  margin-bottom: 24px;
+}
+.explore-loading-note {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.explore-reroll-wrap { margin-top: 16px; }
+
+.explore-pagination {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 16px;
+}
+
+/* Page-pager buttons on the Library / Explore pages match the topbar
+   login/logout/settings buttons (padding: 3px 9px; font-size: 11px) for
+   consistency. Modal pagers (.picker-pager) keep the compact .icon-btn size. */
+.pagination .icon-btn,
+.explore-pagination .icon-btn {
+  padding: 3px 9px;
+  font-size: 11px;
+}
+
+.add-preview-list { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.add-preview {
+  display: flex;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.add-preview-cover {
+  flex: 0 0 130px;
+  width: 130px;
+  height: 190px;
+  overflow: hidden;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.add-preview-cover img { width: 100%; height: 100%; object-fit: cover; }
+.add-preview-body { flex: 1; min-width: 0; max-width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.add-preview-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.add-preview-title {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 16px;
+  color: var(--bright);
+  font-weight: 500;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+a.add-preview-title:hover { color: var(--accent); }
+.add-preview-source { font-size: 10px; color: var(--accent); opacity: 0.75; }
+.add-preview-meta { font-size: 12px; color: var(--dim); }
+.add-preview-genres {
+  font-size: 11px;
+  color: var(--dim);
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.add-preview-desc {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.82;
+  margin: 4px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  line-clamp: 5;
+  overflow: hidden;
+  max-height: calc(12px * 1.45 * 5);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+}
+.add-preview-actions { display: flex; gap: 8px; align-items: center; margin-top: auto; flex-wrap: wrap; }
+
+.session-add-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.session-add-title {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── MAL import: conflict review rows ──────────────────────────────────────── */
+.mal-conflicts { display: flex; flex-direction: column; gap: 8px; }
+.mal-conflict-row { align-items: stretch; padding: 0; gap: 0; cursor: pointer; }
+.mal-conflict-row .term-box { padding: 10px 0 0 10px; }
+.mal-conflict { display: flex; flex: 1; min-width: 0; }
+.mal-conflict-div { width: 1px; background: var(--border); flex-shrink: 0; }
+.mal-entry-card {
+  flex: 1;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.mal-entry-inner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.mal-entry-cover {
+  width: 44px;
+  height: 62px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.mal-entry-body {
+  flex: 1;
+  min-width: 0;
+}
+.mal-entry-title {
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 3px;
+  word-break: break-word;
+}
+.mal-entry-meta {
+  font-size: 11px;
+  border-collapse: collapse;
+  width: 100%;
+}
+.mal-entry-key {
+  color: var(--dim);
+  padding-right: 6px;
+  white-space: nowrap;
+}
+.mal-log {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 360px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.mal-log-running { max-height: 400px; }
+.mal-log-review { max-height: 200px; }
+.mal-log-done { max-height: 260px; }
+.auto-log-done { max-height: 300px; }
+.mal-import-sub {
+  color: var(--dim);
+  font-size: 12px;
+  margin-bottom: 28px;
+}
+.mal-confirm-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.mal-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.mal-stage-status {
+  color: var(--dim);
+  font-size: 13px;
+}
+.mal-review-title { font-weight: 600; }
+.mal-review-hint {
+  font-size: 12px;
+  color: var(--dim);
+  margin-left: 8px;
+}
+.mal-columns-head {
+  display: flex;
+  margin-bottom: 4px;
+  padding-left: 1px;
+}
+.mal-column-label {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dim);
+  text-transform: uppercase;
+  padding-left: 12px;
+}
+.mal-import-selected { min-width: 160px; }
+.mal-done-title {
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.mal-done-stats {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.auto-done-stats {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+/* ── Import modal ──────────────────────────────────────────────────────────── */
+.import-modal {
+  width: 740px;
+  max-width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.import-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.import-center { text-align: center; padding: 36px 0; }
+.import-stage-center { text-align: center; padding: 16px 0; }
+.import-stage-error { text-align: center; padding: 24px 0; }
+.import-status { color: var(--dim); }
+.import-lead { color: var(--dim); margin-bottom: 8px; }
+.import-sub { color: var(--dim); font-size: 12px; line-height: 1.5; margin-bottom: 22px; }
+.import-stage-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.import-log-details { margin-top: 16px; }
+.import-log-summary {
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
+  user-select: none;
+}
+.import-log-wrap { margin-top: 8px; }
+.import-actions-spaced { margin-top: 16px; }
+.import-actions-tight { margin-top: 14px; }
+.import-again {
+  text-align: center;
+  margin-top: 18px;
+}
+.import-error-msg {
+  color: var(--red);
+  margin-bottom: 20px;
+}
+.hidden-file-input { display: none; }
+.panel-small-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.hidden-file { display: none; }
+.import-done-title { font-size: 15px; color: var(--bright); margin-bottom: 22px; }
+.import-stats { display: flex; gap: 16px; }
+.import-center .import-stats { justify-content: center; }
+.import-stats-summary { margin-bottom: 22px; }
+
+.import-conflict { border: 1px solid var(--border); margin-bottom: 12px; }
+.import-conflict-head {
+  background: var(--bg);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--bright);
+  border-bottom: 1px solid var(--border);
+}
+.import-conflict-body { padding: 10px 12px; }
+.import-conflict-nodiff { color: var(--dim); font-size: 12px; margin: 0 0 10px; }
+
+.import-diff { width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 10px; }
+.import-diff th {
+  text-align: left;
+  color: var(--dim);
+  font-weight: 400;
+  padding-bottom: 6px;
+}
+.import-diff th:first-child { width: 18%; }
+.import-diff th:not(:first-child) { width: 41%; }
+.import-diff td { padding: 5px 8px 5px 0; word-break: break-word; border-top: 1px solid var(--border); }
+.import-diff-field { color: var(--dim); }
+
+.import-conflict-choices { display: flex; gap: 8px; }
+.import-conflict-choices .term-row { flex: 1; }
+
+.import-conflicts-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.import-conflicts-title { font-size: 13px; color: var(--bright); margin: 0; }
+.import-conflicts-bulk { font-size: 11px; color: var(--dim); }
+
+/* ── Dedup modal ───────────────────────────────────────────────────────────── */
+.modal.modal-wide { max-width: 640px; width: 92vw; }
+.dedup-error { color: var(--red); font-size: 11px; margin-bottom: 10px; }
+.dedup-loading { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.dedup-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.dedup-intro { margin: 0; color: var(--dim); font-size: 12px; line-height: 1.5; }
+.dedup-keyline {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dim);
+  font-family: 'IBM Plex Mono', monospace;
+}
+.dedup-keep { color: var(--accent); }
+.dedup-del { color: var(--dim); }
+.dedup-bulk-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--red);
+  white-space: nowrap;
+}
+.dedup-groups { display: flex; flex-direction: column; gap: 14px; }
+.dedup-group-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.dedup-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.dedup-group {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+}
+.dedup-group-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+.dedup-row { align-items: center; }
+.dedup-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.dedup-edit { flex-shrink: 0; }
+.dedup-cover { flex: 0 0 28px; }
+.dedup-entry-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dedup-entry-meta { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+
+/* ── Terminal checkbox & radio ─────────────────────────────────────────────── */
+/* All native checkboxes/radios are restyled to the terminal aesthetic: a square,
+   bordered box (no rounded corners) that fills with --accent when checked —
+   mirroring the [x]/[ ] source-chip toggles. */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  transition: border-color 0.12s, background 0.12s;
+}
+input[type="checkbox"]:hover,
+input[type="radio"]:hover { border-color: var(--border2); }
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+input[type="checkbox"]:checked::after {
+  content: '\00d7';            /* × — matches the [x] source toggle */
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1;
+}
+input[type="radio"]:checked::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--accent);   /* square dot — no circles in the terminal theme */
+}
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Extension install (right-sidebar button + modal) ─────────────────────── */
+.ext-install-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 18px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.ext-install-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.ext-feature-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ext-feature-list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.ext-feature-list li::before {
+  content: '+';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+.ext-download-section { padding-top: 12px; }
+.ext-download-intro {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.6;
+}
+.ext-download-label { margin-top: 18px; }
+
+.ext-dl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.ext-dl-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ext-dl-browser { font-size: 12px; color: var(--bright); display: flex; align-items: center; gap: 8px; }
+.ext-dl-rec {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 1px 5px;
+}
+.ext-dl-note { font-size: 10px; color: var(--dim); line-height: 1.5; }
+.ext-dl-ver { font-size: 10px; color: var(--dim); }
+
+.ext-update-note {
+  font-size: 11px;
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  background: rgba(245, 166, 35, 0.08);
+  padding: 6px 10px;
+  margin-bottom: 14px;
+}
+
+/* ── Quick Add (backfill) ─────────────────────────────────────────────────── */
+/* Right-sidebar entry button — blue text + outline, emphasising on hover
+   (mirrors the table edit button). */
+.quickadd-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  /* No font-weight transition — it reflows the label and reads as jank. */
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.quickadd-open-btn:hover {
+  border-color: var(--accent);
+  background: var(--surface2);
+}
+.quickadd-open-btn:disabled {
+  color: var(--dim);
+  cursor: default;
+  opacity: 0.7;
+}
+.quickadd-open-btn:disabled:hover {
+  border-color: var(--border2);
+  background: var(--surface);
+}
+
+/* Inline "this may take a while" confirm that replaces the Reroll button.
+ * Same boxed footprint as the button it stands in for. */
+.explore-reroll-confirm {
+  margin-bottom: 18px;
+  padding: 8px 10px;
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.explore-reroll-confirm-msg {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+.explore-reroll-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+.explore-reroll-confirm-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Inline error under the Reroll button when a single-medium reroll fails —
+ * kept local to the sidebar control rather than the page-wide error block, so
+ * the rest of the grid (every other medium) stays visible. */
+.explore-reroll-error {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--red);
+  text-align: center;
+}
+
+.quickadd-head-right { display: flex; align-items: center; gap: 12px; }
+.quickadd-tally {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+/* The medium selector governs everything below it — a heavier rule makes that
+   relationship explicit. */
+.quickadd-mediums {
+  padding-bottom: 18px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border2);
+}
+.quickadd-source-label { margin-bottom: 0; }
+.quickadd-clear { margin-left: 10px; }
+
+/* Mediums: 4 per row in the wide modal. */
+.quickadd-medium-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) {
+  .quickadd-medium-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Card: the info column is capped to the cover height and clips its synopsis,
+   so the title→synopsis block always spans exactly the height of the cover. */
+.quickadd-card {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.quickadd-cover {
+  width: 150px;
+  height: 214px;
+  background: var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.quickadd-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.quickadd-cover-empty {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--dim);
+}
+.quickadd-info {
+  flex: 1;
+  min-width: 0;
+  height: 214px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.quickadd-title {
+  display: block;
+  font-size: 15px;
+  color: var(--bright);
+  text-decoration: none;
+  margin-bottom: 5px;
+}
+a.quickadd-title:hover { color: var(--accent); }
+.quickadd-meta { font-size: 11px; color: var(--dim); margin-bottom: 6px; }
+.quickadd-rating { color: var(--amber); }
+.quickadd-genres { font-size: 10px; color: var(--dim); margin-bottom: 8px; overflow-wrap: anywhere; }
+/* Synopsis clamps to a line count with an ellipsis — same treatment as the
+   Explore cards. */
+.quickadd-desc {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.55;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Segmented control — connected cells spanning the full width, shared by the
+   status and rating pickers. Terminal style: a recessed --bg strip (like the
+   form inputs) with 1px divider lines; the selected cell reads as "active" via
+   background contrast (--surface2) plus coloured text — the same active idiom
+   as the sidebar items and the Explore mode toggle, no rgba tint fills. */
+.quickadd-seg {
+  display: flex;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.quickadd-seg-btn {
+  flex: 1;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 9px 4px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.quickadd-seg-btn:last-child { border-right: none; }
+.quickadd-seg-btn:hover { color: var(--text); background: var(--surface); }
+.quickadd-seg-btn.is-on { background: var(--surface2); color: var(--bright); }
+
+/* Rating: 11 cells, slightly tighter; active text is amber (ratings are amber
+   throughout the app). */
+.quickadd-rating-seg .quickadd-seg-btn { padding: 9px 2px; letter-spacing: 0; }
+.quickadd-rating-seg .quickadd-seg-btn.is-on { color: var(--amber); }
+
+/* Rating row: cells + the fraction increment button sit on one line. */
+.quickadd-rating-row { display: flex; gap: 8px; align-items: stretch; }
+.quickadd-rating-row .quickadd-rating-seg { flex: 1; }
+/* The increment button steps the selected rating by the configured granularity
+   (0.1 / 0.5); its label shows the running fractional offset (+.5 …). */
+.quickadd-rating-incr {
+  flex: 0 0 auto;
+  min-width: 44px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--amber);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  padding: 0 8px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.quickadd-rating-incr:hover { border-color: var(--amber); background: var(--surface); }
+
+/* Status: active text follows the canonical per-status colour. */
+.quickadd-seg-btn.is-on.status-current   { color: var(--accent); }
+.quickadd-seg-btn.is-on.status-planned   { color: var(--text);   }
+.quickadd-seg-btn.is-on.status-completed { color: var(--green);  }
+.quickadd-seg-btn.is-on.status-on_hold   { color: var(--amber);  }
+.quickadd-seg-btn.is-on.status-dropped   { color: var(--red);    }
+
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.quickadd-completion-date {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px auto;
+  gap: 8px;
+}
+.custom-select {
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+}
+.custom-select.custom-select-fit {
+  width: max(72px, var(--select-fit-width, 10ch));
+  max-width: 100%;
+}
+.custom-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+.custom-select-trigger > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.custom-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.custom-select-placeholder { color: var(--dim); }
+.custom-select-arrow {
+  flex-shrink: 0;
+  color: var(--dim);
+  font-size: 10px;
+  transition: color 0.12s;
+}
+/* Open / focused trigger: accent the edge and the caret — terminal-style
+   active state, no shadows. */
+.custom-select-trigger:focus-visible { outline: none; border-color: var(--accent); }
+.custom-select-trigger[aria-expanded="true"] { border-color: var(--accent); }
+.custom-select-trigger[aria-expanded="true"] .custom-select-arrow { color: var(--accent); }
+.custom-select-menu {
+  position: fixed;
+  z-index: 10000;
+  overflow-y: auto;
+  border: 1px solid var(--border2);
+  border-top: 2px solid var(--accent);
+  background: var(--surface);
+}
+.custom-select-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  /* min-height (not a fixed height) so options that wrap to two lines grow the
+     box instead of spilling over and forcing a scrollbar on the menu. */
+  min-height: 28px;
+  padding: 5px 9px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+.custom-select-option:last-child { border-bottom: none; }
+.custom-select-option:hover,
+.custom-select-option.is-active {
+  background: var(--surface2);
+  color: var(--bright);
+}
+.custom-select-option.is-selected {
+  background: var(--surface2);
+  color: var(--accent);
+}
+.custom-select-option:disabled {
+  color: var(--dim);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.filter-bar .custom-select { flex-shrink: 0; }
+.inline-select.custom-select-trigger { width: 100%; }
+.batch-select.custom-select-trigger { width: 100%; }
+
+.quickadd-completion-date .custom-select {
+  width: 110px;
+}
+@media (max-width: 720px) {
+  .filter-bar .library-manage-sort { display: none; }
+  .manage-list-select { width: 108px; }
+}
+@media (max-width: 480px) {
+  .quickadd-completion-date {
+    grid-template-columns: minmax(0, 1fr) 94px;
+  }
+  .quickadd-completion-date .custom-select {
+    width: 94px;
+  }
+  .quickadd-completion-date .icon-btn {
+    grid-column: 1 / -1;
+  }
+}
+
+.quickadd-err { color: var(--red); font-size: 11px; margin-top: 10px; }
+
+.quickadd-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
