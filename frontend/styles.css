@@ -463,31 +463,16 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 }
 
 /* ── Media table ─────────────────────────────────────────────────────────── */
+/* Standard mode (default): table-layout auto, columns size to content.
+   Fixed mode (.media-table-fixed): guaranteed column widths, no layout shift. */
 .media-table {
   width: 100%;
-  table-layout: fixed;
+  table-layout: auto;
   border-collapse: collapse;
   margin-bottom: 24px;
 }
 
-.media-table.media-table-dynamic {
-  width: auto;
-  max-width: none;
-  table-layout: auto;
-}
-
-.media-table.media-table-dashboard {
-  width: 100%;
-  table-layout: auto;
-}
-
-.media-table.media-table-fluid {
-  width: 100%;
-  table-layout: auto;
-}
-
 .media-table.media-table-fixed {
-  width: 100%;
   table-layout: fixed;
 }
 
@@ -512,34 +497,10 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
   vertical-align: middle;
   font-size: 12px;
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .media-table tr:hover td { background: var(--surface); }
-
-.media-table.media-table-dynamic th,
-.media-table.media-table-dynamic td,
-.media-table.media-table-fluid th,
-.media-table.media-table-fluid td,
-.media-table.media-table-dashboard th,
-.media-table.media-table-dashboard td {
-  white-space: nowrap;
-}
-
-.media-table.media-table-dynamic th.col-title,
-.media-table.media-table-dynamic td.col-title,
-.media-table.media-table-fluid th.col-title,
-.media-table.media-table-fluid td.col-title {
-  width: clamp(220px, 32vw, 420px);
-  max-width: clamp(220px, 32vw, 420px);
-}
-
-.media-table .col-title { min-width: 0; }
-.media-table .col-title .cover-cell { min-width: 0; }
-.media-table .col-title .media-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .cover-cell { display: flex; align-items: center; gap: 10px; }
 
@@ -553,7 +514,15 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 
 .cover-thumb img { width: 100%; height: 100%; object-fit: cover; opacity: 0.85; }
 
-.media-name { color: var(--bright); font-weight: 400; }
+.media-name {
+  color: var(--bright);
+  font-weight: 400;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 
 /* ── Badges ──────────────────────────────────────────────────────────────── */
 .badge {
@@ -572,17 +541,9 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
 
 /* ── Progress ────────────────────────────────────────────────────────────── */
 .progress-cell {
-  width: 84px;
-  max-width: 100%;
   font-size: 11px;
   color: var(--dim);
   white-space: nowrap;
-}
-
-.media-table.media-table-dynamic .progress-cell,
-.media-table.media-table-fluid .progress-cell {
-  width: max-content;
-  min-width: 84px;
 }
 
 .progress-mini {
@@ -590,7 +551,8 @@ input, select, textarea { font-family: 'IBM Plex Mono', monospace; }
   background: var(--border);
   margin-top: 4px;
   position: relative;
-  width: 100%;
+  width: 84px;
+  max-width: 100%;
 }
 
 .progress-mini-fill {
@@ -1777,28 +1739,18 @@ html.light .skeleton-pie::after {
 }
 
 /* ── Library page ───────────────────────────────────────────────────────── */
-.library-table col.col-select { width: 34px; }
-.library-table col.col-medium { width: 86px; }
-.library-table col.col-year { width: 62px; }
-.library-table col.col-progress { width: 104px; }
-.library-table col.col-status { width: 128px; }
-.library-table col.col-rating { width: 84px; }
-.library-table col.col-updated { width: 92px; }
-.library-table col.col-completed { width: 104px; }
-.library-table col.col-custom-list { width: 148px; }
-.library-table col.action-cell { width: 132px; }
-.media-table-dashboard col.col-medium { width: 86px; }
-.media-table-dashboard col.col-year { width: 62px; }
-.media-table-dashboard col.col-progress { width: 104px; }
-.media-table-dashboard col.col-status { width: 128px; }
-.media-table-dashboard col.col-rating { width: 84px; }
-.media-table-dashboard col.col-updated { width: 92px; }
-.media-table-dashboard col.col-completed { width: 104px; }
-.library-table.library-title-fixed col.col-title,
-.library-table.library-title-fixed th.col-title,
-.library-table.library-title-fixed td.col-title {
-  width: 750px;
-}
+/* Fixed mode: column widths only apply here — guaranteed layout, no shift. */
+.library-table.media-table-fixed col.col-select { width: 48px; }
+.library-table.media-table-fixed col.col-medium { width: 86px; }
+.library-table.media-table-fixed col.col-year { width: 62px; }
+.library-table.media-table-fixed col.col-progress { width: 104px; }
+.library-table.media-table-fixed col.col-status { width: 128px; }
+.library-table.media-table-fixed col.col-rating { width: 84px; }
+.library-table.media-table-fixed col.col-updated { width: 92px; }
+.library-table.media-table-fixed col.col-completed { width: 104px; }
+.library-table.media-table-fixed col.col-custom-list { width: 148px; }
+.library-table.media-table-fixed col.action-cell { width: 132px; }
+.library-table.media-table-fixed col.col-title { width: 750px; }
 .media-table .col-dim { color: var(--dim); }
 .media-table th.sortable.is-active { color: var(--accent); }
 .sort-indicator {
@@ -2914,6 +2866,7 @@ a.explore-title:hover { color: var(--accent); }
   padding: 2px 4px;
   user-select: none;
   transition: color 0.12s;
+  white-space: nowrap;
 }
 .box-toggle:hover  { color: var(--text); }
 .box-toggle.is-on  { color: var(--accent); }

@@ -55,10 +55,10 @@ export default function NumberStepper({
         onKeyDown={e => {
           // Inline-edit mode (onCancel present): Enter commits, Escape cancels.
           // In a form (no onCancel) Enter is left alone so it still submits the form.
-          if (e.key === 'Enter' && onCancel) { e.preventDefault(); onCommit?.(); }
+          if (e.key === 'Enter' && onCancel) { e.preventDefault(); onCommit?.(e.currentTarget.value); }
           if (e.key === 'Escape' && onCancel) { e.preventDefault(); onCancel(); }
         }}
-        onBlur={onCommit}
+        onBlur={e => onCommit?.(e.currentTarget.value)}
       />
       <div className="num-stepper-arrows">
         <button type="button" className="num-stepper-arrow" tabIndex={-1}

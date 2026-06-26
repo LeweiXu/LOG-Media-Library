@@ -19,6 +19,7 @@ export default function CustomSelect({
   menuClassName = '',
   maxVisible = 10,
   ariaLabel,
+  fitToOptions = false,
 }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -28,6 +29,10 @@ export default function CustomSelect({
 
   const selectedIndex = options.findIndex(option => sameValue(option.value, value));
   const selected = options[selectedIndex];
+  const maxOptionChars = Math.max(
+    1,
+    ...options.map(option => String(option.label ?? '').length),
+  );
 
   function close() {
     setOpen(false);
@@ -131,7 +136,16 @@ export default function CustomSelect({
   }, [activeIndex, open]);
 
   return (
-    <div className={`custom-select ${containerClassName}`.trim()} style={style}>
+    <div
+      className={[
+        'custom-select',
+        fitToOptions ? 'custom-select-fit' : '',
+        containerClassName,
+      ].filter(Boolean).join(' ')}
+      style={{
+        ...(fitToOptions ? { '--select-fit-width': `calc(${maxOptionChars}ch + 30px)` } : {}),
+        ...(style || {}),
+      }}>
       <button
         ref={triggerRef}
         type="button"

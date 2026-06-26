@@ -834,7 +834,7 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && isManage && (
           <div>
-            <table className={`media-table library-table manage-entry-table${fixTitle ? ' media-table-fixed library-title-fixed' : ' media-table-fluid'}`} data-mobile-show="status">
+            <table className={`media-table library-table manage-entry-table${fixTitle ? ' media-table-fixed' : ''}`} data-mobile-show="status">
               <TableColGroup columns={manageCols} select actions={showActions} />
               <thead>
                 <tr>
@@ -901,7 +901,7 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && !isManage && (
           <div>
-            <table className={`media-table library-table${fixTitle ? ' media-table-fixed library-title-fixed' : ' media-table-fluid'}`} data-mobile-show={mobileShow}>
+            <table className={`media-table library-table${fixTitle ? ' media-table-fixed' : ''}`} data-mobile-show={mobileShow}>
               <TableColGroup columns={viewCols} actions={showActions} />
               <thead>
                 <tr>

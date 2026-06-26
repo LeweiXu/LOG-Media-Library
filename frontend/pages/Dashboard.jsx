@@ -432,7 +432,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 {current.length === 0
                 ? <div className="dash-empty">No active entries.</div>
                 : (
-                    <table className="media-table media-table-dashboard" data-mobile-show="progress">
+                    <table className="media-table" data-mobile-show="progress">
                     <TableColGroup table="current" />
                     <thead>{renderHead('current')}</thead>
                     <tbody>
@@ -449,7 +449,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 {planned.length === 0
                 ? <div className="dash-empty">No planned entries.</div>
                 : (
-                    <table className="media-table media-table-dashboard">
+                    <table className="media-table">
                     <TableColGroup table="planned" />
                     <thead>{renderHead('planned')}</thead>
                     <tbody>
@@ -467,7 +467,7 @@ export default function DashboardAlt({ onFilterChange }) {
       {recent.length === 0
       ? <div className="dash-empty dash-empty-flush">No completed entries yet.</div>
       : (
-        <table className="media-table media-table-dashboard" data-mobile-show="completed">
+        <table className="media-table" data-mobile-show="completed">
                 <TableColGroup table="completed" />
                 <thead>{renderHead('completed')}</thead>
                 <tbody>
