@@ -134,7 +134,12 @@
 .inline-number-sm { width: 64px; }
 
 .media-table .inline-select {
+  box-sizing: border-box;
   max-width: 100%;
+}
+
+.media-table td.col-rating .inline-number-sm {
+  width: 60px;
 }
 
 .media-table .table-status-select {
