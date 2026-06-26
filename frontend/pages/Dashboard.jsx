@@ -248,7 +248,10 @@ export default function DashboardAlt({ onFilterChange }) {
           <td key={col} className="col-status" onClick={ev => ev.stopPropagation()}>
             <CustomSelect className="inline-select" value={e.status}
               options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
-              onChange={value => handleStatusChange(e.id, value)} ariaLabel={`Status for ${e.title}`} />
+              onChange={value => handleStatusChange(e.id, value)}
+              containerClassName="table-status-select"
+              fitToOptions
+              ariaLabel={`Status for ${e.title}`} />
           </td>
         );
       default:

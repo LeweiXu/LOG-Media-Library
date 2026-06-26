@@ -476,7 +476,8 @@ Routes live in `frontend/app.jsx`:
 - `/explore`
 - `/statistics`
 - `/console`
-- `/manage`: redirects to `/library?mode=manage`.
+- `/manage`: legacy bookmark route that renders Library in manage mode without
+  exposing `?mode=manage`.
 - `/settings`: redirects to `/console`.
 - `*`: redirects based on auth state.
 

@@ -268,13 +268,12 @@ export default function Library({ initialFilters = {} }) {
     if (mediumFilter) params.set('medium', mediumFilter);
     if (originFilter) params.set('origin', originFilter);
     if (listFilter) params.set('list', listFilter);
-    if (mode !== 'view') params.set('mode', mode);
     if (sort !== DEFAULT_SORT) params.set('sort', sort);
     if (order !== DEFAULT_ORDER) params.set('order', order);
     if (page !== DEFAULT_PAGE) params.set('page', String(page));
     if (limit !== DEFAULT_LIMIT) params.set('limit', String(limit));
     setSearchParams(params, { replace: true });
-  }, [search, statusFilter, mediumFilter, originFilter, listFilter, mode, sort, order, page, limit, setSearchParams]);
+  }, [search, statusFilter, mediumFilter, originFilter, listFilter, sort, order, page, limit, setSearchParams]);
 
   function refreshView() {
     loadLists();
@@ -572,6 +571,8 @@ export default function Library({ initialFilters = {} }) {
           <CustomSelect className="inline-select" value={e.status}
             options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
             onChange={value => handleStatusChange(e.id, value)}
+            containerClassName="table-status-select"
+            fitToOptions
             ariaLabel={`Status for ${e.title}`} />
         </td>
       );

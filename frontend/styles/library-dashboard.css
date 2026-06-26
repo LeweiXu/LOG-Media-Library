@@ -147,9 +147,12 @@
 .inline-list-create {
   display: flex;
   gap: 6px;
+  width: max(72px, var(--select-fit-width, 10ch));
+  max-width: 100%;
 }
 .inline-list-create-input {
-  flex: 1;
+  flex: 0 1 16ch;
+  width: 16ch;
   min-width: 0;
 }
 .inline-list-create-cancel { padding: 2px 8px; }

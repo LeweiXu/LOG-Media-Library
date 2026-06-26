@@ -172,7 +172,11 @@ export default function App() {
             : <Navigate to="/" replace />}
         />
         {/* Manage merged into Library — keep the old path working for bookmarks. */}
-        <Route path="/manage" element={<Navigate to="/library?mode=manage" replace />} />
+        <Route path="/manage"
+          element={isAuthenticated
+            ? <Library key={`${username}:manage`} initialFilters={{ mode: 'manage' }} />
+            : <Navigate to="/" replace />}
+        />
         <Route path="/statistics"
           element={isAuthenticated
             ? <Statistics key={username} />

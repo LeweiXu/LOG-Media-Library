@@ -11,6 +11,16 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
+  const options = [
+    { value: '', label: 'No List' },
+    ...listNames.map(name => ({ value: name, label: name })),
+    { value: NEW_SENTINEL, label: '+ New List…' },
+  ];
+  const maxOptionChars = Math.max(
+    1,
+    ...options.map(option => String(option.label ?? '').length),
+  );
+  const fitStyle = { '--select-fit-width': `calc(${maxOptionChars}ch + 30px)` };
 
   useEffect(() => { if (creating) inputRef.current?.focus(); }, [creating]);
 
@@ -24,7 +34,8 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
 
   if (creating) {
     return (
-      <div className="manage-list-select inline-list-create"
+      <div className="manage-list-select inline-list-create custom-select-fit"
+        style={fitStyle}
         onClick={ev => ev.stopPropagation()}>
         <input
           ref={inputRef}
@@ -51,11 +62,7 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
       className="inline-select"
       value={entry.custom_list || ''}
       disabled={disabled}
-      options={[
-        { value: '', label: 'No List' },
-        ...listNames.map(name => ({ value: name, label: name })),
-        { value: NEW_SENTINEL, label: '+ New List…' },
-      ]}
+      options={options}
       onChange={value => {
         if (value === NEW_SENTINEL) { setDraft(''); setCreating(true); }
         else onSave(entry, value);
