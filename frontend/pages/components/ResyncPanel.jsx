@@ -82,7 +82,7 @@ export default function ResyncPanel() {
     <div className="console-tool-body">
       {stage === 'select' && (
         <>
-          <p style={{ color: 'var(--dim)', fontSize: 12, lineHeight: 1.6, marginBottom: 16 }}>
+          <p className="tool-intro">
             The extension fetches each selected source's covers first-party and caches
             them on the server, so they survive hotlink/Cloudflare blocks. NovelUpdates
             entries also have their cover URL re-scraped and fixed.
@@ -115,7 +115,7 @@ export default function ResyncPanel() {
             </div>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 22 }}>
+          <div className="tool-center-action">
             <button className="btn-success" disabled={selected.size === 0} onClick={start}>
               Start Resync
             </button>
@@ -125,24 +125,24 @@ export default function ResyncPanel() {
 
       {(stage === 'running' || stage === 'done') && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontSize: 13, color: 'var(--dim)' }}>
+          <div className="tool-progress-head">
+            <span className="tool-progress-title">
               {stage === 'running' ? <span className="loading-dots">Resyncing</span> : 'Done'}
             </span>
-            <span style={{ fontSize: 12, color: 'var(--dim)' }}>{prog.done} / {prog.total}</span>
+            <span className="tool-progress-count">{prog.done} / {prog.total}</span>
           </div>
 
-          <div style={{ height: 8, width: '100%', background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: 'var(--green)', transition: 'width 0.2s linear' }} />
+          <div className="tool-progress-track">
+            <div className="tool-progress-fill" style={{ '--tool-progress-pct': `${pct}%` }} />
           </div>
 
           {stage === 'running' && prog.current && (
-            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div className="tool-current-line">
               {prog.current}
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 18, justifyContent: 'center', marginTop: 22 }}>
+          <div className="tool-stat-row">
             <div className="stat-box"><span className="stat-val">{prog.cached}</span><span className="stat-lbl">Cached</span></div>
             <div className="stat-box"><span className="stat-val">{prog.updated}</span><span className="stat-lbl">URL fixed</span></div>
             <div className="stat-box"><span className="stat-val">{prog.failed}</span><span className="stat-lbl">Failed</span></div>
@@ -150,19 +150,19 @@ export default function ResyncPanel() {
 
           {stage === 'running' && (
             <>
-              <div style={{ textAlign: 'center', marginTop: 20 }}>
-                <button className="icon-btn danger" style={{ padding: '3px 12px', fontSize: 12 }} onClick={cancel}>
+              <div className="tool-cancel">
+                <button className="icon-btn danger tool-small-danger" onClick={cancel}>
                   Cancel
                 </button>
               </div>
-              <p style={{ fontSize: 10, color: 'var(--dim)', textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
+              <p className="tool-note">
                 NovelUpdates entries open each series page briefly in the background — this can take a while.
               </p>
             </>
           )}
 
           {stage === 'done' && (
-            <div style={{ textAlign: 'center', marginTop: 20 }}>
+            <div className="tool-cancel">
               <button className="icon-btn" onClick={() => setStage('select')}>Run Again</button>
             </div>
           )}
@@ -170,9 +170,9 @@ export default function ResyncPanel() {
       )}
 
       {stage === 'error' && (
-        <div style={{ textAlign: 'center', padding: '24px 0' }}>
-          <p style={{ color: 'var(--red)', marginBottom: 8 }}>{errorMsg}</p>
-          <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 20 }}>
+        <div className="import-stage-error">
+          <p className="tool-error-title">{errorMsg}</p>
+          <p className="tool-error-help">
             Make sure the browser extension is installed and you're signed in.
           </p>
           <button className="icon-btn" onClick={() => setStage('select')}>Back</button>

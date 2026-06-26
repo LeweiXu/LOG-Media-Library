@@ -223,10 +223,10 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
         <div className="modal-body">
           <div className="source-select quickadd-mediums">
             <div className="source-select-head">
-              <span className="form-label" style={{ marginBottom: 0 }}>
+              <span className="form-label quickadd-source-label">
                 Mediums
                 {mediums.size > 0 && (
-                  <button type="button" className="source-select-clear" style={{ marginLeft: 10 }}
+                  <button type="button" className="source-select-clear quickadd-clear"
                     onClick={() => setMediums(new Set())}>
                     ✕ Clear ({mediums.size})
                   </button>
@@ -258,7 +258,7 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
             <div className="state-block">
               <div className="state-title">Error</div>
               <div className="state-detail">{error}</div>
-              <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={fetchPool}>Retry</button>
+              <button className="btn btn-outline state-retry-btn" onClick={fetchPool}>Retry</button>
             </div>
           )}
 
@@ -275,7 +275,7 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
                 You've gone through every suggestion for the selected mediums. Pull
                 a fresh batch or change the medium filter.
               </div>
-              <button className="btn" style={{ marginTop: 12 }} onClick={reroll}>Load more</button>
+              <button className="btn state-retry-btn" onClick={reroll}>Load more</button>
             </div>
           )}
 
@@ -303,7 +303,7 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
               </div>
 
               <div className="quickadd-controls">
-                <div className="form-row" style={{ marginBottom: 14 }}>
+                <div className="form-row">
                   <label className="form-label">Status</label>
                   <div className="quickadd-seg">
                     {STATUSES.map(s => (
@@ -320,7 +320,7 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
                 </div>
 
                 {form.status === 'completed' && (
-                  <div className="form-row" style={{ marginBottom: 14 }}>
+                  <div className="form-row">
                     <label className="form-label">Completed Date</label>
                     <div className="quickadd-completion-date">
                       <input
@@ -357,7 +357,7 @@ export default function QuickAddModal({ onClose, onCreated, medium: initialMediu
                   </div>
                 )}
 
-                <div className="form-row" style={{ marginBottom: 14 }}>
+                <div className="form-row">
                   <label className="form-label">Rating</label>
                   <div className="quickadd-rating-row">
                     <div className="quickadd-seg quickadd-rating-seg">

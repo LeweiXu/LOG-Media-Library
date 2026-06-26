@@ -4,7 +4,7 @@ import {
   getEntries, updateEntry, deleteEntry,
   getCustomLists, batchUpdateEntries, batchDeleteEntries,
 } from '../api.jsx';
-import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError } from '../utils.jsx';
+import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError, roundToStep } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
@@ -14,6 +14,7 @@ import ListChips, { ALL_LISTS, UNLISTED_LIST } from './components/ListChips.jsx'
 import { SkeletonLine, SkeletonTable } from './components/Skeletons.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
+import NumberStepper from './components/NumberStepper.jsx';
 
 const SORT_FIELDS = [
   { key: 'title',        label: 'Title' },
@@ -39,8 +40,6 @@ const DEFAULT_SORT = 'updated_at';
 const DEFAULT_ORDER = 'desc';
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 40;
-
-const TITLE_COL_WIDTH = 750;
 
 // Column registry shared by the view + manage tables. `sort` (when present) is
 // the entry field a column header sorts by; columns without it get a plain <th>.
@@ -80,6 +79,7 @@ export default function Library({ initialFilters = {} }) {
 
   const { prefs, loaded: prefsLoaded, updateUi } = usePreferences();
   const libPrefs = prefs.library || DEFAULT_UI.library;
+  const ratingStep = prefs.rating_step ?? DEFAULT_UI.rating_step;
 
   // ── Mode: 'view' (everyday edit) | 'manage' (bulk). URL/nav > saved default. ──
   const initialMode = (() => {
@@ -316,8 +316,9 @@ export default function Library({ initialFilters = {} }) {
     setEditingRating(null);
     const num = value !== '' ? parseFloat(value) : null;
     if (num !== null && (isNaN(num) || num < 0 || num > 10)) return;
+    const rating = num == null ? null : roundToStep(num, ratingStep);
     try {
-      const updated = await updateEntry(id, { rating: num ?? undefined });
+      const updated = await updateEntry(id, { rating: rating ?? undefined });
       setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
     } catch (e) { alert('Update failed: ' + e.message); }
   }
@@ -480,16 +481,28 @@ export default function Library({ initialFilters = {} }) {
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;
   const totalPages   = Math.ceil(total / limit);
 
-  const SortTh = ({ field, className, children, style }) => (
-    <th className={`sortable${className ? ' ' + className : ''}`}
-      onClick={() => handleSort(field)}
-      style={{ color: sort === field ? 'var(--accent)' : undefined, ...style }}>
+  const SortTh = ({ field, className, children }) => (
+    <th className={`sortable${sort === field ? ' is-active' : ''}${className ? ' ' + className : ''}`}
+      onClick={() => handleSort(field)}>
       {children}
-      {sort === field && <span style={{ marginLeft: 4, opacity: 0.7 }}>{order === 'asc' ? '↑' : '↓'}</span>}
+      {sort === field && <span className="sort-indicator">{order === 'asc' ? '↑' : '↓'}</span>}
     </th>
   );
 
   function openListsModal(tab = 'add') { setListModalTab(tab); setShowLists(true); }
+
+  function TableColGroup({ columns, select = false, actions = false }) {
+    return (
+      <colgroup>
+        {select && <col className="col-select" />}
+        <col className="col-title" />
+        {columns.map(col => (
+          <col key={col} className={LIB_COLS[col]?.cls} />
+        ))}
+        {actions && <col className="action-cell" />}
+      </colgroup>
+    );
+  }
 
   // At-a-glance figures for the right sidebar, derived from the global counts.
   const completionPct = counts._total ? Math.round((counts.completed || 0) / counts._total * 100) : 0;
@@ -522,12 +535,12 @@ export default function Library({ initialFilters = {} }) {
   function renderManageCell(entry, col) {
     switch (col) {
       case 'status':    return <td key={col} className="col-status"><span className={`badge badge-${entry.status}`}>{statusLabel(entry.status)}</span></td>;
-      case 'medium':    return <td key={col} className="col-medium"><span style={{ color: 'var(--dim)' }}>{entry.medium || '—'}</span></td>;
-      case 'year':      return <td key={col} className="col-year"><span style={{ color: 'var(--dim)' }}>{entry.year || '—'}</span></td>;
+      case 'medium':    return <td key={col} className="col-medium col-dim">{entry.medium || '—'}</td>;
+      case 'year':      return <td key={col} className="col-year col-dim">{entry.year || '—'}</td>;
       case 'rating':    return <td key={col} className="col-rating"><span className="rating-cell">{entry.rating != null ? entry.rating : '—'}<span>/10</span></span></td>;
-      case 'progress':  return <td key={col} className="col-progress"><span style={{ color: 'var(--dim)' }}>{progressLabel(entry)}</span></td>;
-      case 'updated':   return <td key={col} className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(entry.updated_at)}</span></td>;
-      case 'completed': return <td key={col} className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(entry.completed_at)}</span></td>;
+      case 'progress':  return <td key={col} className="col-progress col-dim">{progressLabel(entry)}</td>;
+      case 'updated':   return <td key={col} className="col-updated col-dim">{fmtDate(entry.updated_at)}</td>;
+      case 'completed': return <td key={col} className="col-completed col-dim">{fmtDate(entry.completed_at)}</td>;
       case 'custom_list': return listCell(entry);
       default: return null;
     }
@@ -536,29 +549,28 @@ export default function Library({ initialFilters = {} }) {
   // View-mode cells: status / progress / rating / custom-list are inline-editable.
   function renderViewCell(e, col) {
     switch (col) {
-      case 'medium': return <td key={col} className="col-medium"><span style={{ color: 'var(--dim)' }}>{e.medium}</span></td>;
-      case 'year':   return <td key={col} className="col-year"><span style={{ color: 'var(--dim)' }}>{e.year || '—'}</span></td>;
-      case 'updated':   return <td key={col} className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>;
-      case 'completed': return <td key={col} className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at)}</span></td>;
+      case 'medium': return <td key={col} className="col-medium col-dim">{e.medium}</td>;
+      case 'year':   return <td key={col} className="col-year col-dim">{e.year || '—'}</td>;
+      case 'updated':   return <td key={col} className="col-updated col-dim">{fmtDate(e.updated_at)}</td>;
+      case 'completed': return <td key={col} className="col-completed col-dim">{fmtDate(e.completed_at)}</td>;
       case 'progress': {
         const pct = progressPercent(e);
         const isEditingProg = editingProgress?.id === e.id;
         return (
           <td key={col} className="col-progress" onClick={ev => ev.stopPropagation()}>
             {isEditingProg ? (
-              <input className="inline-select" type="number" min="0" style={{ width: 64 }}
+              <NumberStepper className="table-number-stepper table-progress-stepper"
+                min={0} step={1}
                 value={editingProgress.value} autoFocus
-                onChange={ev => setEditingProgress({ id: e.id, value: ev.target.value })}
-                onKeyDown={ev => {
-                  if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value);
-                  if (ev.key === 'Escape') setEditingProgress(null);
-                }}
-                onBlur={() => handleProgressSave(e.id, editingProgress.value)} />
+                onChange={value => setEditingProgress({ id: e.id, value })}
+                onCommit={value => handleProgressSave(e.id, value)}
+                onCancel={() => setEditingProgress(null)}
+                ariaLabel={`Progress for ${e.title}`} />
             ) : (
-              <div className="progress-cell" title="Click to edit progress" style={{ cursor: 'text' }}
+              <div className="progress-cell is-editable" title="Click to edit progress"
                 onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
                 {progressLabel(e)}
-                {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ width: `${pct}%` }} /></div>}
+                {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ '--progress-pct': `${pct}%` }} /></div>}
               </div>
             )}
           </td>
@@ -567,6 +579,8 @@ export default function Library({ initialFilters = {} }) {
       case 'status': return (
         <td key={col} className="col-status" onClick={ev => ev.stopPropagation()}>
           <CustomSelect className="inline-select" value={e.status}
+            containerClassName="table-status-select"
+            fitToOptions
             options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
             onChange={value => handleStatusChange(e.id, value)}
             ariaLabel={`Status for ${e.title}`} />
@@ -575,16 +589,15 @@ export default function Library({ initialFilters = {} }) {
       case 'rating': return (
         <td key={col} className="col-rating" onClick={ev => ev.stopPropagation()}>
           {editingRating?.id === e.id ? (
-            <input className="inline-select" type="number" min="0" max="10" step="0.5" style={{ width: 64 }}
+            <NumberStepper className="table-number-stepper table-rating-stepper"
+              min={0} max={10} step={ratingStep}
               value={editingRating.value} autoFocus
-              onChange={ev => setEditingRating({ id: e.id, value: ev.target.value })}
-              onKeyDown={ev => {
-                if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value);
-                if (ev.key === 'Escape') setEditingRating(null);
-              }}
-              onBlur={() => handleRatingSave(e.id, editingRating.value)} />
+              onChange={value => setEditingRating({ id: e.id, value })}
+              onCommit={value => handleRatingSave(e.id, value)}
+              onCancel={() => setEditingRating(null)}
+              ariaLabel={`Rating for ${e.title}`} />
           ) : (
-            <span className="rating-cell" title="Click to edit rating" style={{ cursor: 'text' }}
+            <span className="rating-cell is-editable" title="Click to edit rating"
               onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
               {e.rating != null ? e.rating : '—'}<span>/10</span>
             </span>
@@ -614,7 +627,7 @@ export default function Library({ initialFilters = {} }) {
           onChange={bulkAssignList}
           placeholder="Assign to list…"
           disabled={bulkBusy || selectedIds.size === 0}
-          style={{ width: '100%' }}
+          containerClassName="batch-select-control"
           ariaLabel="Assign selected entries to list"
         />
         <CustomSelect
@@ -624,7 +637,7 @@ export default function Library({ initialFilters = {} }) {
           onChange={bulkSetStatus}
           placeholder="Set status…"
           disabled={bulkBusy || selectedIds.size === 0}
-          style={{ width: '100%' }}
+          containerClassName="batch-select-control"
           ariaLabel="Set status for selected entries"
         />
         <CustomSelect
@@ -634,7 +647,7 @@ export default function Library({ initialFilters = {} }) {
           onChange={value => { setBulkField(value); setBulkFieldValue(''); setBulkListValue(''); setBulkStatusValue(''); }}
           placeholder="Edit field…"
           disabled={bulkBusy || selectedIds.size === 0}
-          style={{ width: '100%' }}
+          containerClassName="batch-select-control"
           ariaLabel="Choose field to edit"
         />
         {bulkField && (
@@ -651,16 +664,15 @@ export default function Library({ initialFilters = {} }) {
                     onChange={setBulkFieldValue}
                     placeholder={`Choose ${meta.label.toLowerCase()}…`}
                     disabled={bulkBusy}
-                    style={{ flex: 1 }}
+                    containerClassName="batch-field-control"
                     maxVisible={opts.length}
                     ariaLabel={`Choose ${meta.label.toLowerCase()}`}
                   />
                 );
               }
               return (
-                <input className="inline-select batch-select" type="number" placeholder={meta.label}
+                <input className="inline-select batch-select batch-field-input" type="number" placeholder={meta.label}
                   min={meta.min} max={meta.max} step={meta.step} value={bulkFieldValue} disabled={bulkBusy}
-                  style={{ flex: 1 }}
                   onChange={e => setBulkFieldValue(e.target.value)} />
               );
             })()}
@@ -676,7 +688,7 @@ export default function Library({ initialFilters = {} }) {
           </button>
           <button className="icon-btn" disabled={bulkBusy} onClick={clearSelection}>Clear</button>
         </div>
-        {bulkError && <div style={{ color: 'var(--red)', fontSize: 11 }}>{bulkError}</div>}
+        {bulkError && <div className="batch-error">{bulkError}</div>}
       </div>
     </>
   );
@@ -761,7 +773,7 @@ export default function Library({ initialFilters = {} }) {
         </div>
 
         <div className="filter-bar">
-          <input placeholder="Search titles…" value={search} style={{ width: 200 }}
+          <input className="library-search-input" placeholder="Search titles…" value={search}
             onChange={e => setSearch(e.target.value)} />
           <CustomSelect
             value={sort}
@@ -771,7 +783,7 @@ export default function Library({ initialFilters = {} }) {
             containerClassName="library-manage-sort"
             ariaLabel="Sort library"
           />
-          <button className="icon-btn library-manage-order" style={{ padding: '5px 10px' }}
+          <button className="icon-btn library-manage-order filter-bar-btn"
             onClick={() => setOrder(o => o === 'asc' ? 'desc' : 'asc')}>
             {order === 'asc' ? '↑ Asc' : '↓ Desc'}
           </button>
@@ -781,10 +793,10 @@ export default function Library({ initialFilters = {} }) {
             options={PAGE_SIZE_OPTIONS.map(size => ({ value: size, label: `${size} / page` }))}
             onChange={value => setLimit(Number(value))}
             className="filter-select"
-            style={{ width: 110, marginLeft: 'auto' }}
+            containerClassName="filter-count-select"
             ariaLabel="Entries per page"
           />
-          <button className="icon-btn" onClick={() => refreshView()} title="Refresh" style={{ padding: '5px 10px' }}>Refresh</button>
+          <button className="icon-btn filter-bar-btn" onClick={() => refreshView()} title="Refresh">Refresh</button>
         </div>
 
         <ListChips
@@ -803,7 +815,7 @@ export default function Library({ initialFilters = {} }) {
           <div className="state-block">
             <div className="state-title">Error</div>
             <div className="state-detail">{error}</div>
-            <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={() => load()}>Retry</button>
+            <button className="btn btn-outline state-retry-btn" onClick={() => load()}>Retry</button>
           </div>
         )}
 
@@ -822,7 +834,8 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && isManage && (
           <div>
-            <table className="media-table manage-entry-table" data-mobile-show="status">
+            <table className={`media-table library-table manage-entry-table${fixTitle ? ' media-table-fixed library-title-fixed' : ' media-table-fluid'}`} data-mobile-show="status">
+              <TableColGroup columns={manageCols} select actions={showActions} />
               <thead>
                 <tr>
                   <th className="col-select">
@@ -831,15 +844,15 @@ export default function Library({ initialFilters = {} }) {
                       {allPageSelected ? '[X]' : '[ ]'}
                     </button>
                   </th>
-                  <SortTh field="title" style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>Title</SortTh>
+                  <SortTh field="title" className="col-title">Title</SortTh>
                   {manageCols.map(renderHead)}
                   {showActions && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {entries.map(entry => (
-                  <tr key={entry.id} style={{ cursor: 'pointer', userSelect: 'none' }}
-                    className={selectedIds.has(entry.id) ? 'row-selected' : undefined}
+                  <tr key={entry.id}
+                    className={`${selectedIds.has(entry.id) ? 'row-selected ' : ''}library-row-clickable library-row-selectable`.trim()}
                     onMouseDown={ev => { if (ev.shiftKey) ev.preventDefault(); }}
                     onClick={ev => handleSelectClick(ev, entry.id)}>
                     <td className="col-select">
@@ -850,7 +863,7 @@ export default function Library({ initialFilters = {} }) {
                         {selectedIds.has(entry.id) ? '[X]' : '[ ]'}
                       </button>
                     </td>
-                    <td style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>
+                    <td className="col-title">
                       <div className="cover-cell">
                         <div className="cover-thumb">
                           {entry.cover_url && <img src={entry.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />}
@@ -862,9 +875,9 @@ export default function Library({ initialFilters = {} }) {
                     {showActions && (
                       <td className="action-cell" onClick={ev => ev.stopPropagation()}>
                         <div className="action-cell-inner">
-                          <button className="icon-btn" style={{ padding: '2px 8px', fontSize: 11 }}
+                          <button className="icon-btn table-action-btn"
                             onClick={() => { setDetailEntry(entry); setStartEditing(false); }}>view</button>
-                          <button className="icon-btn edit" style={{ padding: '2px 8px', fontSize: 11 }}
+                          <button className="icon-btn edit table-action-btn"
                             onClick={() => { setDetailEntry(entry); setStartEditing(true); }}>edit</button>
                         </div>
                       </td>
@@ -875,10 +888,10 @@ export default function Library({ initialFilters = {} }) {
             </table>
 
             {totalPages > 1 && (
-              <div className="pagination" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', paddingBottom: 16 }}>
+              <div className="pagination">
                 {page > 1 && <button className="icon-btn" onClick={() => setPage(1)}>« First</button>}
                 <button className="icon-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                <span style={{ fontSize: 11, color: 'var(--dim)' }}>Page {page} of {totalPages}</span>
+                <span className="pagination-text">Page {page} of {totalPages}</span>
                 <button className="icon-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
                 {page < totalPages && <button className="icon-btn" onClick={() => setPage(totalPages)}>Last »</button>}
               </div>
@@ -888,10 +901,11 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && !isManage && (
           <div>
-            <table className="media-table" data-mobile-show={mobileShow}>
+            <table className={`media-table library-table${fixTitle ? ' media-table-fixed library-title-fixed' : ' media-table-fluid'}`} data-mobile-show={mobileShow}>
+              <TableColGroup columns={viewCols} actions={showActions} />
               <thead>
                 <tr>
-                  <SortTh field="title" style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>Title</SortTh>
+                  <SortTh field="title" className="col-title">Title</SortTh>
                   {viewCols.map(renderHead)}
                   {showActions && <th className="action-cell">Actions</th>}
                 </tr>
@@ -900,8 +914,8 @@ export default function Library({ initialFilters = {} }) {
                 {entries.map(e => {
                   const isConfirmDel = confirmDeleteId === e.id;
                   return (
-                    <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => { setDetailEntry(e); setStartEditing(false); }}>
-                      <td style={fixTitle ? { width: TITLE_COL_WIDTH } : undefined}>
+                    <tr key={e.id} className="library-row-clickable" onClick={() => { setDetailEntry(e); setStartEditing(false); }}>
+                      <td className="col-title">
                         <div className="cover-cell">
                           <div className="cover-thumb">
                             {e.cover_url && <img src={e.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />}
@@ -915,17 +929,17 @@ export default function Library({ initialFilters = {} }) {
                           <div className="action-cell-inner">
                             {isConfirmDel ? (
                               <>
-                                <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
-                                <button className="btn btn-danger" style={{ padding: '2px 8px', fontSize: 11 }}
+                                <span className="confirm-inline-text">sure?</span>
+                                <button className="btn btn-danger table-action-btn"
                                   onClick={() => handleDeleteEntry(e.id)}>yes</button>
-                                <button className="icon-btn" style={{ padding: '2px 8px', fontSize: 11 }}
+                                <button className="icon-btn table-action-btn"
                                   onClick={() => setConfirmDeleteId(null)}>no</button>
                               </>
                             ) : (
                               <>
-                                <button className="icon-btn edit" style={{ padding: '2px 8px', fontSize: 11 }}
+                                <button className="icon-btn edit table-action-btn"
                                   onClick={() => { setDetailEntry(e); setStartEditing(true); }}>edit</button>
-                                <button className="icon-btn danger" style={{ padding: '2px 8px', fontSize: 11 }}
+                                <button className="icon-btn danger table-action-btn"
                                   onClick={() => setConfirmDeleteId(e.id)}>delete</button>
                               </>
                             )}
@@ -939,10 +953,10 @@ export default function Library({ initialFilters = {} }) {
             </table>
 
             {totalPages > 1 && (
-              <div className="pagination" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', paddingBottom: 16 }}>
+              <div className="pagination">
                 {page > 1 && <button className="icon-btn" onClick={() => setPage(1)}>« First</button>}
                 <button className="icon-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                <span style={{ fontSize: 11, color: 'var(--dim)' }}>Page {page} of {totalPages}</span>
+                <span className="pagination-text">Page {page} of {totalPages}</span>
                 <button className="icon-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
                 {page < totalPages && <button className="icon-btn" onClick={() => setPage(totalPages)}>Last »</button>}
               </div>
@@ -961,45 +975,45 @@ export default function Library({ initialFilters = {} }) {
             <p className="panel-title">Sort</p>
             <div className="lib-sort-list">
               {SORT_FIELDS.map(f => (
-                <div key={f.key} className="sidebar-item" style={{ padding: '4px 0', fontSize: 11 }}
+                <div key={f.key} className="sidebar-item lib-sort-item"
                   onClick={() => handleSort(f.key)}>
                   {f.label}
-                  {sort === f.key && <span style={{ color: 'var(--accent)' }}>{order === 'asc' ? ' ↑' : ' ↓'}</span>}
+                  {sort === f.key && <span className="text-accent">{order === 'asc' ? ' ↑' : ' ↓'}</span>}
                 </div>
               ))}
             </div>
           </>
         )}
 
-        <p className="panel-title" style={{ marginTop: 20 }}>View</p>
-        <button type="button" className={`source-chip${isManage ? ' is-on' : ''}`}
-          onClick={() => changeMode(isManage ? 'view' : 'manage')} style={{ width: '100%' }}
+        <p className="panel-title library-view-title">View</p>
+        <button type="button" className={`source-chip library-view-chip${isManage ? ' is-on' : ''}`}
+          onClick={() => changeMode(isManage ? 'view' : 'manage')}
           title="Select multiple entries to batch-edit or delete">
           <span className="source-box">{isManage ? '[x]' : '[ ]'}</span>
           Multi-select
         </button>
-        <button type="button" className={`source-chip${showActions ? ' is-on' : ''}`}
-          onClick={toggleQuickActions} style={{ width: '100%', marginTop: 4 }}
+        <button type="button" className={`source-chip library-view-chip${showActions ? ' is-on' : ''}`}
+          onClick={toggleQuickActions}
           title="Show per-row action buttons in the table">
           <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
           Quick Actions
         </button>
-        <button type="button" className={`source-chip${fixTitle ? ' is-on' : ''}`}
-          onClick={toggleFixTitle} style={{ width: '100%', marginTop: 4 }}
+        <button type="button" className={`source-chip library-view-chip${fixTitle ? ' is-on' : ''}`}
+          onClick={toggleFixTitle}
           title="Pin the Title column to a fixed width so other columns don't shift when sorting or searching">
           <span className="source-box">{fixTitle ? '[x]' : '[ ]'}</span>
           Fixed Table
         </button>
 
-        <div style={{ marginTop: 20 }}>
+        <div className="library-sidebar-section">
           <p className="panel-title">At a Glance</p>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--dim)', marginBottom: 5 }}>
+          <div className="library-meter-block">
+            <div className="library-meter-head">
               <span>Completion</span>
-              <span style={{ color: 'var(--green)' }}>{completionPct}%</span>
+              <span className="text-green">{completionPct}%</span>
             </div>
-            <div style={{ height: 4, background: 'var(--border)', position: 'relative' }}>
-              <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${completionPct}%`, height: '100%', background: 'var(--green)' }} />
+            <div className="library-meter">
+              <div className="library-meter-fill" style={{ '--completion-pct': `${completionPct}%` }} />
             </div>
           </div>
           <div className="stat-grid">
@@ -1014,25 +1028,25 @@ export default function Library({ initialFilters = {} }) {
           </div>
         </div>
 
-        <div style={{ marginTop: 20 }}>
+        <div className="library-sidebar-section">
           <p className="panel-title">Showing</p>
-          <div className="stat-box" style={{ marginBottom: 8 }}>
+          <div className="stat-box library-showing-box">
             <span className="stat-val">{loading ? <SkeletonLine width={44} height={22} /> : entries.length}</span>
             <span className="stat-lbl">Entries</span>
           </div>
           {statusFilter && (
-            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 6 }}>
-              Filter: <span style={{ color: 'var(--accent)' }}>{statusLabel(statusFilter)}</span>
+            <div className="library-filter-summary library-filter-summary-first">
+              Filter: <span className="text-accent">{statusLabel(statusFilter)}</span>
             </div>
           )}
           {mediumFilter && (
-            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4 }}>
-              Medium: <span style={{ color: 'var(--accent)' }}>{mediumFilter}</span>
+            <div className="library-filter-summary">
+              Medium: <span className="text-accent">{mediumFilter}</span>
             </div>
           )}
           {listFilter && (
-            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4 }}>
-              List: <span style={{ color: 'var(--accent)' }}>{listFilter === UNLISTED_LIST ? 'Unlisted' : listFilter}</span>
+            <div className="library-filter-summary">
+              List: <span className="text-accent">{listFilter === UNLISTED_LIST ? 'Unlisted' : listFilter}</span>
             </div>
           )}
         </div>
@@ -1071,10 +1085,10 @@ export default function Library({ initialFilters = {} }) {
               <button className="icon-btn" onClick={() => setLastEntryWarning(null)}>✕</button>
             </div>
             <div className="modal-body">
-              <p style={{ margin: '0 0 16px', color: 'var(--dim)', fontSize: 13 }}>
+              <p className="confirm-copy">
                 "{lastEntryWarning.entry.custom_list}" only contains this entry. Saving will remove the entry from that list, so the custom list will disappear.
               </p>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <div className="confirm-actions">
                 <button className="btn btn-outline" type="button" onClick={() => setLastEntryWarning(null)}>Cancel</button>
                 <button className="btn btn-danger" type="button"
                   onClick={() => saveEntryList(lastEntryWarning.entry, lastEntryWarning.nextValue, { skipWarning: true })}>

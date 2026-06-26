@@ -60,14 +60,14 @@ export default function AuthModal({ onAuth, onClose, defaultTab = 'login' }) {
 
   return (
     <div className="modal-overlay" onClick={onClose ? e => { if (e.target === e.currentTarget) onClose(); } : undefined}>
-      <div className="modal" style={{ width: 360 }}>
+      <div className="modal auth-modal">
 
         <div className="modal-header">
           <span className="modal-title">LOG — {tab === 'login' ? 'Sign In' : 'Register'}</span>
           {onClose && (
             <button
+              className="auth-close-btn"
               onClick={onClose}
-              style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 16, lineHeight: 1, padding: '2px 4px' }}
             >
               ×
             </button>
@@ -75,7 +75,7 @@ export default function AuthModal({ onAuth, onClose, defaultTab = 'login' }) {
         </div>
 
         {/* Tab switcher */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+        <div className="auth-tabs">
           <button
             className={`auth-tab${tab === 'login' ? ' auth-tab--active' : ''}`}
             onClick={() => switchTab('login')}
@@ -120,7 +120,7 @@ export default function AuthModal({ onAuth, onClose, defaultTab = 'login' }) {
                   disabled={loading}
                 />
               </div>
-              <div className="modal-footer" style={{ padding: '12px 0 0' }}>
+              <div className="modal-footer auth-modal-footer">
                 <button className="btn" type="submit" disabled={loading}>
                   {loading ? 'Signing in…' : 'Sign In'}
                 </button>
@@ -173,7 +173,7 @@ export default function AuthModal({ onAuth, onClose, defaultTab = 'login' }) {
                   disabled={loading}
                 />
               </div>
-              <div className="modal-footer" style={{ padding: '12px 0 0' }}>
+              <div className="modal-footer auth-modal-footer">
                 <button className="btn" type="submit" disabled={loading}>
                   {loading ? 'Creating account…' : 'Create Account'}
                 </button>

@@ -119,10 +119,10 @@ export default function App() {
         )}
 
         <div className="topbar-right">
-          {online === null && <span style={{ color: 'var(--dim)' }}>connecting…</span>}
+          {online === null && <span className="text-dim">connecting…</span>}
           {online === true  && <span className="online">● online</span>}
           {online === false && <span className="offline">● offline</span>}
-          <span style={{ color: 'var(--dim)' }}>{BASE.slice(BASE.indexOf('//') + 2)}</span>
+          <span className="text-dim">{BASE.slice(BASE.indexOf('//') + 2)}</span>
           {isAuthenticated ? (
             <>
               <span className="topbar-user">
@@ -204,10 +204,10 @@ export default function App() {
               <button className="icon-btn" onClick={() => setShowLogoutConfirm(false)}>✕</button>
             </div>
             <div className="modal-body">
-              <p style={{ margin: '0 0 16px', color: 'var(--dim)', fontSize: 13 }}>
+              <p className="confirm-copy">
                 Are you sure you want to log out?
               </p>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <div className="confirm-actions">
                 <button className="btn btn-outline" type="button" onClick={() => setShowLogoutConfirm(false)}>
                   Cancel
                 </button>
@@ -221,7 +221,7 @@ export default function App() {
       )}
 
       {/* ── Footer ── */}
-      {isAuthenticated && <footer className="app-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {isAuthenticated && <footer className="app-footer">
         <div>
           <span>© 2026 Lewei Xu</span>
           <span className="footer-sep">·</span>
@@ -231,7 +231,7 @@ export default function App() {
           href="https://github.com/LeweiXu/logarium"
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: 'inherit', textDecoration: 'underline', fontSize: 11 }}
+          className="app-footer-link"
         >
           https://github.com/LeweiXu/logarium
         </a>

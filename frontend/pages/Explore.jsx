@@ -577,13 +577,13 @@ export default function Explore() {
           <div className="state-block">
             <div className="state-title">Error</div>
             <div className="state-detail">{error}</div>
-            <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={handleRefresh}>Retry</button>
+            <button className="btn btn-outline state-retry-btn" onClick={handleRefresh}>Retry</button>
           </div>
         )}
 
         {!error && loading && (
           <div className="skeleton-page" aria-label="Loading explore">
-            <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.6, marginBottom: 12 }}>
+            <div className="explore-loading-note">
               Querying external sources{scanSeconds >= 2 ? ` · ${scanSeconds}s elapsed` : ''} — this can take a while.
               You don’t need to stay here; your suggestions will be ready when you come back.
             </div>
@@ -593,7 +593,7 @@ export default function Explore() {
 
         {!error && !loading && visibleMediumRerolling && (
           <div className="skeleton-page" aria-label={`Rerolling ${medium || 'medium'}`}>
-            <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.6, marginBottom: 12 }}>
+            <div className="explore-loading-note">
               Rerolling {medium || [...rerollingMediums].join(', ')}…
             </div>
             <SkeletonExploreGrid cards={6} />
@@ -687,7 +687,7 @@ export default function Explore() {
           <div className="explore-pagination">
             {recPage > 1 && <button className="icon-btn" onClick={() => setRecPage(1)}>« First</button>}
             <button className="icon-btn" disabled={recPage === 1} onClick={() => setRecPage(p => p - 1)}>← Prev</button>
-            <span style={{ fontSize: 11, color: 'var(--dim)' }}>Page {recPage} of {recTotalPages}</span>
+            <span className="pagination-text">Page {recPage} of {recTotalPages}</span>
             <button className="icon-btn" disabled={recPage === recTotalPages} onClick={() => setRecPage(p => p + 1)}>Next →</button>
             {recPage < recTotalPages && <button className="icon-btn" onClick={() => setRecPage(recTotalPages)}>Last »</button>}
           </div>
@@ -754,7 +754,7 @@ export default function Explore() {
             </div>
           </>
         )}
-        <div style={{ marginTop: 16 }}>{rerollControl}</div>
+        <div className="explore-reroll-wrap">{rerollControl}</div>
       </aside>
 
       {pendingAdd && (

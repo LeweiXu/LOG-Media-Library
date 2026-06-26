@@ -207,7 +207,7 @@ export default function EntryForm({
           onChange={e => setField('title', e.target.value)} />
       </div>
 
-      <div className="form-row-2" style={{ marginBottom: 14 }}>
+      <div className="form-row-2 entry-form-spaced">
         <div>
           <label className="form-label">Medium</label>
           <CustomSelect
@@ -232,7 +232,7 @@ export default function EntryForm({
         </div>
       </div>
 
-      <div className="form-row" style={{ marginBottom: 14 }}>
+      <div className="form-row entry-form-spaced">
         <label className="form-label">Custom List</label>
         <CustomListField
           value={form.custom_list}
@@ -242,7 +242,7 @@ export default function EntryForm({
       </div>
 
       {form.status === 'completed' && (
-        <div className="form-row-2" style={{ marginBottom: 14 }}>
+        <div className="form-row-2 entry-form-spaced">
           <div>
             <label className="form-label">Completed Date</label>
             <input className="form-input" type="date" value={form.completed_at}
@@ -250,7 +250,7 @@ export default function EntryForm({
           </div>
           <div>
             <label className="form-label">Completion Year</label>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="entry-form-completion-row">
               <CustomSelect
                 value={form.completed_at?.slice(0, 4) || ''}
                 options={COMPLETION_YEAR_OPTIONS}
@@ -265,12 +265,11 @@ export default function EntryForm({
                 placeholder="Year"
                 maxVisible={6}
                 ariaLabel="Completion year"
-                style={{ flex: 1 }}
+                containerClassName="entry-form-completion-select"
               />
               <button
                 type="button"
-                className="icon-btn"
-                style={{ padding: '5px 10px', flex: 'none' }}
+                className="icon-btn entry-form-randomize"
                 title="Randomize day and month, keep year"
                 onClick={() => {
                   // Year comes from the existing value if present, otherwise the
@@ -294,7 +293,7 @@ export default function EntryForm({
         </div>
       )}
 
-      <div className="form-row-2" style={{ marginBottom: 14 }}>
+      <div className="form-row-2 entry-form-spaced">
         <div>
           <label className="form-label">Origin</label>
           <CustomSelect
@@ -315,7 +314,7 @@ export default function EntryForm({
         </div>
       </div>
 
-      <div className="form-row-2" style={{ marginBottom: 14 }}>
+      <div className="form-row-2 entry-form-spaced">
         <div>
           <label className="form-label">Progress</label>
           <input className="form-input" type="number" min="0" value={form.progress}
@@ -330,7 +329,7 @@ export default function EntryForm({
         </div>
       </div>
 
-      <div className="form-row-2" style={{ marginBottom: 14 }}>
+      <div className="form-row-2 entry-form-spaced">
         <div>
           <label className="form-label">Rating (0-10)</label>
           <NumberStepper className="form-stepper" value={form.rating} step={ratingStep}
@@ -359,7 +358,7 @@ export default function EntryForm({
           placeholder="https://novelupdates.com/series/..."
           onChange={e => setField('external_url', e.target.value)} />
         {form.source && (
-          <span style={{ fontSize: 11, color: 'var(--accent)', marginTop: 3 }}>
+          <span className="entry-form-source">
             Source: {form.source}
           </span>
         )}
@@ -378,22 +377,22 @@ export default function EntryForm({
 
       <div className="form-row">
         <label className="form-label">Notes</label>
-        <textarea className="form-input" rows={2} value={form.notes}
+        <textarea rows={2} value={form.notes}
           placeholder="Optional notes..."
           onChange={e => setField('notes', e.target.value)}
-          style={{ resize: 'vertical' }} />
+          className="form-input entry-form-notes" />
       </div>
 
-      {err && <div style={{ color: 'var(--red)', fontSize: 11, marginBottom: 8 }}>{err}</div>}
+      {err && <div className="entry-form-error">{err}</div>}
 
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 4 }}>
+      <div className="entry-form-actions">
         <div>
           {showDelete && isEdit && (!confirmDelete
             ? <button type="button" className="btn btn-danger-outline"
                 onClick={() => setConfirmDelete(true)}>
                 Delete
               </button>
-            : <span style={{ fontSize: 11, color: 'var(--red)', display: 'flex', gap: 8, alignItems: 'center' }}>
+            : <span className="entry-form-delete-confirm">
                 Confirm?
                 <button type="button" className="btn btn-danger"
                   onClick={handleDelete} disabled={deleting}>
@@ -407,7 +406,7 @@ export default function EntryForm({
           )}
           {!showDelete && leftAction}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="entry-form-primary-actions">
           {onCancel && <button type="button" className="btn btn-outline" onClick={onCancel}>{cancelLabel}</button>}
           <button type="submit" className="btn" disabled={saving}>
             {saving ? savingLabel : submitLabel || (isEdit ? 'Save' : 'Add Entry')}
@@ -425,10 +424,10 @@ export default function EntryForm({
             <button className="icon-btn" onClick={() => setLastListWarning(false)}>✕</button>
           </div>
           <div className="modal-body">
-            <p style={{ margin: '0 0 16px', color: 'var(--dim)', fontSize: 13 }}>
+            <p className="confirm-copy">
               "{entry.custom_list}" only contains this entry. Saving will remove the entry from that list, so the custom list will disappear.
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <div className="confirm-actions">
               <button className="btn btn-outline" type="button" onClick={() => setLastListWarning(false)}>
                 Cancel
               </button>

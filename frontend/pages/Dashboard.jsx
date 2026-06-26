@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getEntries, getStats, updateEntry } from '../api.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass, onCoverError } from '../utils.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass, onCoverError, roundToStep } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
 import ExtensionUpdateLink from './components/ExtensionUpdateLink.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
+import NumberStepper from './components/NumberStepper.jsx';
 
 // Canonical column order + labels shared by every dashboard table. Which of
 // these actually render is decided per-table by the saved column preference.
@@ -37,6 +38,7 @@ function CoverThumb({ url, title }) {
 export default function DashboardAlt({ onFilterChange }) {
   const { prefs } = usePreferences();
   const dash = prefs.dashboard || DEFAULT_UI.dashboard;
+  const ratingStep = prefs.rating_step ?? DEFAULT_UI.rating_step;
   const [stats,           setStats]           = useState(null);
   const [current,         setCurrent]         = useState([]);
   const [planned,         setPlanned]         = useState([]);
@@ -150,8 +152,9 @@ export default function DashboardAlt({ onFilterChange }) {
     setEditingRating(null);
     const num = value !== '' ? parseFloat(value) : null;
     if (num !== null && (isNaN(num) || num < 0 || num > 10)) return;
+    const rating = num == null ? null : roundToStep(num, ratingStep);
     try {
-      const updated = await updateEntry(id, { rating: num ?? undefined });
+      const updated = await updateEntry(id, { rating: rating ?? undefined });
       refreshEntry(updated);
       load(true);
     } catch (e) {
@@ -181,10 +184,21 @@ export default function DashboardAlt({ onFilterChange }) {
   // Columns in the saved order (filtered to known keys); ordering is set in Settings.
   const dashCols = table => (dash.columns?.[table] || DEFAULT_UI.dashboard.columns[table]).filter(c => DASH_COL_META[c]);
 
+  function TableColGroup({ table }) {
+    return (
+      <colgroup>
+        <col className="col-title" />
+        {dashCols(table).map(col => (
+          <col key={col} className={DASH_COL_META[col].cls} />
+        ))}
+      </colgroup>
+    );
+  }
+
   function renderHead(table) {
     return (
       <tr>
-        <th>Title</th>
+        <th className="col-title">Title</th>
         {dashCols(table).map(c => <th key={c} className={DASH_COL_META[c].cls}>{DASH_COL_META[c].label}</th>)}
       </tr>
     );
@@ -194,28 +208,30 @@ export default function DashboardAlt({ onFilterChange }) {
     const pct = progressPercent(e);
     switch (col) {
       case 'medium':
-        return <td key={col} className="col-medium"><span style={{ color: 'var(--dim)' }}>{statusMode === 'badge' ? [e.medium, e.origin].filter(Boolean).join(' / ') : (e.medium ?? '—')}</span></td>;
+        return <td key={col} className="col-medium col-dim">{statusMode === 'badge' ? [e.medium, e.origin].filter(Boolean).join(' / ') : (e.medium ?? '—')}</td>;
       case 'year':
-        return <td key={col} className="col-year"><span style={{ color: 'var(--dim)' }}>{e.year ?? '—'}</span></td>;
+        return <td key={col} className="col-year col-dim">{e.year ?? '—'}</td>;
       case 'updated':
-        return <td key={col} className="col-updated"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.updated_at)}</span></td>;
+        return <td key={col} className="col-updated col-dim">{fmtDate(e.updated_at)}</td>;
       case 'completed':
-        return <td key={col} className="col-completed"><span style={{ color: 'var(--dim)' }}>{fmtDate(e.completed_at || e.updated_at)}</span></td>;
+        return <td key={col} className="col-completed col-dim">{fmtDate(e.completed_at || e.updated_at)}</td>;
       case 'progress': {
         const isEditingProg = editingProgress?.id === e.id;
         return (
           <td key={col} className="col-progress" onClick={ev => ev.stopPropagation()}>
             {isEditingProg ? (
-              <input className="inline-select" type="number" min="0" style={{ width: 64 }}
+              <NumberStepper className="table-number-stepper table-progress-stepper"
+                min={0} step={1}
                 value={editingProgress.value} autoFocus
-                onChange={ev => setEditingProgress({ id: e.id, value: ev.target.value })}
-                onKeyDown={ev => { if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value); if (ev.key === 'Escape') setEditingProgress(null); }}
-                onBlur={() => handleProgressSave(e.id, editingProgress.value)} />
+                onChange={value => setEditingProgress({ id: e.id, value })}
+                onCommit={value => handleProgressSave(e.id, value)}
+                onCancel={() => setEditingProgress(null)}
+                ariaLabel={`Progress for ${e.title}`} />
             ) : (
-              <div className="progress-cell" title="Click to edit progress" style={{ cursor: 'text' }}
+              <div className="progress-cell is-editable" title="Click to edit progress"
                 onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
                 {progressLabel(e)}
-                {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ width: `${pct}%` }} /></div>}
+                {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ '--progress-pct': `${pct}%` }} /></div>}
               </div>
             )}
           </td>
@@ -226,13 +242,15 @@ export default function DashboardAlt({ onFilterChange }) {
         return (
           <td key={col} className="col-rating" onClick={ev => ev.stopPropagation()}>
             {isEditingRating ? (
-              <input className="inline-select" type="number" min="0" max="10" step="0.5" style={{ width: 64 }}
+              <NumberStepper className="table-number-stepper table-rating-stepper"
+                min={0} max={10} step={ratingStep}
                 value={editingRating.value} autoFocus
-                onChange={ev => setEditingRating({ id: e.id, value: ev.target.value })}
-                onKeyDown={ev => { if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value); if (ev.key === 'Escape') setEditingRating(null); }}
-                onBlur={() => handleRatingSave(e.id, editingRating.value)} />
+                onChange={value => setEditingRating({ id: e.id, value })}
+                onCommit={value => handleRatingSave(e.id, value)}
+                onCancel={() => setEditingRating(null)}
+                ariaLabel={`Rating for ${e.title}`} />
             ) : (
-              <span className="rating-cell" title="Click to edit rating" style={{ cursor: 'text' }}
+              <span className="rating-cell is-editable" title="Click to edit rating"
                 onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
                 {e.rating != null ? e.rating : '—'}<span>/10</span>
               </span>
@@ -247,6 +265,8 @@ export default function DashboardAlt({ onFilterChange }) {
         return (
           <td key={col} className="col-status" onClick={ev => ev.stopPropagation()}>
             <CustomSelect className="inline-select" value={e.status}
+              containerClassName="table-status-select"
+              fitToOptions
               options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
               onChange={value => handleStatusChange(e.id, value)} ariaLabel={`Status for ${e.title}`} />
           </td>
@@ -258,8 +278,8 @@ export default function DashboardAlt({ onFilterChange }) {
 
   function renderRow(e, table, statusMode) {
     return (
-      <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setDetailEntry(e)}>
-        <td>
+      <tr key={e.id} className="library-row-clickable" onClick={() => setDetailEntry(e)}>
+        <td className="col-title">
           <div className="cover-cell">
             <CoverThumb url={e.cover_url} title={e.title} />
             <span className="media-name">{e.title}</span>
@@ -358,7 +378,7 @@ export default function DashboardAlt({ onFilterChange }) {
           <div className="state-block">
             <div className="state-title">Connection Error</div>
             <div className="state-detail">{error}</div>
-            <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={load}>Retry</button>
+            <button className="btn btn-outline state-retry-btn" onClick={load}>Retry</button>
           </div>
         )}
 
@@ -366,12 +386,7 @@ export default function DashboardAlt({ onFilterChange }) {
           <div className="skeleton-page" aria-label="Loading dashboard">
             <div
               className="dash-pair-skeleton"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `${split}fr ${100 - split}fr`,
-                gap: '0 24px',
-                alignItems: 'start',
-              }}>
+              style={{ '--dash-current-fr': `${split}fr`, '--dash-planned-fr': `${100 - split}fr` }}>
               <div>
                 <div className="section-header">Current</div>
                 <SkeletonTable
@@ -409,7 +424,7 @@ export default function DashboardAlt({ onFilterChange }) {
           {/* Side-by-side layout for the two tables */}
             <div
               className="dash-pair"
-              style={{ display: 'grid', gridTemplateColumns: `${split}fr ${100 - split}fr`, gap: '0 24px', alignItems: 'start' }}>
+              style={{ '--dash-current-fr': `${split}fr`, '--dash-planned-fr': `${100 - split}fr` }}>
 
             {/* Current */}
             <div>
@@ -417,7 +432,8 @@ export default function DashboardAlt({ onFilterChange }) {
                 {current.length === 0
                 ? <div className="dash-empty">No active entries.</div>
                 : (
-                    <table className="media-table" data-mobile-show="progress">
+                    <table className="media-table media-table-dashboard" data-mobile-show="progress">
+                    <TableColGroup table="current" />
                     <thead>{renderHead('current')}</thead>
                     <tbody>
                         {current.slice(0, dash.current_rows).map(e => renderRow(e, 'current', 'select'))}
@@ -433,7 +449,8 @@ export default function DashboardAlt({ onFilterChange }) {
                 {planned.length === 0
                 ? <div className="dash-empty">No planned entries.</div>
                 : (
-                    <table className="media-table">
+                    <table className="media-table media-table-dashboard">
+                    <TableColGroup table="planned" />
                     <thead>{renderHead('planned')}</thead>
                     <tbody>
                         {planned.slice(0, dash.planned_rows).map(e => renderRow(e, 'planned', 'select'))}
@@ -450,7 +467,8 @@ export default function DashboardAlt({ onFilterChange }) {
       {recent.length === 0
       ? <div className="dash-empty dash-empty-flush">No completed entries yet.</div>
       : (
-        <table className="media-table" data-mobile-show="completed">
+        <table className="media-table media-table-dashboard" data-mobile-show="completed">
+                <TableColGroup table="completed" />
                 <thead>{renderHead('completed')}</thead>
                 <tbody>
                     {recent.slice(0, dash.completed_rows).map(e => renderRow(e, 'completed', 'badge'))}
@@ -512,7 +530,7 @@ export default function DashboardAlt({ onFilterChange }) {
               {monthBarsData.slice(-7).map((m, i) => (
                 <div key={i} className="bar-col">
                   <div className="bar-fill"
-                    style={{ height: barsReady ? `${Math.round((m.count / maxBar) * 100)}%` : '0%' }} />
+                    style={{ '--bar-height': barsReady ? `${Math.round((m.count / maxBar) * 100)}%` : '0%' }} />
                   <span className="bar-label">{m.month ?? m.label ?? ''}</span>
                 </div>
               ))}
@@ -520,7 +538,7 @@ export default function DashboardAlt({ onFilterChange }) {
           </>
         )}
 
-        <p className="panel-title" style={{ marginTop: 18 }}>Activity Log</p>
+        <p className="panel-title dashboard-activity-title">Activity Log</p>
         {loading
           ? <SkeletonActivity rows={8} />
           : activity.length === 0

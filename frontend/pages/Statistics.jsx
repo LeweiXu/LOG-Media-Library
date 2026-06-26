@@ -82,7 +82,7 @@ function Tooltip_({ active, payload, label }) {
     <div className="custom-tooltip">
       <div className="tt-label">{label}</div>
       {payload.map((item, index) => (
-        <div key={index} className="tt-val" style={{ color: item.color }}>
+        <div key={index} className="tt-val" style={{ '--tooltip-color': item.color }}>
           {item.name}: {item.value}
         </div>
       ))}
@@ -107,7 +107,7 @@ function PieLegend({ data, colorOffset = 0 }) {
         <div key={item.name} className="stats-pie-legend-row">
           <span
             className="stats-pie-swatch"
-            style={{ background: COLORS[(index + colorOffset) % COLORS.length] }}
+            style={{ '--pie-swatch': COLORS[(index + colorOffset) % COLORS.length] }}
           />
           <span>{item.name}</span>
           <span className="stats-pie-leader" aria-hidden="true" />
@@ -140,11 +140,11 @@ function StatisticsSkeleton() {
         <div className="chart-section-title">Added per Month</div>
         <SkeletonChartBox variant="plot" />
       </div>
-      <div className="charts-2col" style={{ marginBottom: 28 }}>
+      <div className="charts-2col stats-section-gap">
         <SkeletonChartBox rows={7} />
         <SkeletonChartBox rows={7} />
       </div>
-      <div className="charts-2col" style={{ marginBottom: 28 }}>
+      <div className="charts-2col stats-section-gap">
         <SkeletonChartBox rows={7} />
         <SkeletonChartBox rows={7} />
       </div>
@@ -262,7 +262,7 @@ export default function Statistics() {
   return (
     <div className="statistics-page">
       <div className="stats-layout">
-        <div className="page-head" style={{ marginBottom: 24 }}>
+        <div className="page-head statistics-page-head">
           <div className="page-head-left">
             <span className="page-title">Statistics</span>
             <span className="page-desc">insights into your media habits</span>
@@ -410,8 +410,8 @@ export default function Statistics() {
                       <div
                         className="bar-v"
                         style={{
-                          width: barsReady ? `${item.count / maxMedium * 100}%` : '0%',
-                          background: COLORS[index % COLORS.length],
+                          '--bar-width': barsReady ? `${item.count / maxMedium * 100}%` : '0%',
+                          '--bar-color': COLORS[index % COLORS.length],
                         }}
                       />
                     </div>
@@ -431,8 +431,8 @@ export default function Statistics() {
                       <div
                         className="bar-v"
                         style={{
-                          width: barsReady ? `${item.rate}%` : '0%',
-                          opacity: 0.5 + (item.total / maxCompletionTotal) * 0.5,
+                          '--bar-width': barsReady ? `${item.rate}%` : '0%',
+                          '--bar-opacity': 0.5 + (item.total / maxCompletionTotal) * 0.5,
                         }}
                       />
                     </div>
@@ -455,7 +455,7 @@ export default function Statistics() {
                     <div className="bar-bg">
                       <div
                         className="bar-v stats-backlog-bar"
-                        style={{ width: barsReady ? `${item.count / maxBacklog * 100}%` : '0%' }}
+                        style={{ '--bar-width': barsReady ? `${item.count / maxBacklog * 100}%` : '0%' }}
                       />
                     </div>
                     <span className="cnt">{item.count}</span>
@@ -489,7 +489,7 @@ export default function Statistics() {
                     <div className="r-bar-bg">
                       <div
                         className="r-bar-v"
-                        style={{ width: barsReady ? `${item.count / maxRatingBucket * 100}%` : '0%' }}
+                        style={{ '--rating-bar-width': barsReady ? `${item.count / maxRatingBucket * 100}%` : '0%' }}
                       />
                     </div>
                     <span className="r-cnt">{item.count}</span>

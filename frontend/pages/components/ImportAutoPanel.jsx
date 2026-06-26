@@ -96,33 +96,20 @@ export default function ImportAutoPanel({ onImported }) {
     setInterrupted(false);
   }
 
-  const logBoxStyle = {
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    padding: '10px 12px',
-    fontFamily: 'monospace',
-    fontSize: 12,
-    lineHeight: 1.6,
-    maxHeight: 360,
-    overflowY: 'auto',
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-all',
-  };
-
   return (
     <div className="console-tool-body">
       {/* ── Pick stage ── */}
       {stage === 'pick' && (
-        <div style={{ textAlign: 'center', padding: '16px 0' }}>
-          <p style={{ color: 'var(--dim)', marginBottom: 8 }}>
+        <div className="import-stage-center">
+          <p className="import-lead">
             Upload a CSV with a <strong>title</strong> column. All other columns are optional.
           </p>
-          <p style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 28 }}>
+          <p className="mal-import-sub">
             For each row, the app will search external sources to automatically fill in
             cover art, year, origin, and other metadata. This uses the same CSV format
             as a regular export — only the <code>title</code> field is required.
           </p>
-          <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFile} />
+          <input ref={fileRef} className="hidden-file-input" type="file" accept=".csv" onChange={handleFile} />
           <button className="btn" onClick={() => fileRef.current.click()}>
             Choose File
           </button>
@@ -131,16 +118,16 @@ export default function ImportAutoPanel({ onImported }) {
 
       {/* ── Confirm stage ── */}
       {stage === 'confirm' && (
-        <div style={{ textAlign: 'center', padding: '16px 0' }}>
-          <p style={{ fontWeight: 600, marginBottom: 8 }}>
+        <div className="import-stage-center">
+          <p className="mal-confirm-title">
             {rowCount} {rowCount === 1 ? 'entry' : 'entries'} found in <em>{file?.name}</em>
           </p>
-          <p style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 28 }}>
+          <p className="mal-import-sub">
             Each entry will be searched on external sources. This may take a while.
             You can interrupt the process at any time.
           </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFile} />
+          <div className="import-stage-actions">
+            <input ref={fileRef} className="hidden-file-input" type="file" accept=".csv" onChange={handleFile} />
             <button className="icon-btn" onClick={reset}>Choose Different File</button>
             <button className="btn-success" onClick={handleConfirm}>
               Start Import
@@ -152,21 +139,20 @@ export default function ImportAutoPanel({ onImported }) {
       {/* ── Running stage ── */}
       {stage === 'running' && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ color: 'var(--dim)', fontSize: 13 }}>
+          <div className="mal-stage-head">
+            <span className="mal-stage-status">
               <span className="loading-dots">Importing</span>
             </span>
             <button
-              className="icon-btn danger"
-              style={{ padding: '3px 10px', fontSize: 12 }}
+              className="icon-btn danger panel-small-btn"
               onClick={handleInterrupt}
             >
               Interrupt
             </button>
           </div>
-          <div ref={logRef} style={logBoxStyle}>
+          <div ref={logRef} className="mal-log">
             {logs.length === 0
-              ? <span style={{ color: 'var(--dim)' }}>Starting…</span>
+              ? <span className="text-dim">Starting…</span>
               : logs.map((line, i) => <div key={i}>{line}</div>)
             }
           </div>
@@ -176,12 +162,12 @@ export default function ImportAutoPanel({ onImported }) {
       {/* ── Done stage ── */}
       {stage === 'done' && (
         <>
-          <p style={{ fontWeight: 600, fontSize: 15, marginBottom: 16, textAlign: 'center' }}>
+          <p className="mal-done-title">
             {interrupted ? 'Import Interrupted' : 'Import Complete'}
           </p>
 
           {result && (
-            <div style={{ display: 'flex', gap: 24, justifyContent: 'center', marginBottom: 20 }}>
+            <div className="auto-done-stats">
               <div className="stat-box">
                 <span className="stat-val">{result.created}</span>
                 <span className="stat-lbl">Created</span>
@@ -194,12 +180,12 @@ export default function ImportAutoPanel({ onImported }) {
           )}
 
           {logs.length > 0 && (
-            <div ref={logRef} style={{ ...logBoxStyle, maxHeight: 300 }}>
+            <div ref={logRef} className="mal-log auto-log-done">
               {logs.map((line, i) => <div key={i}>{line}</div>)}
             </div>
           )}
 
-          <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <div className="import-again">
             <button className="icon-btn" onClick={reset}>Import Another</button>
           </div>
         </>
@@ -207,8 +193,8 @@ export default function ImportAutoPanel({ onImported }) {
 
       {/* ── Error stage ── */}
       {stage === 'error' && (
-        <div style={{ textAlign: 'center', padding: '24px 0' }}>
-          <p style={{ color: 'var(--red)', marginBottom: 20 }}>{errorMsg}</p>
+        <div className="import-stage-error">
+          <p className="import-error-msg">{errorMsg}</p>
           <button className="icon-btn" onClick={reset}>Try Again</button>
         </div>
       )}

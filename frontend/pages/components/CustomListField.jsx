@@ -44,11 +44,10 @@ export default function CustomListField({ value, onChange, lists = [] }) {
 
   if (creating) {
     return (
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="custom-list-create">
         <input
           ref={inputRef}
-          className="form-input"
-          style={{ flex: 1, minWidth: 0 }}
+          className="form-input custom-list-create-input"
           maxLength={100}
           placeholder="New list name…"
           value={value}
@@ -56,8 +55,7 @@ export default function CustomListField({ value, onChange, lists = [] }) {
         />
         <button
           type="button"
-          className="icon-btn"
-          style={{ padding: '5px 10px' }}
+          className="icon-btn custom-list-create-cancel"
           onClick={cancelCreate}
           title="Pick an existing list instead"
         >

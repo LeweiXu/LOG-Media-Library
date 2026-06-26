@@ -81,7 +81,7 @@ function AccentSwatches({ value, onChange }) {
           aria-label={label}
           aria-pressed={v === value}
         >
-          <span className="accent-swatch-dot" style={{ background: swatch }} />
+          <span className="accent-swatch-dot" style={{ '--swatch': swatch }} />
           <span className="accent-swatch-label">{label}</span>
         </button>
       ))}
@@ -184,9 +184,9 @@ function ColumnOrderEditor({ cols, selected, onChange }) {
 // A bordered section with a header rule; body spans the full panel width.
 function Section({ title, desc, danger, children }) {
   return (
-    <section className="settings-section">
+    <section className={`settings-section${danger ? ' is-danger' : ''}`}>
       <div className="settings-section-head">
-        <span className="sh-title" style={danger ? { color: 'var(--red)' } : undefined}>{title}</span>
+        <span className="sh-title">{title}</span>
         {desc && <span className="sh-desc">{desc}</span>}
       </div>
       <div className="settings-section-body">{children}</div>
@@ -239,7 +239,10 @@ function Slider({ value, min, max, step = 1, onChange, format }) {
 
 // A select sized to sit on the right of a setting row.
 function RowSelect(props) {
-  return <CustomSelect {...props} style={{ width: 200, ...(props.style || {}) }} />;
+  return <CustomSelect
+    {...props}
+    containerClassName={`settings-row-select ${props.containerClassName || ''}`.trim()}
+  />;
 }
 
 export default function Console({ theme, onThemeChange, accent, onAccentChange, onLogout, onDataDeleted }) {
@@ -430,20 +433,20 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
     return (
       <div className="stats-layout">
         <div className="settings-page">
-          <div className="page-head" style={{ marginBottom: 24 }}>
+          <div className="page-head console-confirm-head">
             <div className="page-head-left"><span className="page-title">Delete All Data</span></div>
           </div>
-          <section className="settings-section">
+          <section className="settings-section is-danger">
             <div className="settings-section-head">
-              <span className="sh-title" style={{ color: 'var(--red)' }}>Confirm deletion</span>
+              <span className="sh-title">Confirm deletion</span>
             </div>
-            <div className="settings-section-body" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 18 }}>
-              <p style={{ margin: 0, fontWeight: 600 }}>This will permanently delete all your library entries.</p>
-              <p style={{ margin: 0, color: 'var(--dim)', fontSize: 13 }}>
+            <div className="settings-section-body console-delete-body">
+              <p className="console-delete-title">This will permanently delete all your library entries.</p>
+              <p className="console-delete-copy">
                 This action cannot be undone. Your account will remain active, but every entry in your library will be gone forever.
               </p>
               {deleteError && <div className="settings-msg settings-msg-error">{deleteError}</div>}
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="console-delete-actions">
                 <button className="btn" onClick={() => setScreen('settings')} disabled={deleting}>Cancel</button>
                 <button className="btn btn-danger" onClick={handleDeleteAll} disabled={deleting}>
                   {deleting ? 'Deleting…' : 'Yes, delete everything'}
@@ -461,7 +464,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   return (
     <div className="stats-layout">
       <div className="settings-page">
-        <div className="page-head" style={{ marginBottom: 16 }}>
+        <div className="page-head console-page-head">
           <div className="page-head-left">
             <span className="page-title">Console</span>
             <span className="page-desc">library tools & settings</span>
@@ -469,7 +472,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         </div>
 
         {/* ── Tab bar: Tools (default) · Settings — full width, 50/50 ── */}
-        <div className="term-tabs console-tabs" style={{ marginBottom: 20 }}>
+        <div className="term-tabs console-tabs">
           <button type="button" className={`term-tab${tab === 'tools' ? ' is-on' : ''}`}
             onClick={() => setTab('tools')}>Tools</button>
           <button type="button" className={`term-tab${tab === 'settings' ? ' is-on' : ''}`}
@@ -522,7 +525,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
           <div className="console-tool-body">
             {extPresent
               ? <ResyncPanel />
-              : <p style={{ margin: 0, color: 'var(--dim)', fontSize: 12 }}>
+              : <p className="console-tool-note">
                   Requires the Logarium browser extension.
                 </p>}
           </div>
@@ -731,17 +734,17 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               </div>
               {error   && <div className="settings-msg settings-msg-error">{error}</div>}
               {success && <div className="settings-msg settings-msg-success">Password changed.</div>}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+              <div className="settings-form-actions">
                 <button className="btn" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update Password'}</button>
               </div>
             </form>
           </Row>
           <Row title="Log out" desc="End your current session on this device.">
             {confirmLogout ? (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
-                <button type="button" className="btn btn-danger-outline" style={{ padding: '6px 10px' }} onClick={() => onLogout?.()}>Yes, log out</button>
-                <button type="button" className="icon-btn" style={{ padding: '6px 10px' }} onClick={() => setConfirmLogout(false)}>Cancel</button>
+              <div className="settings-confirm-actions">
+                <span className="confirm-inline-text">sure?</span>
+                <button type="button" className="btn btn-danger-outline settings-confirm-btn" onClick={() => onLogout?.()}>Yes, log out</button>
+                <button type="button" className="icon-btn settings-confirm-btn" onClick={() => setConfirmLogout(false)}>Cancel</button>
               </div>
             ) : (
               <button type="button" className="btn btn-danger-outline" onClick={() => setConfirmLogout(true)}>Log out</button>
@@ -753,7 +756,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         <Section title="Periodic Backup">
           <Row
             title="Backup frequency"
-            desc={<>A CSV copy of your library is emailed to <span style={{ color: 'var(--text)' }}>{backupEmail || 'your account email'}</span> on this schedule.</>}>
+            desc={<>A CSV copy of your library is emailed to <span className="text-normal">{backupEmail || 'your account email'}</span> on this schedule.</>}>
             <div className="set-row-control">
               <RowSelect value={backupFreq}
                 options={[
@@ -776,13 +779,13 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         <Section title="Danger Zone" danger>
           <Row title="Reset settings" desc="Restore all display, layout, and column preferences to their defaults. Your library and password are not affected.">
             {confirmReset ? (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
-                <button type="button" className="btn btn-danger" style={{ padding: '6px 10px' }}
+              <div className="settings-confirm-actions">
+                <span className="confirm-inline-text">sure?</span>
+                <button type="button" className="btn btn-danger settings-confirm-btn"
                   disabled={resetting} onClick={handleResetDefaults}>
                   {resetting ? 'Resetting…' : 'Yes'}
                 </button>
-                <button type="button" className="icon-btn" style={{ padding: '6px 10px' }}
+                <button type="button" className="icon-btn settings-confirm-btn"
                   onClick={() => setConfirmReset(false)}>Cancel</button>
               </div>
             ) : (

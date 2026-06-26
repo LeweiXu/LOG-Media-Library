@@ -24,12 +24,11 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
 
   if (creating) {
     return (
-      <div className="manage-list-select" style={{ display: 'flex', gap: 6 }}
+      <div className="manage-list-select inline-list-create"
         onClick={ev => ev.stopPropagation()}>
         <input
           ref={inputRef}
-          className="inline-select"
-          style={{ flex: 1, minWidth: 0 }}
+          className="inline-select inline-list-create-input"
           maxLength={100}
           placeholder="New list…"
           value={draft}
@@ -40,7 +39,7 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
           }}
           onBlur={commit}
         />
-        <button type="button" className="icon-btn" style={{ padding: '2px 8px' }}
+        <button type="button" className="icon-btn inline-list-create-cancel"
           title="Pick an existing list instead"
           onMouseDown={ev => { ev.preventDefault(); cancel(); }}>✕</button>
       </div>
@@ -62,6 +61,7 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
         else onSave(entry, value);
       }}
       containerClassName="manage-list-select"
+      fitToOptions
       maxVisible={listNames.length + 2}
       ariaLabel={`Custom list for ${entry.title}`}
     />

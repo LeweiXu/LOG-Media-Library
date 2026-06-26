@@ -38,8 +38,8 @@ export default function ExtensionDownloadSection() {
   const ff = isFirefox();
 
   return (
-    <div style={{ paddingTop: 12 }}>
-      <p style={{ margin: '0 0 14px', fontSize: 12, color: 'var(--dim)', lineHeight: 1.6 }}>
+    <div className="ext-download-section">
+      <p className="ext-download-intro">
         A lightweight companion for Chrome and Firefox that lets you add or update
         entries from the source page, caches covers the server can’t fetch itself, and
         unlocks sources (NovelUpdates, Goodreads) that are otherwise blocked server-side.
@@ -57,7 +57,7 @@ export default function ExtensionDownloadSection() {
         {FEATURES.map(f => <li key={f}>{f}</li>)}
       </ul>
 
-      <p className="settings-section-label" style={{ marginTop: 18 }}>Download</p>
+      <p className="settings-section-label ext-download-label">Download</p>
       <DownloadRow
         browser="Firefox"
         url={firefox}

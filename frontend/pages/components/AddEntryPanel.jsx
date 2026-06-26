@@ -198,8 +198,7 @@ export default function AddEntryPanel({
       <form onSubmit={handleSearch} className="add-panel-search">
         <div className="add-panel-search-row">
           <input
-            className="form-input"
-            style={{ flex: 1 }}
+            className="form-input add-panel-query"
             placeholder="Search a title, or paste a URL to add…"
             value={query}
             onChange={e => onQueryChange(e.target.value)}
@@ -218,13 +217,13 @@ export default function AddEntryPanel({
         </div>
 
         {urlMode ? (
-          <div style={{ fontSize: 10, color: 'var(--dim)', letterSpacing: '0.03em', padding: '6px 0 0' }}>
+          <div className="add-url-mode-note">
             {URL_SCRAPE_SOURCES.has(detectedSource)
               ? `Detected ${SOURCE_LABEL[detectedSource] ?? detectedSource} link — source toggles ignored`
               : 'Paste a supported media URL (TMDB, AniList, MAL, NovelUpdates, Goodreads book/series, IMDb, …)'}
           </div>
         ) : (
-          <div className="source-select source-select-wide" style={{ marginTop: 10 }}>
+          <div className="source-select source-select-wide add-source-select">
             <div className="source-select-head">
               <span className="form-label">Sources — filter recommendations &amp; search</span>
             </div>
@@ -249,8 +248,8 @@ export default function AddEntryPanel({
       </form>
 
       {searchErr && (
-        <div className="state-block" style={{ marginTop: 4 }}>
-          <div className="state-detail" style={{ color: 'var(--red)' }}>{searchErr}</div>
+        <div className="state-block add-search-error">
+          <div className="state-detail text-red">{searchErr}</div>
         </div>
       )}
 
@@ -289,7 +288,7 @@ export default function AddEntryPanel({
                           label: statusLabel(status),
                         }))}
                         onChange={value => setPreviewStatus(s => ({ ...s, [idx]: value }))}
-                        style={{ width: 140 }}
+                        containerClassName="add-preview-status"
                         ariaLabel={`Status for ${item.title}`}
                       />
                       <button className="btn" type="button" onClick={() => openAdd(item, previewStatus[idx] || 'current')}>
@@ -312,10 +311,10 @@ export default function AddEntryPanel({
                   ? 'No results — try a different title or source.'
                   : `No results match the “${medium}” filter.`}
               {!nuSearching && nuRequested && !extPresent && (
-                <div style={{ marginTop: 10 }}><ExtensionInstallHint context="search" /></div>
+                <div className="add-extension-hint"><ExtensionInstallHint context="search" /></div>
               )}
             </div></div>
-          : <div className="explore-grid" style={{ marginTop: 12 }}>
+          : <div className="explore-grid add-results-grid">
               {shownResults.map(({ r, i }) => {
                 const added = addedResults[i];
                 const addedStatus = added?.status || '';
@@ -366,7 +365,7 @@ export default function AddEntryPanel({
       )}
 
       {nuSearching && shownResults.length > 0 && (
-        <div style={{ fontSize: 11, color: 'var(--dim)', textAlign: 'center', padding: '10px 0' }}>
+        <div className="add-nu-searching">
           <span className="loading-dots">Searching NovelUpdates</span>
         </div>
       )}

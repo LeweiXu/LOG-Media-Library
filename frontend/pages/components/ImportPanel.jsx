@@ -197,7 +197,7 @@ export default function ImportPanel({ onImported }) {
                 <span className="stat-lbl">Skipped</span>
               </div>
             </div>
-            <div style={{ textAlign: 'center', marginTop: 18 }}>
+            <div className="import-again">
               <button className="icon-btn" onClick={reset}>Import Another</button>
             </div>
           </div>
@@ -250,7 +250,7 @@ export default function ImportPanel({ onImported }) {
               </p>
             )}
 
-            <div className="modal-actions" style={{ marginTop: 14 }}>
+            <div className="modal-actions import-actions-tight">
               <input ref={fileRef} type="file" accept=".csv" className="hidden-file" onChange={handleFile} />
               <button className="icon-btn" onClick={reset}>Choose Different File</button>
               <button className="btn-success" onClick={handleConfirm} disabled={nothingToImport}>

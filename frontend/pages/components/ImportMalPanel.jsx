@@ -157,22 +157,22 @@ export default function ImportMalPanel({ onImported }) {
 
   function EntryCard({ data }) {
     return (
-      <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <div className="mal-entry-card">
+        <div className="mal-entry-inner">
           {data.cover_url && (
             <img
               src={data.cover_url}
               alt=""
               referrerPolicy="no-referrer"
-              style={{ width: 44, height: 62, objectFit: 'cover', flexShrink: 0 }}
+              className="mal-entry-cover"
               onError={onCoverError}
             />
           )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 3, wordBreak: 'break-word' }}>
+          <div className="mal-entry-body">
+            <div className="mal-entry-title">
               {data.title}
             </div>
-            <table style={{ fontSize: 11, borderCollapse: 'collapse', width: '100%' }}>
+            <table className="mal-entry-meta">
               <tbody>
                 {[
                   ['Medium',   data.medium],
@@ -185,7 +185,7 @@ export default function ImportMalPanel({ onImported }) {
                   ['Completed', data.completed_at ? fmtDate(data.completed_at) : null],
                 ].filter(([, v]) => v != null && v !== '').map(([k, v]) => (
                   <tr key={k}>
-                    <td style={{ color: 'var(--dim)', paddingRight: 6, whiteSpace: 'nowrap' }}>{k}</td>
+                    <td className="mal-entry-key">{k}</td>
                     <td>{v}</td>
                   </tr>
                 ))}
@@ -197,25 +197,14 @@ export default function ImportMalPanel({ onImported }) {
     );
   }
 
-  function LogPanel({ maxHeight = 360 }) {
+  function LogPanel({ size = 'default' }) {
     return (
       <div
         ref={logRef}
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          padding: '10px 12px',
-          fontFamily: 'monospace',
-          fontSize: 12,
-          lineHeight: 1.6,
-          maxHeight,
-          overflowY: 'auto',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all',
-        }}
+        className={`mal-log mal-log-${size}`}
       >
         {logs.length === 0
-          ? <span style={{ color: 'var(--dim)' }}>Starting…</span>
+          ? <span className="text-dim">Starting…</span>
           : logs.map((line, i) => <div key={i}>{line}</div>)
         }
       </div>
@@ -226,17 +215,17 @@ export default function ImportMalPanel({ onImported }) {
     <div className="console-tool-body">
       {/* ── Pick stage ── */}
       {stage === 'pick' && (
-        <div style={{ textAlign: 'center', padding: '16px 0' }}>
-          <p style={{ color: 'var(--dim)', marginBottom: 8 }}>
+        <div className="import-stage-center">
+          <p className="import-lead">
             Upload your MyAnimeList XML export file.
           </p>
-          <p style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 28 }}>
+          <p className="mal-import-sub">
             Go to <strong>myanimelist.net → Profile → Export My List</strong> and
             download the XML file for your Anime or Manga list. Metadata will be
             fetched from Jikan (MAL API) for each entry. Entries that closely match
             your existing library will be flagged for review.
           </p>
-          <input ref={fileRef} type="file" accept=".xml" style={{ display: 'none' }} onChange={handleFile} />
+          <input ref={fileRef} className="hidden-file-input" type="file" accept=".xml" onChange={handleFile} />
           <button className="btn" onClick={() => fileRef.current.click()}>
             Choose XML File
           </button>
@@ -245,16 +234,16 @@ export default function ImportMalPanel({ onImported }) {
 
       {/* ── Confirm stage ── */}
       {stage === 'confirm' && (
-        <div style={{ textAlign: 'center', padding: '16px 0' }}>
-          <p style={{ fontWeight: 600, marginBottom: 8 }}>
+        <div className="import-stage-center">
+          <p className="mal-confirm-title">
             {entryCount} {entryCount === 1 ? 'entry' : 'entries'} found in <em>{file?.name}</em>
           </p>
-          <p style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 28 }}>
+          <p className="mal-import-sub">
             Metadata will be fetched from Jikan for each entry. This may take a while.
             Entries that closely match your existing library will be shown for review at the end.
           </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <input ref={fileRef} type="file" accept=".xml" style={{ display: 'none' }} onChange={handleFile} />
+          <div className="import-stage-actions">
+            <input ref={fileRef} className="hidden-file-input" type="file" accept=".xml" onChange={handleFile} />
             <button className="icon-btn" onClick={reset}>Choose Different File</button>
             <button className="btn-success" onClick={handleStart}>Start Import</button>
           </div>
@@ -264,45 +253,44 @@ export default function ImportMalPanel({ onImported }) {
       {/* ── Running stage ── */}
       {stage === 'running' && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ color: 'var(--dim)', fontSize: 13 }}>
+          <div className="mal-stage-head">
+            <span className="mal-stage-status">
               <span className="loading-dots">Importing from MAL</span>
             </span>
             <button
-              className="icon-btn danger"
-              style={{ padding: '3px 10px', fontSize: 12 }}
+              className="icon-btn danger panel-small-btn"
               onClick={handleInterrupt}
             >
               Interrupt
             </button>
           </div>
-          <LogPanel maxHeight={400} />
+          <LogPanel size="running" />
         </>
       )}
 
       {/* ── Review stage ── */}
       {stage === 'review' && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div className="mal-stage-head">
             <div>
-              <span style={{ fontWeight: 600 }}>
+              <span className="mal-review-title">
                 {conflicts.length} potential {conflicts.length === 1 ? 'duplicate' : 'duplicates'} found
               </span>
-              <span style={{ fontSize: 12, color: 'var(--dim)', marginLeft: 8 }}>
+              <span className="mal-review-hint">
                 Click to select entries to import anyway
               </span>
             </div>
-            <button className="icon-btn" style={{ fontSize: 12, padding: '3px 10px' }} onClick={toggleSelectAll}>
+            <button className="icon-btn panel-small-btn" onClick={toggleSelectAll}>
               {allSelected ? 'Deselect All' : 'Select All'}
             </button>
           </div>
 
           {/* Column headings */}
-          <div style={{ display: 'flex', marginBottom: 4, paddingLeft: 1 }}>
-            <div style={{ flex: 1, fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', paddingLeft: 12 }}>
+          <div className="mal-columns-head">
+            <div className="mal-column-label">
               Existing in library
             </div>
-            <div style={{ flex: 1, fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', paddingLeft: 12 }}>
+            <div className="mal-column-label">
               To import
             </div>
           </div>
@@ -325,25 +313,24 @@ export default function ImportMalPanel({ onImported }) {
           </div>
 
           {logs.length > 0 && (
-            <details style={{ marginTop: 16 }}>
-              <summary style={{ fontSize: 12, color: 'var(--dim)', cursor: 'pointer', userSelect: 'none' }}>
+            <details className="import-log-details">
+              <summary className="import-log-summary">
                 Show import log
               </summary>
-              <div style={{ marginTop: 8 }}>
-                <LogPanel maxHeight={200} />
+              <div className="import-log-wrap">
+                <LogPanel size="review" />
               </div>
             </details>
           )}
 
-          <div className="modal-actions" style={{ marginTop: 16 }}>
+          <div className="modal-actions import-actions-spaced">
             <button className="icon-btn" onClick={() => setStage('done')}>
               Finish without importing
             </button>
             <button
-              className="btn-success"
               disabled={confirming || selectedCount === 0}
               onClick={handleConfirmConflicts}
-              style={{ minWidth: 160 }}
+              className="btn-success mal-import-selected"
             >
               {confirming
                 ? 'Importing…'
@@ -356,11 +343,11 @@ export default function ImportMalPanel({ onImported }) {
       {/* ── Done stage ── */}
       {stage === 'done' && (
         <>
-          <p style={{ fontWeight: 600, fontSize: 15, marginBottom: 16, textAlign: 'center' }}>
+          <p className="mal-done-title">
             {interrupted ? 'Import Interrupted' : 'Import Complete'}
           </p>
 
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+          <div className="mal-done-stats">
             {result && (
               <>
                 <div className="stat-box">
@@ -383,16 +370,16 @@ export default function ImportMalPanel({ onImported }) {
 
           {logs.length > 0 && (
             <details>
-              <summary style={{ fontSize: 12, color: 'var(--dim)', cursor: 'pointer', userSelect: 'none' }}>
+              <summary className="import-log-summary">
                 Show import log
               </summary>
-              <div style={{ marginTop: 8 }}>
-                <LogPanel maxHeight={260} />
+              <div className="import-log-wrap">
+                <LogPanel size="done" />
               </div>
             </details>
           )}
 
-          <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <div className="import-again">
             <button className="icon-btn" onClick={reset}>Import Another</button>
           </div>
         </>
@@ -400,8 +387,8 @@ export default function ImportMalPanel({ onImported }) {
 
       {/* ── Error stage ── */}
       {stage === 'error' && (
-        <div style={{ textAlign: 'center', padding: '24px 0' }}>
-          <p style={{ color: 'var(--red)', marginBottom: 20 }}>{errorMsg}</p>
+        <div className="import-stage-error">
+          <p className="import-error-msg">{errorMsg}</p>
           <button className="icon-btn" onClick={reset}>Try Again</button>
         </div>
       )}

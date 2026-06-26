@@ -54,15 +54,15 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
 
         <div className="modal-body">
           {current.cover_url && (
-            <div style={{ textAlign: 'center', marginBottom: 14 }}>
+            <div className="entry-detail-cover-wrap">
               <img src={current.cover_url} alt=""
                 referrerPolicy="no-referrer"
-                style={{ maxHeight: 320, borderRadius: 4, objectFit: 'cover' }}
+                className="entry-detail-cover"
                 onError={onCoverError} />
             </div>
           )}
 
-          <div className="form-row-2" style={{ marginBottom: 10 }}>
+          <div className="form-row-2 entry-detail-row">
             <div>
               <div className="form-label">Medium</div>
               <div>{current.medium || '—'}</div>
@@ -73,7 +73,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
             </div>
           </div>
 
-          <div className="form-row-2" style={{ marginBottom: 10 }}>
+          <div className="form-row-2 entry-detail-row">
             <div>
               <div className="form-label">Origin</div>
               <div>{current.origin || '—'}</div>
@@ -84,7 +84,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
             </div>
           </div>
 
-          <div className="form-row-2" style={{ marginBottom: 10 }}>
+          <div className="form-row-2 entry-detail-row">
             <div>
               <div className="form-label">Progress</div>
               <div>{progressLabel(current)}</div>
@@ -95,16 +95,16 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
             </div>
           </div>
 
-          <div style={{ marginBottom: 10 }}>
+          <div className="entry-detail-row">
             <div className="form-label">Custom List</div>
             <div>{current.custom_list || '—'}</div>
           </div>
 
           {(current.genres || current.external_rating != null) && (
-            <div className="form-row-2" style={{ marginBottom: 10 }}>
+            <div className="form-row-2 entry-detail-row">
               <div>
                 <div className="form-label">Genres</div>
-                <div style={{ fontSize: 12 }}>{current.genres || '—'}</div>
+                <div className="entry-detail-small">{current.genres || '—'}</div>
               </div>
               <div>
                 <div className="form-label">Source Rating</div>
@@ -114,47 +114,45 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
           )}
 
           {current.completed_at && (
-            <div style={{ marginBottom: 10 }}>
+            <div className="entry-detail-row">
               <div className="form-label">Completed Date</div>
               <div>{fmtDate(current.completed_at)}</div>
             </div>
           )}
 
           {current.notes && (
-            <div style={{ marginBottom: 10 }}>
+            <div className="entry-detail-row">
               <div className="form-label">Notes</div>
-              <div style={{ whiteSpace: 'pre-wrap', color: 'var(--dim)', fontSize: 12 }}>
+              <div className="entry-detail-notes">
                 {current.notes}
               </div>
             </div>
           )}
 
           {current.external_url && (
-            <div style={{ marginBottom: 10 }}>
+            <div className="entry-detail-row">
               <div className="form-label">External Source</div>
               <a href={current.external_url} target="_blank" rel="noopener noreferrer"
-                style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: 12, wordBreak: 'break-all' }}
-                onMouseOver={e => e.target.style.textDecoration = 'underline'}
-                onMouseOut={e => e.target.style.textDecoration = 'none'}>
+                className="entry-detail-external">
                 {cleanUrl(current.external_url)}
               </a>
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--dim)', marginBottom: 8 }}>
+          <div className="entry-detail-timestamps">
             <span>Added: {fmtDate(current.created_at)}</span>
             <span>Updated: {fmtDate(current.updated_at)}</span>
           </div>
 
           {deleteError && (
-            <div className="settings-msg settings-msg-error" style={{ marginBottom: 8 }}>
+            <div className="settings-msg settings-msg-error entry-detail-error">
               {deleteError}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="entry-detail-actions">
             {confirmDelete ? (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--red)' }}>sure?</span>
+              <div className="entry-detail-confirm">
+                <span className="confirm-inline-text">sure?</span>
                 <button type="button" className="btn btn-danger"
                   onClick={handleDelete} disabled={deleting}>
                   {deleting ? '…' : 'Yes, delete'}
@@ -170,7 +168,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
                 Delete
               </button>
             )}
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="entry-detail-primary-actions">
               <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
               <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
             </div>
