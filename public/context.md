@@ -411,7 +411,9 @@ series URL.
 Behavior:
 
 - Reads `ui.explore` from the authenticated user's settings.
-- `sources` is a comma-separated available-source set from the frontend.
+- `sources` is a comma-separated available-source set from the frontend. It is
+  applied as a response filter, not as part of the Explore cache key, so source
+  setting changes should not force a provider reroll.
 - `refresh=true` bypasses and overwrites the per-user/per-medium cache.
 - Response: `{ items, affinity, personalised }`.
 
@@ -913,9 +915,9 @@ Recommended checks by change type:
   - Server-side `/covers/cache-all`.
   - Extension upload `/covers/upload`.
   Keep both behavior paths in mind when debugging missing covers.
-- Explore cache is keyed only by `(username, medium)` in the current model. If
-  source sets or personalization settings change, verify whether refresh/cache
-  behavior is still desired.
+- Explore cache is keyed by user, medium, personalization mode, and combined-vs-
+  legacy All mode. Source availability is intentionally response-only so source
+  setting changes can reuse cached recommendations.
 - Library/Dashboard table CSS is high risk for visual regressions. Treat table
   layout changes as UI-sensitive work.
 

@@ -27,9 +27,9 @@ Caching
 ───────
 Results are cached per ``(username, medium)`` in the ``explore_cache`` table.
 Only the Reroll button on the Explore page invalidates a cache row (via
-``refresh=True``) — every other request reads from cache (re-filtering library
-titles live so that adding an entry on one tab doesn't show stale "available"
-items on another).
+``refresh=True``) — every other request reads from cache, then applies live
+library/source filters so settings changes do not create new cache rows or
+force provider re-scans.
 
 Discovery providers live inline below — they hit known popular/trending
 endpoints rather than reusing the title-search code paths.
@@ -192,8 +192,9 @@ _PROVIDER_FNS_BY_MEDIUM: dict[str, list] = {
 }
 
 # Source value (matching the frontend SEARCH_SOURCES values) each discover
-# function emits. Used to restrict discovery to the user's available sources so
-# the recommender doesn't fill results from a source the UI will then hide.
+# function emits. The helper can restrict provider lists, but normal Explore
+# caching now fetches the full provider pool and applies source availability as
+# a response filter so source settings don't create new cache identities.
 _DISCOVER_SOURCE: dict = {
     _discover_tmdb:         "tmdb",
     _discover_imdb:         "imdb",
@@ -343,16 +344,14 @@ def _scalar_bias(value: Optional[str], weights: dict[str, float], cap: float) ->
 # library" filter so adding an entry on one tab doesn't leave it visible on
 # another.
 
-def _cache_key(medium: Optional[str], personalize: bool = True, sources: Optional[set[str]] = None, combine_all: bool = True) -> str:
+def _cache_key(medium: Optional[str], personalize: bool = True, combine_all: bool = True) -> str:
     """Normalise a medium hint into the string used as the cache key.
 
     Empty string is the cache key for the "All" sidebar tab. Neutral
-    (non-personalized) results and different available-source sets are cached
-    separately so changing either preference never serves a stale ranking.
+    (non-personalized) results are cached separately so changing ranking
+    preference never serves a stale ranking.
     """
-    # The medium column is VARCHAR(50), so keep the key short: a printable flag
-    # for neutral mode and a short hash of the available-source set (the full
-    # comma list would overflow the column).
+    # The medium column is VARCHAR(50), so keep the key short.
     base = medium or ""
     if not personalize:
         base += "|n"
@@ -361,32 +360,55 @@ def _cache_key(medium: Optional[str], personalize: bool = True, sources: Optiona
     # matters for the combined view (a specific medium ignores combine_all).
     if not medium and not combine_all:
         base += "|L"
-    if sources:
-        digest = hashlib.sha1(",".join(sorted(sources)).encode()).hexdigest()[:10]
-        base += "|s" + digest
     return base
 
 
-def _read_cache(db: Session, username: str, medium: Optional[str], personalize: bool = True, sources: Optional[set[str]] = None, combine_all: bool = True) -> Optional[list[ExploreItem]]:
-    row = db.execute(
-        select(ExploreCache.items_json).where(
-            ExploreCache.username == username,
-            ExploreCache.medium   == _cache_key(medium, personalize, sources, combine_all),
-        )
-    ).first()
-    if not row:
+def _legacy_source_cache_key(
+    medium: Optional[str],
+    personalize: bool = True,
+    sources: Optional[set[str]] = None,
+    combine_all: bool = True,
+) -> Optional[str]:
+    """Old cache identity used before source filters became response-only."""
+    if not sources:
         return None
-    try:
-        raw = json.loads(row[0])
-        return [ExploreItem(**d) for d in raw]
-    except Exception as exc:
-        logger.warning("Discarding malformed explore cache row: %s", exc)
-        return None
+    digest = hashlib.sha1(",".join(sorted(sources)).encode()).hexdigest()[:10]
+    return _cache_key(medium, personalize, combine_all) + "|s" + digest
 
 
-def _write_cache(db: Session, username: str, medium: Optional[str], items: list[ExploreItem], personalize: bool = True, sources: Optional[set[str]] = None, combine_all: bool = True) -> None:
+def _read_cache(
+    db: Session,
+    username: str,
+    medium: Optional[str],
+    personalize: bool = True,
+    sources: Optional[set[str]] = None,
+    combine_all: bool = True,
+) -> Optional[list[ExploreItem]]:
+    keys = [_cache_key(medium, personalize, combine_all)]
+    legacy_key = _legacy_source_cache_key(medium, personalize, sources, combine_all)
+    if legacy_key:
+        keys.append(legacy_key)
+    for key in keys:
+        row = db.execute(
+            select(ExploreCache.items_json).where(
+                ExploreCache.username == username,
+                ExploreCache.medium == key,
+            )
+        ).first()
+        if not row:
+            continue
+        try:
+            raw = json.loads(row[0])
+            return [ExploreItem(**d) for d in raw]
+        except Exception as exc:
+            logger.warning("Discarding malformed explore cache row: %s", exc)
+            return None
+    return None
+
+
+def _write_cache(db: Session, username: str, medium: Optional[str], items: list[ExploreItem], personalize: bool = True, combine_all: bool = True) -> None:
     payload = json.dumps([i.model_dump() for i in items])
-    key = _cache_key(medium, personalize, sources, combine_all)
+    key = _cache_key(medium, personalize, combine_all)
     existing = db.execute(
         select(ExploreCache).where(
             ExploreCache.username == username,
@@ -464,9 +486,9 @@ async def explore_media(
         if not mediums_to_query:
             mediums_to_query = list(all_mediums)
 
-    # Drop any medium with no available provider so we don't waste a fetch slot
-    # on a medium whose results would all be filtered out.
-    mediums_to_query = [m for m in mediums_to_query if _providers_for(m, sources)]
+    # Drop any medium with no provider. Source availability is response-only so
+    # changing settings can reuse the same cached recommendation pool.
+    mediums_to_query = [m for m in mediums_to_query if _providers_for(m, None)]
 
     # Each queried medium independently targets `target_limit` items — the
     # budget is never split across mediums (a prior version divided
@@ -480,7 +502,7 @@ async def explore_media(
     if not refresh:
         cached = _read_cache(db, username, medium, personalize, sources, combine_all)
         if cached is not None:
-            return _finalise(db, username, profile, cached, response_limit, personalize)
+            return _finalise(db, username, profile, cached, response_limit, personalize, sources)
 
     rng = random.Random(seed) if seed is not None else random.Random()
 
@@ -522,7 +544,7 @@ async def explore_media(
             medium_rng = random.Random(rng.randint(0, 2**31 - 1))
             tasks.append(
                 _discover_medium_with_fallback(
-                    client, med, top_genre_names, medium_rng, target_per_medium, owned, sources
+                    client, med, top_genre_names, medium_rng, target_per_medium, owned, None
                 )
             )
         groups = await asyncio.gather(*tasks, return_exceptions=True)
@@ -569,9 +591,9 @@ async def explore_media(
     # re-applied at read time, so we strip them before caching to keep the
     # row small and avoid serving stale "in library" tags.
     to_cache = [i.model_copy(update={"matches": [], "in_library": False}) for i in items]
-    _write_cache(db, username, medium, to_cache, personalize, sources, combine_all)
+    _write_cache(db, username, medium, to_cache, personalize, combine_all)
 
-    return _finalise(db, username, profile, items, response_limit, personalize)
+    return _finalise(db, username, profile, items, response_limit, personalize, sources)
 
 
 def _finalise(
@@ -581,16 +603,19 @@ def _finalise(
     items:       list[ExploreItem],
     limit:       int,
     personalize: bool = True,
+    sources:     Optional[set[str]] = None,
 ) -> ExploreResponse:
-    """Apply the live "in library" filter, tag matches, and trim to ``limit``.
+    """Apply live source/library filters, tag matches, and trim to ``limit``.
 
     Used both for cache hits and freshly-fetched results so behaviour stays
     consistent.
     """
     owned = _owned_entry_keys(db, username)
+    source_filter = sources or set()
     filtered = [
         i for i in items
         if _item_key(i) not in owned
+        and (not source_filter or i.source in source_filter)
     ]
 
     for i in filtered:

@@ -388,9 +388,8 @@ export const runBackup       = () => req('/backup/run', { method: 'POST' });
 export const getExplore = ({ medium, limit, seed, refresh, sources } = {}) => {
   const params = { medium, limit, seed };
   if (refresh) params.refresh = 'true';
-  // Comma-separated list of sitewide-available sources; restricts which
-  // providers the recommender draws from (so it doesn't fill with a source the
-  // user has disabled and then have the UI hide it).
+  // Comma-separated list of sitewide-available sources; the backend applies it
+  // as a response filter without making source selection part of cache identity.
   if (Array.isArray(sources) && sources.length) params.sources = sources.join(',');
   const qs = new URLSearchParams(
     Object.fromEntries(

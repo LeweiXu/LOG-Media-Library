@@ -27,9 +27,9 @@ const EXPLORE_FETCH_LIMIT = 120;
 const REC_PAGE_SIZE = 30;
 
 // Per-medium recommendation cache that survives navigation within the SPA
-// session (module scope, not component state). Lets a source-availability change
-// fetch only the newly-added sources instead of re-querying everything: removed
-// sources are filtered out of the cached pool, added ones are appended.
+// session (module scope, not component state). Source-availability changes never
+// block first paint: removed sources are filtered out of the cached pool, and
+// newly-added sources are appended by a background cache read/fill.
 //   medium -> { sources: string[], items, affinity, personalised }
 const exploreCache = {};
 
@@ -173,10 +173,9 @@ export default function Explore() {
   }, [setSearchParams]);
 
   // ── Fetch explore data whenever filters or seed change ──────────────────
-  // `force` (Refresh/Reroll) always re-queries the full set; otherwise, when a
-  // cached pool exists for this medium, only the newly-available sources are
-  // fetched and no-longer-available ones are filtered out — so toggling a source
-  // in Console doesn't trigger a slow full reroll.
+  // `force` (Refresh/Reroll) re-queries through the backend. Otherwise, when a
+  // cached pool exists for this medium, source changes are handled locally and
+  // any newly-visible source slice is filled in the background.
   const fetchExplore = useCallback(async ({ force = false } = {}) => {
     const requestSeq = ++exploreRequestSeq.current;
     setLoading(true); setError(''); setCardState({});
@@ -195,17 +194,34 @@ export default function Explore() {
         && cached.personalize === personalize && cached.by === exploreBy;
 
       let recs, affinity, personalised;
+      let cacheSources = want;
       if (incremental) {
-        const wantSet = new Set(want);
-        const have = new Set(cached.sources);
+        const have = new Set(cached.sources || []);
         const added = want.filter(s => !have.has(s));
-        recs = cached.items.filter(it => wantSet.has(it.source));
+        recs = cached.items || [];
         affinity = cached.affinity;
         personalised = cached.personalised;
+        cacheSources = cached.sources || [];
         if (added.length) {
-          const data = await getExplore({ medium: effectiveMedium, limit: EXPLORE_FETCH_LIMIT, seed, sources: added });
-          if (requestSeq !== exploreRequestSeq.current) return;
-          recs = mergeResults(recs, data.items || []);
+          getExplore({ medium: effectiveMedium, limit: EXPLORE_FETCH_LIMIT, seed, sources: added })
+            .then(data => {
+              if (requestSeq !== exploreRequestSeq.current) return;
+              const extra = data.items || [];
+              if (!extra.length) return;
+              setItems(prev => {
+                const merged = mergeResults(prev, extra);
+                const current = exploreCache[effectiveMedium];
+                if (current) {
+                  current.items = merged;
+                  current.sources = [...new Set([...(current.sources || []), ...added])];
+                }
+                return merged;
+              });
+            })
+            .catch(() => {
+              // A missing source slice should not turn a cached Explore page
+              // into an error state. The next visit/reroll can try again.
+            });
         }
       } else {
         // Joins the shared in-flight promise if one is already running for this
@@ -219,7 +235,7 @@ export default function Explore() {
         personalised = !!data.personalised;
       }
 
-      exploreCache[effectiveMedium] = { sources: want, items: recs, affinity, personalised, personalize, by: exploreBy };
+      exploreCache[effectiveMedium] = { sources: cacheSources, items: recs, affinity, personalised, personalize, by: exploreBy };
       setItems(recs);
       setAffinity(affinity);
       setPersonalised(personalised);
@@ -297,7 +313,10 @@ export default function Explore() {
         // combine mode) in sync so a later remount/incremental fetch doesn't
         // resurrect the stale pre-reroll slice for this medium.
         const combinedCache = exploreCache[effectiveMedium];
-        if (combinedCache) combinedCache.items = merged;
+        if (combinedCache) {
+          combinedCache.items = merged;
+          combinedCache.sources = want;
+        }
         return merged;
       });
     } catch (e) {
