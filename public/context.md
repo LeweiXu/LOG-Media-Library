@@ -581,6 +581,7 @@ Current `DEFAULT_UI` shape:
 - `dashboard`
   - row counts
   - split percentage
+  - fixed table toggles
   - columns for current/planned/completed tables
 - `statistics`
   - ranges
@@ -612,6 +613,9 @@ Current default values:
 - `dashboard.planned_rows`: `5`
 - `dashboard.completed_rows`: `20`
 - `dashboard.split`: `60`
+- `dashboard.fixed_tables.current`: `true`
+- `dashboard.fixed_tables.planned`: `true`
+- `dashboard.fixed_tables.completed`: `false` (fluid by default)
 - `dashboard.columns.current`: `medium`, `progress`, `status`, `rating`
 - `dashboard.columns.planned`: `medium`, `status`
 - `dashboard.columns.completed`: `medium`, `progress`, `completed`, `status`,
@@ -683,6 +687,21 @@ Keep this import order unless there is a specific cascade reason to change it:
    - Console tools, add/custom/import panels, CustomSelect, batch edit.
 9. `light.css`
    - Light theme overrides. Imported last intentionally.
+
+Table/dropdown sizing contracts:
+
+- `library-dashboard.css` owns Dashboard/Library table sizing. Library fixed
+  tables cap inter-column padding at `96px`; Dashboard Current/Planned fixed
+  tables cap it at `72px`; Dashboard Recently Completed fixed table caps it at
+  `96px`. Dashboard fixed/fluid behavior is controlled per table via
+  `ui.dashboard.fixed_tables`.
+- `tools-add-custom.css` owns CustomSelect base sizing. Table status selects are
+  explicitly `112px`; table custom-list selects are explicitly `224px`, truncate
+  trigger text, and wrap long menu options. Settings row selects are explicitly
+  `112px` via `.settings-row-select` so they remain the same width regardless of
+  option text length.
+- Custom list names are capped at 60 characters in frontend inputs and backend
+  schema validation.
 
 ### CSS Variable Rules
 

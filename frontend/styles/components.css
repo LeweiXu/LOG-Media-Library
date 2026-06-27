@@ -658,7 +658,7 @@ html.light .skeleton-pie::after {
 .settings-section.is-danger .settings-section-head .sh-title { color: var(--red); }
 .settings-section-head .sh-desc { font-size: 11px; color: var(--dim); }
 .settings-section-body { padding: 2px 18px; }
-.settings-row-select { width: 200px; }
+.settings-row-select { width: 112px; }
 .console-page-head { margin-bottom: 16px; }
 .console-confirm-head { margin-bottom: 24px; }
 .console-tabs { margin-bottom: 20px; }

@@ -34,6 +34,11 @@ export const DEFAULT_UI = {
     planned_rows: 5,
     completed_rows: 20,
     split: 60,   // % width of the "currently consuming" column vs "planned"
+    fixed_tables: {
+      current: true,
+      planned: true,
+      completed: false,
+    },
     columns: {
       current:   ['medium', 'progress', 'status', 'rating'],
       planned:   ['medium', 'status'],

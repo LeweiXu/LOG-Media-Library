@@ -843,6 +843,10 @@ a.quickadd-title:hover { color: var(--accent); }
   width: max(72px, var(--select-fit-width, 10ch));
   max-width: 100%;
 }
+.custom-select.settings-row-select {
+  width: 136px;
+  flex: 0 0 136px;
+}
 .custom-select-trigger {
   width: 100%;
   display: flex;
@@ -896,6 +900,8 @@ a.quickadd-title:hover { color: var(--accent); }
   font: inherit;
   font-size: 11px;
   line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
   text-align: left;
   cursor: pointer;
 }
@@ -917,6 +923,16 @@ a.quickadd-title:hover { color: var(--accent); }
 .filter-bar .custom-select { flex-shrink: 0; }
 .inline-select.custom-select-trigger { width: 100%; }
 .batch-select.custom-select-trigger { width: 100%; }
+.custom-select.table-status-select.custom-select-fit {
+  width: 112px;
+}
+.custom-select.manage-list-select.custom-select-fit,
+.inline-list-create.manage-list-select {
+  width: 168px;
+}
+.custom-list-select-menu .custom-select-option {
+  align-items: flex-start;
+}
 
 .quickadd-completion-date .custom-select {
   width: 110px;

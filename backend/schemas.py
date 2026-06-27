@@ -9,6 +9,8 @@ from constants import (
     normalise_medium, normalise_origin,
 )
 
+CUSTOM_LIST_MAX_LENGTH = 60
+
 
 class EntryBase(BaseModel):
     title:       str             = Field(..., min_length=1, max_length=500)
@@ -26,7 +28,7 @@ class EntryBase(BaseModel):
     external_url:    Optional[str]   = Field(None, max_length=1000)
     genres:          Optional[str]   = Field(None, max_length=500)
     external_rating: Optional[float] = Field(None, ge=0, le=100)
-    custom_list:     Optional[str]   = Field(None, max_length=100)
+    custom_list:     Optional[str]   = Field(None, max_length=CUSTOM_LIST_MAX_LENGTH)
 
     @field_validator("status")
     @classmethod
@@ -85,7 +87,7 @@ class EntryUpdate(BaseModel):
     external_url:    Optional[str]      = Field(None, max_length=1000)
     genres:          Optional[str]      = Field(None, max_length=500)
     external_rating: Optional[float]    = Field(None, ge=0, le=100)
-    custom_list:     Optional[str]      = Field(None, max_length=100)
+    custom_list:     Optional[str]      = Field(None, max_length=CUSTOM_LIST_MAX_LENGTH)
     completed_at:    Optional[datetime] = None
 
     @field_validator("status")
@@ -163,7 +165,7 @@ class CustomListRead(BaseModel):
     updated_at: datetime
 
 class CustomListRename(BaseModel):
-    new_name: str = Field(..., min_length=1, max_length=100)
+    new_name: str = Field(..., min_length=1, max_length=CUSTOM_LIST_MAX_LENGTH)
 
     @field_validator("new_name")
     @classmethod
@@ -238,6 +240,11 @@ DEFAULT_UI: dict[str, Any] = {
         "planned_rows": 5,
         "completed_rows": 20,
         "split": 60,                      # % width of the "currently consuming" column vs "planned"
+        "fixed_tables": {
+            "current": True,
+            "planned": True,
+            "completed": False,
+        },
         "columns": {
             "current":   ["medium", "progress", "status", "rating"],
             "planned":   ["medium", "status"],

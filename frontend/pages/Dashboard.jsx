@@ -180,6 +180,8 @@ export default function DashboardAlt({ onFilterChange }) {
   // catalogue; visibility is driven by the saved per-table column preference. ──
   // Columns in the saved order (filtered to known keys); ordering is set in Settings.
   const dashCols = table => (dash.columns?.[table] || DEFAULT_UI.dashboard.columns[table]).filter(c => DASH_COL_META[c]);
+  const dashFixed = table => dash.fixed_tables?.[table] ?? DEFAULT_UI.dashboard.fixed_tables[table];
+  const dashTableClass = table => `media-table dash-table-${table}${dashFixed(table) ? ' dash-fixed-title' : ''}`;
 
   function renderHead(table) {
     return (
@@ -415,7 +417,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 {current.length === 0
                 ? <div className="dash-empty">No active entries.</div>
                 : (
-                    <table className="media-table dash-fixed-title" data-mobile-show="progress">
+                    <table className={dashTableClass('current')} data-mobile-show="progress">
                     <thead>{renderHead('current')}</thead>
                     <tbody>
                         {current.slice(0, dash.current_rows).map(e => renderRow(e, 'current', 'select'))}
@@ -431,7 +433,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 {planned.length === 0
                 ? <div className="dash-empty">No planned entries.</div>
                 : (
-                    <table className="media-table dash-fixed-title">
+                    <table className={dashTableClass('planned')}>
                     <thead>{renderHead('planned')}</thead>
                     <tbody>
                         {planned.slice(0, dash.planned_rows).map(e => renderRow(e, 'planned', 'select'))}
@@ -448,7 +450,7 @@ export default function DashboardAlt({ onFilterChange }) {
       {recent.length === 0
       ? <div className="dash-empty dash-empty-flush">No completed entries yet.</div>
       : (
-        <table className="media-table" data-mobile-show="completed">
+        <table className={dashTableClass('completed')} data-mobile-show="completed">
                 <thead>{renderHead('completed')}</thead>
                 <tbody>
                     {recent.slice(0, dash.completed_rows).map(e => renderRow(e, 'completed', 'badge'))}

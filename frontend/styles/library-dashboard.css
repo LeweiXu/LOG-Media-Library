@@ -36,7 +36,7 @@
 .library-table.media-table-fixed col.col-rating { width: 84px; }
 .library-table.media-table-fixed col.col-updated { width: 92px; }
 .library-table.media-table-fixed col.col-completed { width: 104px; }
-.library-table.media-table-fixed col.col-custom-list { width: 148px; }
+.library-table.media-table-fixed col.col-custom-list { width: 236px; }
 .library-table.media-table-fixed col.action-cell { width: 132px; }
 .library-table.media-table-fixed col.col-title { width: 750px; }
 .library-table.is-fixed-title:not(.manage-entry-table) th:first-child,
@@ -73,12 +73,12 @@
 .library-table.is-fixed-title .col-rating { min-width: 84px; }
 .library-table.is-fixed-title .col-updated { min-width: 102px; }
 .library-table.is-fixed-title .col-completed { min-width: 112px; }
-.library-table.is-fixed-title .col-custom-list { min-width: 150px; }
+.library-table.is-fixed-title .col-custom-list { min-width: 236px; }
 .library-table.is-fixed-title .action-cell {
   min-width: 140px;
 }
 
-/* Dashboard Current/Planned tables: same fixed-title logic as the Library
+/* Dashboard tables: same fixed-title logic as the Library
    table — Title absorbs the slack, the rest stay compact and packed right with
    a viewport-scaled gap between them. These tables sit in the narrower
    side-by-side grid, so the clamp runs smaller than the full-width Library one. */
@@ -91,8 +91,12 @@
 .media-table.dash-fixed-title td:not(:first-child) {
   width: 1%;
   white-space: nowrap;
-  padding-left: min(3.2vw, 96px);
+  padding-left: min(3.2vw, 72px);
   padding-right: 8px;
+}
+.media-table.dash-fixed-title.dash-table-completed th:not(:first-child),
+.media-table.dash-fixed-title.dash-table-completed td:not(:first-child) {
+  padding-left: min(3.2vw, 96px);
 }
 .media-table .col-dim { color: var(--dim); }
 .media-table th.sortable.is-active { color: var(--accent); }
@@ -203,7 +207,6 @@
 .inline-list-create {
   display: flex;
   gap: 6px;
-  width: max(72px, var(--select-fit-width, 10ch));
   max-width: 100%;
 }
 .inline-list-create-input {

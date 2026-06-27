@@ -285,6 +285,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   const display = ui.display || DEFAULT_UI.display;
   const visibleMediums = ui.mediums?.visible ?? DEFAULT_UI.mediums.visible;
   const visibleMediumSet = new Set(visibleMediums);
+  const dashFixed = table => dash.fixed_tables?.[table] ?? DEFAULT_UI.dashboard.fixed_tables[table];
 
   // ── Library tools state ──
   const extPresent = useExtensionPresent();
@@ -348,6 +349,10 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
     const next = value || 'blue';
     onAccentChange?.(next);
     saveUi({ display: { accent: next } });
+  }
+
+  function toggleDashFluid(table) {
+    saveUi({ dashboard: { fixed_tables: { [table]: !dashFixed(table) } } });
   }
 
   async function exportCSV() {
@@ -768,6 +773,13 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
             <Slider value={dash.split ?? DEFAULT_UI.dashboard.split} min={20} max={80} step={5}
               onChange={n => saveUi({ dashboard: { split: n } })}
               format={n => `${n}% / ${100 - n}%`} />
+          </Row>
+          <Row title="Fluid tables" desc="Fixed is the default; enable fluid sizing per dashboard table." stack>
+            <div className="settings-chip-row">
+              <ChipToggle label="Current" on={!dashFixed('current')} onClick={() => toggleDashFluid('current')} />
+              <ChipToggle label="Planned" on={!dashFixed('planned')} onClick={() => toggleDashFluid('planned')} />
+              <ChipToggle label="Recently Completed" on={!dashFixed('completed')} onClick={() => toggleDashFluid('completed')} />
+            </div>
           </Row>
           <Row title="Current columns" desc="Drag to reorder · click to toggle." stack>
             <ColumnOrderEditor cols={DASH_COLS} selected={dashColSel('current')}

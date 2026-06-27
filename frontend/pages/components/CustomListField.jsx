@@ -3,6 +3,7 @@ import CustomSelect from './CustomSelect.jsx';
 
 // Sentinel option value that flips the picker into "new list" text-entry mode.
 const NEW_SENTINEL = '__new__';
+const MAX_LIST_NAME_LENGTH = 60;
 
 /**
  * Custom-list picker that doubles as a creator. Renders the styled dropdown of
@@ -48,10 +49,10 @@ export default function CustomListField({ value, onChange, lists = [] }) {
         <input
           ref={inputRef}
           className="form-input custom-list-create-input"
-          maxLength={100}
+          maxLength={MAX_LIST_NAME_LENGTH}
           placeholder="New list name…"
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={e => onChange(e.target.value.slice(0, MAX_LIST_NAME_LENGTH))}
         />
         <button
           type="button"
@@ -75,6 +76,7 @@ export default function CustomListField({ value, onChange, lists = [] }) {
         { value: NEW_SENTINEL, label: '+ New List…' },
       ]}
       onChange={handleSelect}
+      menuClassName="custom-list-select-menu"
       ariaLabel="Custom list"
     />
   );

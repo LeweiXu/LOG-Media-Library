@@ -5,6 +5,7 @@ import { SkeletonLine } from './Skeletons.jsx';
 import { Tabs, SelectRow } from './terminal.jsx';
 
 const PAGE_SIZE = 10;
+const MAX_LIST_NAME_LENGTH = 60;
 
 /**
  * Custom-list body shared by the inline Console panel and the Library "+ New"
@@ -160,8 +161,9 @@ export default function ListsPanel({
               <input
                 className="form-input"
                 value={name}
+                maxLength={MAX_LIST_NAME_LENGTH}
                 placeholder="e.g. Next up"
-                onChange={e => setName(e.target.value)}
+                onChange={e => setName(e.target.value.slice(0, MAX_LIST_NAME_LENGTH))}
                 onBlur={e => setName(e.target.value.trim())}
                 autoFocus
               />
@@ -269,7 +271,8 @@ export default function ListsPanel({
                         <input
                           className="form-input"
                           value={editNames[list.name] || ''}
-                          onChange={e => setEditNames(prev => ({ ...prev, [list.name]: e.target.value }))}
+                          maxLength={MAX_LIST_NAME_LENGTH}
+                          onChange={e => setEditNames(prev => ({ ...prev, [list.name]: e.target.value.slice(0, MAX_LIST_NAME_LENGTH) }))}
                           onKeyDown={e => { if (e.key === 'Enter') handleRename(list); }}
                         />
                         <button

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import CustomSelect from './CustomSelect.jsx';
 
 const NEW_SENTINEL = '__new__';
+const MAX_LIST_NAME_LENGTH = 60;
 
 // Inline custom-list picker used in the Library table cells. Like CustomListField
 // it offers existing lists plus a "+ New List…" creator, but it commits the
@@ -16,12 +17,6 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
     ...listNames.map(name => ({ value: name, label: name })),
     { value: NEW_SENTINEL, label: '+ New List…' },
   ];
-  const maxOptionChars = Math.max(
-    1,
-    ...options.map(option => String(option.label ?? '').length),
-  );
-  const fitStyle = { '--select-fit-width': `calc(${maxOptionChars}ch + 30px)` };
-
   useEffect(() => { if (creating) inputRef.current?.focus(); }, [creating]);
 
   function cancel() { setCreating(false); setDraft(''); }
@@ -34,13 +29,12 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
 
   if (creating) {
     return (
-      <div className="manage-list-select inline-list-create custom-select-fit"
-        style={fitStyle}
+      <div className="manage-list-select inline-list-create"
         onClick={ev => ev.stopPropagation()}>
         <input
           ref={inputRef}
           className="inline-select inline-list-create-input"
-          maxLength={100}
+          maxLength={MAX_LIST_NAME_LENGTH}
           placeholder="New list…"
           value={draft}
           onChange={e => setDraft(e.target.value)}
@@ -68,6 +62,7 @@ export default function InlineListSelect({ entry, listNames, disabled, onSave })
         else onSave(entry, value);
       }}
       containerClassName="manage-list-select"
+      menuClassName="custom-list-select-menu"
       fitToOptions
       maxVisible={listNames.length + 2}
       ariaLabel={`Custom list for ${entry.title}`}
