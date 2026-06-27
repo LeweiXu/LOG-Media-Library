@@ -415,7 +415,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 {current.length === 0
                 ? <div className="dash-empty">No active entries.</div>
                 : (
-                    <table className="media-table" data-mobile-show="progress">
+                    <table className="media-table dash-fixed-title" data-mobile-show="progress">
                     <thead>{renderHead('current')}</thead>
                     <tbody>
                         {current.slice(0, dash.current_rows).map(e => renderRow(e, 'current', 'select'))}
@@ -431,7 +431,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 {planned.length === 0
                 ? <div className="dash-empty">No planned entries.</div>
                 : (
-                    <table className="media-table">
+                    <table className="media-table dash-fixed-title">
                     <thead>{renderHead('planned')}</thead>
                     <tbody>
                         {planned.slice(0, dash.planned_rows).map(e => renderRow(e, 'planned', 'select'))}

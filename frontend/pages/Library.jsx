@@ -500,6 +500,7 @@ export default function Library({ initialFilters = {} }) {
     title: 'status', medium: 'medium', rating: 'completed',
     status: 'status', year: 'year', updated_at: 'updated', completed_at: 'completed',
   })[sort] || 'status';
+  const fixedTableClass = fixTitle ? ' is-fixed-title' : '';
 
   // ── Column rendering (order from saved prefs; Title pinned separately) ──
   function renderHead(col) {
@@ -822,7 +823,7 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && isManage && (
           <div>
-            <table className={`media-table library-table manage-entry-table${fixTitle ? ' is-fixed-title' : ''}`} data-mobile-show="status">
+            <table className={`media-table library-table manage-entry-table${fixedTableClass}`} data-mobile-show="status">
               <thead>
                 <tr>
                   <th className="col-select">
@@ -888,7 +889,7 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && !isManage && (
           <div>
-            <table className={`media-table library-table${fixTitle ? ' is-fixed-title' : ''}`} data-mobile-show={mobileShow}>
+            <table className={`media-table library-table${fixedTableClass}`} data-mobile-show={mobileShow}>
               <thead>
                 <tr>
                   <SortTh field="title">Title</SortTh>
@@ -986,7 +987,7 @@ export default function Library({ initialFilters = {} }) {
         </button>
         <button type="button" className={`source-chip library-view-chip${fixTitle ? ' is-on' : ''}`}
           onClick={toggleFixTitle}
-          title="Pin the Title column to a fixed width so other columns don't shift when sorting or searching">
+          title="Let the title column absorb extra width so other columns stay compact and stable">
           <span className="source-box">{fixTitle ? '[x]' : '[ ]'}</span>
           Fixed Table
         </button>

@@ -1,4 +1,4 @@
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   /* App shell padding shrinks. */
   .topbar  { padding: 0 8px; gap: 0; }
   .topbar-logo { margin-right: 6px; font-size: 13px; flex-shrink: 0; }

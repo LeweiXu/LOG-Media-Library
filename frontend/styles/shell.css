@@ -169,7 +169,11 @@
 /* ── Three-column layout ─────────────────────────────────────────────────── */
 .layout-3col {
   display: grid;
-  grid-template-columns: 210px 1fr 256px;
+  /* minmax(0, 1fr) lets the middle track shrink below the table's intrinsic
+     width instead of forcing the grid to overflow — without it, a wide table
+     pushes the whole grid past its container and the right sidebar gets clipped
+     / overlapped. The table scrolls inside .main-content (overflow: auto). */
+  grid-template-columns: 210px minmax(0, 1fr) 256px;
   flex: 1;
   overflow: hidden;
 }
