@@ -282,6 +282,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   const dash = ui.dashboard || DEFAULT_UI.dashboard;
   const statp = ui.statistics || DEFAULT_UI.statistics;
   const exp = ui.explore || DEFAULT_UI.explore;
+  const display = ui.display || DEFAULT_UI.display;
   const visibleMediums = ui.mediums?.visible ?? DEFAULT_UI.mediums.visible;
   const visibleMediumSet = new Set(visibleMediums);
 
@@ -335,6 +336,18 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
       return nextSources;
     });
     saveUi(patch);
+  }
+
+  function saveTheme(value) {
+    const next = value === 'light' ? 'light' : 'dark';
+    onThemeChange?.(next);
+    saveUi({ display: { theme: next } });
+  }
+
+  function saveAccent(value) {
+    const next = value || 'blue';
+    onAccentChange?.(next);
+    saveUi({ display: { accent: next } });
   }
 
   async function exportCSV() {
@@ -692,14 +705,14 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         <Section title="Display">
           <Row title="Theme" desc="Colour scheme for the whole interface.">
             <RowSelect
-              value={theme || 'dark'}
+              value={display.theme || theme || 'dark'}
               options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]}
-              onChange={value => onThemeChange?.(value)}
+              onChange={saveTheme}
               ariaLabel="Theme"
             />
           </Row>
           <Row title="Accent colour" desc="Highlight for buttons, selections, progress bars and links." stack>
-            <AccentSwatches value={accent || 'blue'} onChange={a => onAccentChange?.(a)} />
+            <AccentSwatches value={display.accent || accent || 'blue'} onChange={saveAccent} />
           </Row>
         </Section>
 
@@ -798,7 +811,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
           </Row>
           <Row title="Table behaviour" stack>
             <div className="settings-chip-row">
-              <ChipToggle label="Fixed Table" on={!!lib.fix_title} onClick={() => saveUi({ library: { fix_title: !lib.fix_title } })} />
+              <ChipToggle label="Fluid Table" on={!lib.fix_title} onClick={() => saveUi({ library: { fix_title: !lib.fix_title } })} />
               <ChipToggle label="Quick Actions" on={!!lib.quick_actions} onClick={() => saveUi({ library: { quick_actions: !lib.quick_actions } })} />
             </div>
           </Row>

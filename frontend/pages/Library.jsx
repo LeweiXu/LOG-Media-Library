@@ -137,7 +137,7 @@ export default function Library({ initialFilters = {} }) {
   const [drawer, setDrawer] = useState('');
   // View toggles + per-mode columns come from the saved UI preferences.
   const [showActions, setShowActions] = useState(false);
-  const [fixTitle, setFixTitle] = useState(false);
+  const [fixTitle, setFixTitle] = useState(true);
   const toggleQuickActions = () => setShowActions(prev => {
     const next = !prev;
     updateUi({ library: { quick_actions: next } });
@@ -985,11 +985,11 @@ export default function Library({ initialFilters = {} }) {
           <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
           Quick Actions
         </button>
-        <button type="button" className={`source-chip library-view-chip${fixTitle ? ' is-on' : ''}`}
+        <button type="button" className={`source-chip library-view-chip${!fixTitle ? ' is-on' : ''}`}
           onClick={toggleFixTitle}
-          title="Let the title column absorb extra width so other columns stay compact and stable">
-          <span className="source-box">{fixTitle ? '[x]' : '[ ]'}</span>
-          Fixed Table
+          title="Use fluid table sizing instead of the compact fixed table layout">
+          <span className="source-box">{!fixTitle ? '[x]' : '[ ]'}</span>
+          Fluid Table
         </button>
 
         <div className="library-sidebar-section">

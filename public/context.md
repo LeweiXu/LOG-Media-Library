@@ -275,8 +275,9 @@ Backend scripts:
 
 - `backend/scripts/demo_script.py` refreshes `demo_user` from `lingwei` for demo
   data. It preserves demo login credentials, resets demo settings to
-  `schemas.DEFAULT_UI`/`backup_freq="never"`, and copies entries plus Explore
-  cache rows from the source account.
+  `schemas.DEFAULT_UI`/`backup_freq="never"`/`last_backup_at=None`, and copies
+  entries plus Explore cache rows from the source account. The demo script does
+  not copy the source user's settings.
 
 ### Data Models
 
@@ -507,7 +508,7 @@ Routes live in `frontend/app.jsx`:
   lists, and manage/multi-select mode.
 - Manage mode replaces the old separate Manage page.
 - Table formatting is sensitive. Preserve:
-  - Standard vs fixed-title table modes.
+  - Fixed-title table mode is the default; Fluid Table is the opt-out mode.
   - Title-column sizing rules.
   - `library-table` and `is-fixed-title` class behavior.
   - `SortTh` active state and sort indicator behavior.
@@ -563,6 +564,9 @@ Preferences are centralized in `frontend/preferences.jsx` and mirrored by
 
 Current `DEFAULT_UI` shape:
 
+- `display`
+  - `theme`
+  - `accent`
 - `rating_step`
 - `mediums`
   - `visible`
@@ -588,9 +592,45 @@ Current `DEFAULT_UI` shape:
   - `by`
   - `combine_all`
 
+Current default values:
+
+- `display.theme`: `dark`
+- `display.accent`: `blue`
+- `rating_step`: `1.0`
+- `mediums.visible`: `Film`, `TV Show`, `Anime`, `Book`, `Manga`,
+  `Light Novel`, `Web Novel`, `Comic`, `Game`, `Visual Novel`
+- `library.default_mode`: `view`
+- `library.default_sort`: `updated_at`
+- `library.entries_per_page`: `40`
+- `library.fix_title`: `true` (fixed table by default)
+- `library.quick_actions`: `false`
+- `library.columns.view`: `medium`, `year`, `progress`, `status`, `rating`,
+  `updated`, `completed`
+- `library.columns.manage`: `status`, `medium`, `rating`, `progress`,
+  `updated`, `custom_list`
+- `dashboard.current_rows`: `5`
+- `dashboard.planned_rows`: `5`
+- `dashboard.completed_rows`: `20`
+- `dashboard.split`: `60`
+- `dashboard.columns.current`: `medium`, `progress`, `status`, `rating`
+- `dashboard.columns.planned`: `medium`, `status`
+- `dashboard.columns.completed`: `medium`, `progress`, `completed`, `status`,
+  `rating`
+- `statistics.consumed_range`: `12`
+- `statistics.added_range`: `5`
+- `statistics.sections`: all enabled
+- `explore.default_medium`: `null`
+- `explore.personalize`: `true`
+- `explore.hide_in_library`: `true`
+- `explore.by`: `all`
+- `explore.combine_all`: `true`
+
 Important behavior:
 
 - The backend always returns a default-merged UI doc.
+- Theme/accent live in `ui.display`; `localStorage.theme`/`localStorage.accent`
+  are only a client-side cache so the app can paint immediately before settings
+  finish loading.
 - Frontend settings load uses retry/backoff so a cold backend does not look like
   a preference reset.
 - Failed settings loads do not clear the current document.

@@ -206,6 +206,10 @@ _VALID_EXPLORE_BY = {"all", "genre", "medium", "origin"}
 # Canonical defaults for the single UI-preferences document. The frontend reads
 # a complete document (defaults deep-merged with the user's stored overrides).
 DEFAULT_UI: dict[str, Any] = {
+    "display": {
+        "theme": "dark",
+        "accent": "blue",
+    },
     # Granularity for rating entry/editing across the app: the up/down step size
     # and the grid ratings snap to on save. One of 0.1, 0.5, 1.0.
     "rating_step": 1.0,
@@ -222,7 +226,7 @@ DEFAULT_UI: dict[str, Any] = {
         "default_mode": "view",          # "view" | "manage"
         "default_sort": "updated_at",
         "entries_per_page": 40,
-        "fix_title": False,
+        "fix_title": True,
         "quick_actions": False,
         "columns": {
             "view":   ["medium", "year", "progress", "status", "rating", "updated", "completed"],
@@ -230,8 +234,8 @@ DEFAULT_UI: dict[str, Any] = {
         },
     },
     "dashboard": {
-        "current_rows": 10,
-        "planned_rows": 10,
+        "current_rows": 5,
+        "planned_rows": 5,
         "completed_rows": 20,
         "split": 60,                      # % width of the "currently consuming" column vs "planned"
         "columns": {

@@ -5,6 +5,10 @@ import { getSettings, updateSettings } from './api.jsx';
 // UI-preferences document. The backend always returns a default-merged doc, so
 // this is only a fallback before settings have loaded (or outside the provider).
 export const DEFAULT_UI = {
+  display: {
+    theme: 'dark',
+    accent: 'blue',
+  },
   // Granularity for rating entry/editing across the app: the up/down step size
   // and the grid ratings snap to on save. One of 0.1, 0.5, 1.0.
   rating_step: 1.0,
@@ -18,7 +22,7 @@ export const DEFAULT_UI = {
     default_mode: 'view',
     default_sort: 'updated_at',
     entries_per_page: 40,
-    fix_title: false,
+    fix_title: true,
     quick_actions: false,
     columns: {
       view:   ['medium', 'year', 'progress', 'status', 'rating', 'updated', 'completed'],
@@ -26,8 +30,8 @@ export const DEFAULT_UI = {
     },
   },
   dashboard: {
-    current_rows: 10,
-    planned_rows: 10,
+    current_rows: 5,
+    planned_rows: 5,
     completed_rows: 20,
     split: 60,   // % width of the "currently consuming" column vs "planned"
     columns: {

@@ -27,6 +27,8 @@ from config import get_settings
 from models import Entry, ExploreCache, User
 from schemas import DEFAULT_UI
 
+DEFAULT_BACKUP_FREQ = "never"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
@@ -69,7 +71,7 @@ def _sync_demo_user(session) -> None:
         session.add(dest)
         log.info("Created missing destination user '%s'.", DEST_USER)
 
-    dest.backup_freq = "never"
+    dest.backup_freq = DEFAULT_BACKUP_FREQ
     dest.last_backup_at = None
     dest.ui_preferences = deepcopy(DEFAULT_UI)
     log.info("Reset settings for '%s' to defaults.", DEST_USER)

@@ -7,8 +7,21 @@ import Explore     from './pages/Explore.jsx';
 import Console     from './pages/Console.jsx';
 import LandingPage from './pages/LandingPage.jsx';
 import AuthModal      from './pages/components/AuthModal.jsx';
-import { PreferencesProvider } from './preferences.jsx';
+import { DEFAULT_UI, PreferencesProvider, usePreferences } from './preferences.jsx';
 import { BASE } from './api.jsx';
+
+function DisplayPreferenceSync({ isAuthenticated, onThemeChange, onAccentChange }) {
+  const { prefs, loaded, error } = usePreferences();
+
+  useEffect(() => {
+    if (!isAuthenticated || !loaded || error) return;
+    const display = prefs.display || DEFAULT_UI.display;
+    onThemeChange(display.theme === 'light' ? 'light' : 'dark');
+    onAccentChange(display.accent || 'blue');
+  }, [prefs, loaded, error, isAuthenticated, onThemeChange, onAccentChange]);
+
+  return null;
+}
 
 export default function App() {
   const navigate = useNavigate();
@@ -91,6 +104,11 @@ export default function App() {
 
   return (
     <PreferencesProvider authKey={isAuthenticated ? username : ''}>
+    <DisplayPreferenceSync
+      isAuthenticated={isAuthenticated}
+      onThemeChange={setTheme}
+      onAccentChange={setAccent}
+    />
     <div className="app-shell">
       {/* ── Topbar ── */}
       <div className="topbar">
