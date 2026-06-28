@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   getEntries, updateEntry, deleteEntry,
-  getCustomLists, batchUpdateEntries, batchDeleteEntries,
+  getCustomLists, getEntryCounts, batchUpdateEntries, batchDeleteEntries,
 } from '../api.jsx';
 import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError, visibleMediumsFromPrefs } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
@@ -102,6 +102,7 @@ export default function Library({ initialFilters = {} }) {
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState('');
   const [counts,       setCounts]       = useState({});
+  const [loadingCounts,setLoadingCounts]= useState(true);
 
   // ── Custom lists ──
   const [lists,         setLists]         = useState([]);
@@ -179,6 +180,11 @@ export default function Library({ initialFilters = {} }) {
   const [order,        setOrder]        = useState(() => searchParams.get('order') === 'asc' ? 'asc' : DEFAULT_ORDER);
   const [page,         setPage]         = useState(() => positiveIntParam(searchParams.get('page'), DEFAULT_PAGE));
   const [limit,        setLimit]        = useState(() => validParam(Number(searchParams.get('limit')), PAGE_SIZE_OPTIONS, DEFAULT_LIMIT));
+  const pageCacheRef = useRef(new Map());
+  const pageInflightRef = useRef(new Map());
+  const cacheEpochRef = useRef(0);
+  const loadSeqRef = useRef(0);
+  const visibleMediumsKey = useMemo(() => visibleMediums.join('\u001f'), [visibleMediums]);
 
   const listParams = useCallback(() => (
     listFilter === UNLISTED_LIST ? { custom_list_empty: true }
@@ -186,45 +192,143 @@ export default function Library({ initialFilters = {} }) {
       : {}
   ), [listFilter]);
 
+  const invalidateLibraryCache = useCallback(() => {
+    cacheEpochRef.current += 1;
+    pageCacheRef.current.clear();
+    pageInflightRef.current.clear();
+  }, []);
+
+  const buildEntryParams = useCallback((overrides = {}) => {
+    const pageValue = overrides.page ?? page;
+    const limitValue = overrides.limit ?? limit;
+    return {
+      ...(search       && { title:  search }),
+      ...(statusFilter && { status: statusFilter }),
+      ...(mediumFilter && { medium: mediumFilter }),
+      ...(originFilter && { origin: originFilter }),
+      ...listParams(),
+      sort: overrides.sort ?? sort,
+      order: overrides.order ?? order,
+      limit: limitValue,
+      offset: overrides.offset ?? ((pageValue - 1) * limitValue),
+    };
+  }, [search, statusFilter, mediumFilter, originFilter, listParams, sort, order, page, limit]);
+
+  const pageCacheKey = useCallback((params) => JSON.stringify([
+    visibleMediumsKey,
+    params.title || '',
+    params.status || '',
+    params.medium || '',
+    params.origin || '',
+    params.custom_list || '',
+    params.custom_list_empty ? 1 : 0,
+    params.sort || DEFAULT_SORT,
+    params.order || DEFAULT_ORDER,
+    params.limit || DEFAULT_LIMIT,
+    params.offset || 0,
+  ]), [visibleMediumsKey]);
+
+  const fetchEntryPage = useCallback((params) => {
+    const key = pageCacheKey(params);
+    const cached = pageCacheRef.current.get(key);
+    if (cached) return Promise.resolve(cached);
+    const inflight = pageInflightRef.current.get(key);
+    if (inflight) return inflight;
+    const epoch = cacheEpochRef.current;
+
+    const request = getEntries(params)
+      .then(data => {
+        const items = extractItems(data);
+        const payload = {
+          items,
+          total: data?.total ?? items.length,
+          limit: data?.limit ?? params.limit,
+          offset: data?.offset ?? params.offset,
+        };
+        if (epoch === cacheEpochRef.current) {
+          pageCacheRef.current.set(key, payload);
+        }
+        return payload;
+      })
+      .finally(() => {
+        if (pageInflightRef.current.get(key) === request) {
+          pageInflightRef.current.delete(key);
+        }
+      });
+
+    pageInflightRef.current.set(key, request);
+    return request;
+  }, [pageCacheKey]);
+
+  const prefetchEntryPage = useCallback((params) => {
+    fetchEntryPage(params).catch(() => {});
+  }, [fetchEntryPage]);
+
+  const prefetchNearbyPages = useCallback((params, totalForQuery) => {
+    const nextOffset = (params.offset || 0) + (params.limit || DEFAULT_LIMIT);
+    if (nextOffset < totalForQuery) {
+      prefetchEntryPage({ ...params, offset: nextOffset });
+    }
+    if ((params.offset || 0) === 0) {
+      prefetchEntryPage({
+        ...params,
+        order: params.order === 'asc' ? 'desc' : 'asc',
+        offset: 0,
+      });
+    }
+  }, [prefetchEntryPage]);
+
   useEffect(() => {
     if (mediumFilter && !visibleMediumSet.has(mediumFilter)) setMediumFilter('');
   }, [mediumFilter, visibleMediumSet]);
 
-  const load = useCallback(async (silent = false) => {
+  useEffect(() => { invalidateLibraryCache(); }, [visibleMediumsKey, invalidateLibraryCache]);
+
+  const applyCountPayload = useCallback((data) => {
+    const next = { _total: data?.total || 0 };
+    Object.entries(data?.statuses || {}).forEach(([key, value]) => { next[key] = value; });
+    Object.entries(data?.mediums || {}).forEach(([key, value]) => { next[key] = value; });
+    Object.entries(data?.origins || {}).forEach(([key, value]) => { next[key] = value; });
+    setCounts(next);
+    setUnlistedCount(data?.unlisted || 0);
+  }, []);
+
+  const loadCounts = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoadingCounts(true);
+    try {
+      applyCountPayload(await getEntryCounts());
+    } catch { /* counts are best-effort */ }
+    finally { if (!silent) setLoadingCounts(false); }
+  }, [applyCountPayload]);
+
+  const load = useCallback(async (silent = false, { useCache = true } = {}) => {
+    const requestId = ++loadSeqRef.current;
+    const params = buildEntryParams();
+    const cached = useCache ? pageCacheRef.current.get(pageCacheKey(params)) : null;
+    if (cached) {
+      setEntries(cached.items);
+      setTotal(cached.total);
+      setLoading(false);
+      setError('');
+      prefetchNearbyPages(params, cached.total);
+      return;
+    }
+
     if (!silent) { setLoading(true); setError(''); }
     try {
-      const params = {
-        ...(search       && { title:  search }),
-        ...(statusFilter && { status: statusFilter }),
-        ...(mediumFilter && { medium: mediumFilter }),
-        ...(originFilter && { origin: originFilter }),
-        ...listParams(),
-        sort, order, limit, offset: (page - 1) * limit,
-      };
-
-      const data  = await getEntries(params);
-      const items = extractItems(data);
-      setEntries(items);
-      setTotal(data?.total ?? items.length);
-
-      // build sidebar counts on first unfiltered load (global, across all lists)
-      if (page === 1 && !search) {
-        const allData = await getEntries({ limit: 2000 }).catch(() => data);
-        const all     = extractItems(allData);
-        const c = { _total: all.length };
-        all.forEach(e => {
-          c[e.status] = (c[e.status] || 0) + 1;
-          if (e.medium) c[e.medium] = (c[e.medium] || 0) + 1;
-          if (ORIGINS.includes(e.origin)) c[e.origin] = (c[e.origin] || 0) + 1;
-        });
-        setCounts(c);
-      }
+      const data = await fetchEntryPage(params);
+      if (requestId !== loadSeqRef.current) return;
+      setEntries(data.items);
+      setTotal(data.total);
+      prefetchNearbyPages(params, data.total);
     } catch (e) {
+      if (requestId !== loadSeqRef.current) return;
       if (!silent) setError(e.message);
     } finally {
+      if (requestId !== loadSeqRef.current) return;
       if (!silent) setLoading(false);
     }
-  }, [search, statusFilter, mediumFilter, originFilter, listParams, sort, order, page, limit]);
+  }, [buildEntryParams, fetchEntryPage, pageCacheKey, prefetchNearbyPages]);
 
   const loadLists = useCallback(async ({ silent = false } = {}) => {
     // `silent` skips the loading flag so a background refresh (e.g. on tab
@@ -232,13 +336,9 @@ export default function Library({ initialFilters = {} }) {
     if (!silent) setLoadingLists(true);
     let nextLists = [];
     try {
-      const [listData, unlistedData] = await Promise.all([
-        getCustomLists(),
-        getEntries({ custom_list_empty: true, limit: 1 }),
-      ]);
+      const listData = await getCustomLists();
       nextLists = Array.isArray(listData) ? listData : [];
       setLists(nextLists);
-      setUnlistedCount(unlistedData?.total ?? extractItems(unlistedData).length);
     } catch { /* lists are best-effort */ }
     finally { if (!silent) setLoadingLists(false); }
     return nextLists;
@@ -250,7 +350,7 @@ export default function Library({ initialFilters = {} }) {
     setPage(1);
   }, [search, statusFilter, mediumFilter, originFilter, listFilter, sort, order, limit]);
 
-  useEffect(() => { loadLists(); }, [loadLists]);
+  useEffect(() => { loadLists(); loadCounts(); }, [loadLists, loadCounts, visibleMediumsKey]);
   useEffect(() => { if (settingsApplied) load(); }, [load, settingsApplied]);
 
   // If the active list no longer exists (deleted/emptied elsewhere), fall back to All.
@@ -276,13 +376,20 @@ export default function Library({ initialFilters = {} }) {
   }, [search, statusFilter, mediumFilter, originFilter, listFilter, sort, order, page, limit, setSearchParams]);
 
   function refreshView() {
+    invalidateLibraryCache();
     loadLists();
-    load(true);
+    loadCounts();
+    load(true, { useCache: false });
   }
 
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
   // Fully silent — updates entries and list counts in place without flashing.
-  useRevalidateOnFocus(() => { loadLists({ silent: true }); load(true); });
+  useRevalidateOnFocus(() => {
+    invalidateLibraryCache();
+    loadLists({ silent: true });
+    loadCounts({ silent: true });
+    load(true, { useCache: false });
+  });
 
   function handleSort(field) {
     if (sort === field) setOrder(o => o === 'asc' ? 'desc' : 'asc');
@@ -292,6 +399,8 @@ export default function Library({ initialFilters = {} }) {
   async function handleStatusChange(id, newStatus) {
     try {
       const updated = await updateEntry(id, { status: newStatus });
+      invalidateLibraryCache();
+      loadCounts({ silent: true });
       setEntries(prev => {
         const mapped = prev.map(e => e.id === id ? { ...e, ...updated } : e);
         return (statusFilter && newStatus !== statusFilter)
@@ -310,6 +419,7 @@ export default function Library({ initialFilters = {} }) {
     if (!isNaN(num)) {
       try {
         const updated = await updateEntry(id, { progress: num });
+        invalidateLibraryCache();
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
       } catch (e) { alert('Update failed: ' + e.message); }
     }
@@ -321,6 +431,7 @@ export default function Library({ initialFilters = {} }) {
     if (num !== null && (isNaN(num) || num < 0 || num > 10)) return;
     try {
       const updated = await updateEntry(id, { rating: num ?? undefined });
+      invalidateLibraryCache();
       setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
     } catch (e) { alert('Update failed: ' + e.message); }
   }
@@ -336,6 +447,9 @@ export default function Library({ initialFilters = {} }) {
   }
 
   const handleUpdated = (updated) => {
+    invalidateLibraryCache();
+    loadLists({ silent: true });
+    loadCounts({ silent: true });
     setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
   };
   const handleDeleted = (id) => {
@@ -363,7 +477,9 @@ export default function Library({ initialFilters = {} }) {
     setLastEntryWarning(null);
     try {
       const updated = await updateEntry(entry.id, { custom_list: nextValue || null });
+      invalidateLibraryCache();
       await loadLists();
+      loadCounts({ silent: true });
       const movedAway =
         listFilter === UNLISTED_LIST ? (nextValue || '') !== ''
           : listFilter ? nextValue !== listFilter
@@ -701,7 +817,7 @@ export default function Library({ initialFilters = {} }) {
               className={`sidebar-item${statusFilter === v ? ' active' : ''}`}
               onClick={() => setStatusFilter(v)}>
               {l}
-              {loading
+              {loading || loadingCounts
                 ? <SkeletonLine width={24} height={14} />
                 : <span className="sidebar-count">{v === '' ? (counts._total || 0) : (counts[v] || 0)}</span>}
             </div>
@@ -716,7 +832,7 @@ export default function Library({ initialFilters = {} }) {
           {visibleMediums.map(m => (
             <div key={m} className={`sidebar-item${mediumFilter === m ? ' active' : ''}`} onClick={() => setMediumFilter(m)}>
               {m}
-              {loading
+              {loading || loadingCounts
                 ? <SkeletonLine width={24} height={14} />
                 : <span className="sidebar-count">{counts[m] || 0}</span>}
             </div>
@@ -731,7 +847,7 @@ export default function Library({ initialFilters = {} }) {
           {ORIGINS.map(o => (
             <div key={o} className={`sidebar-item${originFilter === o ? ' active' : ''}`} onClick={() => setOriginFilter(o)}>
               {o}
-              {loading
+              {loading || loadingCounts
                 ? <SkeletonLine width={24} height={14} />
                 : <span className="sidebar-count">{counts[o] || 0}</span>}
             </div>
@@ -794,7 +910,7 @@ export default function Library({ initialFilters = {} }) {
           unlistedCount={unlistedCount}
           onChange={setListFilter}
           onNew={() => openListsModal('add')}
-          loading={loadingLists}
+          loading={loadingLists || loadingCounts}
         />
 
         {/* Mobile-only: batch edit lives inline above the table in manage mode. */}
@@ -854,7 +970,7 @@ export default function Library({ initialFilters = {} }) {
                     <td>
                       <div className="cover-cell">
                         <div className="cover-thumb">
-                          {entry.cover_url && <img src={entry.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />}
+                          {entry.cover_url && <img src={entry.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />}
                         </div>
                         <span className="media-name">{entry.title}</span>
                       </div>
@@ -905,7 +1021,7 @@ export default function Library({ initialFilters = {} }) {
                       <td>
                         <div className="cover-cell">
                           <div className="cover-thumb">
-                            {e.cover_url && <img src={e.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />}
+                            {e.cover_url && <img src={e.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />}
                           </div>
                           <span className="media-name">{e.title}</span>
                         </div>
@@ -1058,9 +1174,9 @@ export default function Library({ initialFilters = {} }) {
           initialTab={listModalTab}
           onClose={() => setShowLists(false)}
           existingLists={lists}
-          onCreated={(name) => { setShowLists(false); setListFilter(name); setPage(1); loadLists(); }}
-          onRenamed={(oldName, newName) => { if (listFilter === oldName) { setListFilter(newName); setPage(1); } loadLists(); }}
-          onDeleted={(name) => { if (listFilter === name) { setListFilter(ALL_LISTS); setPage(1); } loadLists(); }}
+          onCreated={(name) => { invalidateLibraryCache(); setShowLists(false); setListFilter(name); setPage(1); loadLists(); loadCounts({ silent: true }); }}
+          onRenamed={(oldName, newName) => { invalidateLibraryCache(); if (listFilter === oldName) { setListFilter(newName); setPage(1); } loadLists(); loadCounts({ silent: true }); }}
+          onDeleted={(name) => { invalidateLibraryCache(); if (listFilter === name) { setListFilter(ALL_LISTS); setPage(1); } loadLists(); loadCounts({ silent: true }); }}
         />
       )}
 

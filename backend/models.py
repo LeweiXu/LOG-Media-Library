@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any
-from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, JSON, func, ForeignKey, UniqueConstraint
+from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, JSON, func, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from db import Base
 
@@ -53,6 +53,18 @@ class Entry(Base):
     updated_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=_utcnow, nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     username: Mapped[str] = mapped_column(String(100), ForeignKey("users.username"), nullable=False, index=True)
+    __table_args__ = (
+        Index("ix_entries_user_updated_at", "username", "updated_at"),
+        Index("ix_entries_user_completed_at", "username", "completed_at"),
+        Index("ix_entries_user_title", "username", "title"),
+        Index("ix_entries_user_rating", "username", "rating"),
+        Index("ix_entries_user_year", "username", "year"),
+        Index("ix_entries_user_status", "username", "status"),
+        Index("ix_entries_user_medium", "username", "medium"),
+        Index("ix_entries_user_origin", "username", "origin"),
+        Index("ix_entries_user_custom_list", "username", "custom_list"),
+        Index("ix_entries_user_external_url", "username", "external_url"),
+    )
     def __repr__(self) -> str:
         return f"<Entry id={self.id} title={self.title!r} status={self.status!r} username={self.username!r}>"
 

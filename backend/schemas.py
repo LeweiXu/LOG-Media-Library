@@ -141,6 +141,13 @@ class EntryListResponse(BaseModel):
     limit: int
     offset: int
 
+class EntryCountsResponse(BaseModel):
+    total: int = 0
+    unlisted: int = 0
+    statuses: dict[str, int] = Field(default_factory=dict)
+    mediums: dict[str, int] = Field(default_factory=dict)
+    origins: dict[str, int] = Field(default_factory=dict)
+
 # --- Batch / Dedup Schemas ---
 
 class BatchUpdateRequest(BaseModel):

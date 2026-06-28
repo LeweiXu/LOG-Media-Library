@@ -7,7 +7,14 @@ from sqlalchemy import func, select, asc, desc, and_, or_, nullslast
 from sqlalchemy.orm import Session
 
 from models import Entry
-from schemas import EntryCreate, EntryUpdate, EntryListResponse, EntryRead, DuplicateCheckItem
+from schemas import (
+    EntryCreate,
+    EntryUpdate,
+    EntryListResponse,
+    EntryRead,
+    EntryCountsResponse,
+    DuplicateCheckItem,
+)
 
 # Columns that the frontend is allowed to sort by
 SORTABLE_COLUMNS: dict[str, object] = {
@@ -116,6 +123,53 @@ def get_entries(
 
 def get_entry_by_id(db: Session, entry_id: int) -> Optional[Entry]:
     return db.get(Entry, entry_id)
+
+
+def get_entry_counts(
+    db: Session,
+    username: str,
+    visible_mediums: set[str] | None = None,
+) -> EntryCountsResponse:
+    def scoped(q):
+        q = q.where(Entry.username == username)
+        return _apply_visible_mediums(q, visible_mediums)
+
+    total = db.execute(scoped(select(func.count(Entry.id)))).scalar_one()
+    unlisted = db.execute(
+        scoped(select(func.count(Entry.id))).where(
+            or_(Entry.custom_list.is_(None), Entry.custom_list == "")
+        )
+    ).scalar_one()
+
+    statuses = {
+        key: count
+        for key, count in db.execute(
+            scoped(select(Entry.status, func.count(Entry.id))).group_by(Entry.status)
+        ).all()
+        if key
+    }
+    mediums = {
+        key: count
+        for key, count in db.execute(
+            scoped(select(Entry.medium, func.count(Entry.id))).group_by(Entry.medium)
+        ).all()
+        if key
+    }
+    origins = {
+        key: count
+        for key, count in db.execute(
+            scoped(select(Entry.origin, func.count(Entry.id))).group_by(Entry.origin)
+        ).all()
+        if key
+    }
+
+    return EntryCountsResponse(
+        total=total,
+        unlisted=unlisted,
+        statuses=statuses,
+        mediums=mediums,
+        origins=origins,
+    )
 
 
 def get_custom_lists(db: Session, username: str, visible_mediums: set[str] | None = None) -> list[dict]:

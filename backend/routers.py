@@ -11,7 +11,7 @@ from schemas import (
     BackupStatus,
     BatchUpdateRequest, BatchDeleteRequest, BatchResult, DuplicateGroup,
     CustomListRead, CustomListRename,
-    EntryCreate, EntryListResponse, EntryRead, EntryUpdate,
+    EntryCountsResponse, EntryCreate, EntryListResponse, EntryRead, EntryUpdate,
     ImportConfirmRequest, ImportConfirmResponse, ImportPreviewResponse,
     SearchResult, StatsResponse,
     UserCreate, UserRead, Token, ChangePassword,
@@ -308,6 +308,17 @@ def list_entries(
         order=order,
         limit=limit,
         offset=offset,
+        visible_mediums=_visible_mediums(current_user),
+    )
+
+@router.get("/entries/counts", response_model=EntryCountsResponse)
+def entry_counts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return entry_service.get_entry_counts(
+        db,
+        current_user.username,
         visible_mediums=_visible_mediums(current_user),
     )
 
