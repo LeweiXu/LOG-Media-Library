@@ -27,6 +27,11 @@
 }
 
 /* ── Library page ───────────────────────────────────────────────────────── */
+.table-size-scope {
+  container-type: inline-size;
+  min-width: 0;
+}
+
 /* Fixed mode: column widths only apply here — guaranteed layout, no shift. */
 .library-table.media-table-fixed col.col-select { width: 48px; }
 .library-table.media-table-fixed col.col-medium { width: 86px; }
@@ -44,19 +49,21 @@
 .library-table.is-fixed-title.manage-entry-table th:nth-child(2),
 .library-table.is-fixed-title.manage-entry-table td:nth-child(2) {
   width: 100%;
-  /* Title absorbs the slack but doesn't hoard it: a smaller floor means the
-     other columns keep their room longer as the window narrows. */
-  min-width: 180px;
+  /* Title absorbs available slack first, then gives all of it back before the
+     compact data columns force horizontal overflow. */
+  min-width: 0;
+}
+.library-table.is-fixed-title {
+  --fixed-table-col-gap: clamp(0px, calc(6cqw - 55px), 96px);
 }
 .library-table.is-fixed-title:not(.manage-entry-table) th:not(:first-child),
 .library-table.is-fixed-title:not(.manage-entry-table) td:not(:first-child),
 .library-table.is-fixed-title.manage-entry-table th:not(:first-child):not(:nth-child(2)),
 .library-table.is-fixed-title.manage-entry-table td:not(:first-child):not(:nth-child(2)) {
   width: 1%;
-  /* Compact columns pack against the right edge, so the left padding is the
-     gap between them. Scale it purely with the viewport — proportional all the
-     way down to 0 on narrow windows, capped at 96px on wide displays. */
-  padding-left: min(3.2vw, 96px);
+  /* Extra spacing is based on this table's own container, not the viewport.
+     It reaches 0 before the title column has to collapse. */
+  padding-left: var(--fixed-table-col-gap);
   padding-right: 10px;
 }
 .library-table.is-fixed-title.manage-entry-table th.col-select,
@@ -77,6 +84,10 @@
 .library-table.is-fixed-title .action-cell {
   min-width: 140px;
 }
+.library-table.is-fixed-title .cover-cell,
+.media-table.dash-fixed-title .cover-cell {
+  min-width: 0;
+}
 
 /* Dashboard tables: same fixed-title logic as the Library
    table — Title absorbs the slack, the rest stay compact and packed right with
@@ -87,16 +98,22 @@
   width: 100%;
   min-width: 0;
 }
+.media-table.dash-fixed-title {
+  --fixed-table-col-gap: clamp(0px, calc(9cqw - 54px), 72px);
+}
 .media-table.dash-fixed-title th:not(:first-child),
 .media-table.dash-fixed-title td:not(:first-child) {
   width: 1%;
   white-space: nowrap;
-  padding-left: min(3.2vw, 72px);
+  padding-left: var(--fixed-table-col-gap);
   padding-right: 8px;
+}
+.media-table.dash-fixed-title.dash-table-completed {
+  --fixed-table-col-gap: clamp(0px, calc(6cqw - 55px), 96px);
 }
 .media-table.dash-fixed-title.dash-table-completed th:not(:first-child),
 .media-table.dash-fixed-title.dash-table-completed td:not(:first-child) {
-  padding-left: min(3.2vw, 96px);
+  padding-left: var(--fixed-table-col-gap);
 }
 .media-table .col-dim { color: var(--dim); }
 .media-table th.sortable.is-active { color: var(--accent); }

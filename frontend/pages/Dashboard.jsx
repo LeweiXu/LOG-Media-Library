@@ -412,7 +412,7 @@ export default function DashboardAlt({ onFilterChange }) {
               style={{ '--dash-current-fr': `${split}fr`, '--dash-planned-fr': `${100 - split}fr` }}>
 
             {/* Current */}
-            <div>
+            <div className="table-size-scope">
                 <div className="section-header">Current</div>
                 {current.length === 0
                 ? <div className="dash-empty">No active entries.</div>
@@ -428,7 +428,7 @@ export default function DashboardAlt({ onFilterChange }) {
             </div>
 
             {/* Planned */}
-            <div>
+            <div className="table-size-scope">
                 <div className="section-header">Planned</div>
                 {planned.length === 0
                 ? <div className="dash-empty">No planned entries.</div>
@@ -445,7 +445,7 @@ export default function DashboardAlt({ onFilterChange }) {
 
             </div>
 
-            <div>
+            <div className="table-size-scope">
       <div className="section-header">Recently Completed</div>
       {recent.length === 0
       ? <div className="dash-empty dash-empty-flush">No completed entries yet.</div>

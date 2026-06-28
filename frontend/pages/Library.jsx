@@ -938,7 +938,7 @@ export default function Library({ initialFilters = {} }) {
         )}
 
         {!error && !loading && entries.length > 0 && isManage && (
-          <div>
+          <div className="table-size-scope">
             <table className={`media-table library-table manage-entry-table${fixedTableClass}`} data-mobile-show="status">
               <thead>
                 <tr>
@@ -1004,7 +1004,7 @@ export default function Library({ initialFilters = {} }) {
         )}
 
         {!error && !loading && entries.length > 0 && !isManage && (
-          <div>
+          <div className="table-size-scope">
             <table className={`media-table library-table${fixedTableClass}`} data-mobile-show={mobileShow}>
               <thead>
                 <tr>
