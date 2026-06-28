@@ -148,6 +148,14 @@ async def _discover_jikan(client: httpx.AsyncClient, medium: str, page: int = 1)
     try:
         r = await _jikan_get(client, endpoint, params)
         r.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # Let a real outage (502/503/504) propagate so Explore can surface the
+        # "MyAnimeList/Jikan API is down" message; rate-limits / 4xx stay
+        # graceful (return empty so a fallback provider can fill in).
+        if exc.response.status_code >= 500:
+            raise
+        logger.warning("Jikan top error: %s", exc)
+        return []
     except Exception as exc:
         logger.warning("Jikan top error: %s", exc)
         return []

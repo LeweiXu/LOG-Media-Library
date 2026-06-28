@@ -666,16 +666,6 @@ input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
   justify-content: center;
 }
 
-/* Inline error under the Reroll button when a single-medium reroll fails —
- * kept local to the sidebar control rather than the page-wide error block, so
- * the rest of the grid (every other medium) stays visible. */
-.explore-reroll-error {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--red);
-  text-align: center;
-}
-
 .quickadd-head-right { display: flex; align-items: center; gap: 12px; }
 .quickadd-inline {
   width: 100%;

@@ -1,35 +1,27 @@
 """
-Explore service — surfaces new media and biases ranking toward whichever
-dimension the user picked in Settings (``explore_by``).
+Explore service — recommends new media per medium and decides the ordering of
+the aggregate "All" view.
 
-Pipeline
-────────
-1.  Build a *consumption profile* by counting how often each genre / origin /
-    medium appears in the user's library. Counts only — no rating math.
-2.  Pick the dimension to bias on from ``explore_by``:
-      - "genre"  → bias toward titles whose genres overlap with the user's
-                   most-consumed genres
-      - "medium" → bias toward titles in the user's most-consumed mediums
-      - "origin" → bias toward titles in the user's most-consumed origins
-      - "all"    → small mixed bias from all three
-3.  Fan out to discovery endpoints across providers in parallel; each one
-    returns recently-popular / trending picks. Mediums are chosen either
-    explicitly via the request, or by descending consumption when "all".
-4.  Drop titles already in the user's library (always — the toggle was
-    retired in favour of an always-on filter).
-5.  Rank by ``popularity + bias`` with seeded jitter so "Refresh" actually
-    reshuffles the result instead of returning the same order.
-6.  Tag each item with up to two ``matches`` — items the candidate shares
-    with the user's most-consumed genres / origins / mediums. Used by the
-    UI for a *subtle* "matches: action, japanese" hint.
+Model
+─────
+- Recommendations are **per medium**. Each medium has its own cached row in the
+  ``explore_cache`` table, its own reroll, and its own failed-reroll state.
+- A **reroll** (``reroll_medium``) is the only thing that hits providers: it
+  fans out to that medium's discovery endpoints, drops library titles, and ranks
+  by ``popularity + genre/origin bias + seeded jitter``. On failure it keeps the
+  previous cached items and records a provider-specific message
+  (``reroll_failed`` / ``reroll_error``).
+- A plain **read** (``read_medium``) returns the cached row and its failed state;
+  it never hits providers.
+- The **"All" view** (``read_all``) is a pure aggregate: it concatenates every
+  medium's cached set and orders it deterministically by the full bias
+  (genre + origin + medium-consumption), so the user's most-consumed mediums
+  float up and the order is stable across reloads until something is rerolled.
+- Personalisation only *orders* results; ``personalize=False`` makes ordering
+  neutral (popularity only).
 
-Caching
-───────
-Results are cached per ``(username, medium)`` in the ``explore_cache`` table.
-Only the Reroll button on the Explore page invalidates a cache row (via
-``refresh=True``) — every other request reads from cache, then applies live
-library/source filters so settings changes do not create new cache rows or
-force provider re-scans.
+Each item is tagged with up to a few ``matches`` — overlaps with the user's
+most-consumed genres / origins / mediums — used by the UI for a subtle hint.
 
 Discovery providers live inline below — they hit known popular/trending
 endpoints rather than reusing the title-search code paths.
@@ -37,7 +29,6 @@ endpoints rather than reusing the title-search code paths.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import random
@@ -48,7 +39,6 @@ import httpx
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from constants import VALID_MEDIUMS
 from models import Entry, ExploreCache
 from schemas import ExploreItem, ExploreResponse, AffinitySnapshot
 from services.search_providers.utils import TIMEOUT
@@ -67,9 +57,18 @@ from services.search_providers.vndb import _discover_vndb
 logger = logging.getLogger(__name__)
 
 
-VALID_EXPLORE_BY = {"all", "genre", "medium", "origin"}
 _MIN_RECOMMENDATIONS_PER_MEDIUM = 30
 _MAX_DISCOVERY_PAGES_PER_PROVIDER = 10
+
+# Display names for the discovery sources, used to build provider-specific
+# reroll error messages (mirrors the frontend SOURCE_LABEL map).
+_SOURCE_LABEL: dict[str, str] = {
+    "tmdb": "TMDB", "imdb": "IMDb", "jikan": "MyAnimeList", "anilist": "AniList",
+    "novelupdates": "NovelUpdates", "comicvine": "ComicVine",
+    "google_books": "Google Books", "goodreads": "Goodreads", "rawg": "RAWG",
+    "igdb": "IGDB", "vndb": "VNDB",
+}
+_JIKAN_DOWN_MSG = "The MyAnimeList/Jikan API is down. Try again later."
 
 
 # ── Consumption profile ───────────────────────────────────────────────────────
@@ -257,7 +256,69 @@ def _visible_count(items: list[ExploreItem], owned: set[tuple[str, str]]) -> int
     return sum(1 for item in _dedupe_best(items) if _item_key(item) not in owned)
 
 
-async def _discover_medium_with_fallback(
+def _down_message(source: str) -> str:
+    """The 'provider is down' message for a source."""
+    if source == "jikan":
+        return _JIKAN_DOWN_MSG
+    label = _SOURCE_LABEL.get(source, "The source")
+    return f"{label} is unavailable right now. Try again later."
+
+
+def _provider_error_message(fn, exc: Exception) -> str:
+    """A short, provider-specific message for a failed discovery call."""
+    source = _DISCOVER_SOURCE.get(fn, "")
+    label = _SOURCE_LABEL.get(source, "The source")
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if fn is _discover_jikan and code in (502, 503, 504):
+            return _JIKAN_DOWN_MSG
+        return f"{label} returned an error ({code}). Try again later."
+    return f"{label} is unavailable right now. Try again later."
+
+
+# Base API endpoints used for a quick liveness check when a medium's reroll comes
+# back empty — so "is the provider down?" is answered directly instead of guessed
+# from whatever the discovery call happened to raise. A response (even 4xx) means
+# up; a connection error / timeout / 5xx means down.
+_PROVIDER_BASE_URL: dict[str, str] = {
+    "jikan":     "https://api.jikan.moe/v4/",
+    "anilist":   "https://graphql.anilist.co",
+    "tmdb":      "https://api.themoviedb.org/3/",
+    "rawg":      "https://api.rawg.io/api/",
+    "igdb":      "https://api.igdb.com/v4/",
+    "vndb":      "https://api.vndb.org/kana",
+    "comicvine": "https://comicvine.gamespot.com/api/",
+    "goodreads": "https://www.goodreads.com/",
+    "novelupdates":  "https://www.novelupdates.com/",
+    "google_books":  "https://www.googleapis.com/books/v1/",
+}
+
+
+async def _provider_is_up(client: httpx.AsyncClient, url: str) -> bool:
+    """True if the base API responds at all (any status < 500)."""
+    try:
+        r = await client.get(url, timeout=8.0)
+        return r.status_code < 500
+    except Exception:
+        return False
+
+
+async def _provider_down_message(client: httpx.AsyncClient, medium: str) -> Optional[str]:
+    """If the medium's primary provider's base API is unreachable, return its
+    'down' message; otherwise None (so the caller keeps its own error)."""
+    providers = _providers_for(medium, None)
+    if not providers:
+        return None
+    source = _DISCOVER_SOURCE.get(providers[0])
+    base = _PROVIDER_BASE_URL.get(source or "")
+    if not base:
+        return None
+    if not await _provider_is_up(client, base):
+        return _down_message(source)
+    return None
+
+
+async def _discover_medium_capturing(
     client: httpx.AsyncClient,
     medium: str,
     top_genres: list[str],
@@ -265,14 +326,19 @@ async def _discover_medium_with_fallback(
     target_visible: int,
     owned: set[tuple[str, str]],
     allowed_sources: Optional[set[str]] = None,
-) -> list[ExploreItem]:
-    """Try providers by priority, querying more pages until enough items exist.
+) -> tuple[list[ExploreItem], Optional[str]]:
+    """Try providers by priority, returning ``(items, error)``.
 
     A fallback provider is only used when the higher-priority provider returns
     nothing useful or cannot fill the remaining visible recommendations after
-    several pages. ``allowed_sources`` restricts which providers are consulted.
+    several pages. ``error`` is a provider-specific message when nothing usable
+    came back (every provider errored or returned empty); ``None`` on success.
     """
     combined: list[ExploreItem] = []
+    # Keep the first provider's error: providers are tried in priority order, so
+    # the primary source's message (e.g. the Jikan-down message for Anime) wins
+    # over a fallback provider's later failure.
+    first_error: Optional[str] = None
     for fn in _providers_for(medium, allowed_sources):
         pages = list(range(1, _MAX_DISCOVERY_PAGES_PER_PROVIDER + 1))
         rng.shuffle(pages)
@@ -282,6 +348,8 @@ async def _discover_medium_with_fallback(
                 items = await _call_discover_provider(fn, client, medium, top_genres, page)
             except Exception as exc:
                 logger.warning("Explore provider exception for %s: %s", medium, exc)
+                if first_error is None:
+                    first_error = _provider_error_message(fn, exc)
                 break
 
             if not items:
@@ -290,32 +358,29 @@ async def _discover_medium_with_fallback(
             combined.extend(items)
 
             if _visible_count(combined, owned) >= target_visible:
-                return _dedupe_best(combined)
+                return _dedupe_best(combined), None
 
-    return _dedupe_best(combined)
+    deduped = _dedupe_best(combined)
+    if deduped:
+        return deduped, None
+    return [], first_error or "No new recommendations found. Try again later."
 
 
 # ── Bias scoring ──────────────────────────────────────────────────────────────
 #
-# Bias is intentionally gentle — just enough to nudge the user's preferred
-# dimension toward the top without burying random recommendations. The ranking
-# formula is:  popularity_centered + bias_amount + jitter.
+# Personalisation only *orders* results; it never changes which titles get
+# fetched. The ranking formula is:  popularity_centered + bias_amount + jitter.
 #
-# Popularity is centered around 5.0 so it spans ~[-5, +5]. Bias amounts are
-# capped at the constants below; jitter is wider than bias so a popular
-# unrelated title can still beat a low-popularity match. This keeps the page
-# feeling *exploratory* rather than predictable.
+# Popularity is centered around 5.0 so it spans ~[-5, +5]. Genre/origin bias is
+# intentionally gentle (it just nudges); jitter is wider than it so a popular
+# unrelated title can still beat a low-popularity match, keeping per-medium
+# rerolls feeling exploratory. The aggregate "All" view adds a much stronger
+# medium-consumption bias so the user's most-consumed mediums clearly lead the
+# mixed feed (larger than the jitter amplitude on purpose).
 
-_BIAS_CAP_GENRE  = 0.8
-_BIAS_CAP_MEDIUM = 0.5
-_BIAS_CAP_ORIGIN = 0.5
-# Used when explore_by == "all" — three smaller biases combined.
-_BIAS_CAP_ALL_GENRE  = 0.35
-_BIAS_CAP_ALL_MEDIUM = 0.25
-_BIAS_CAP_ALL_ORIGIN = 0.25
-# Combined "All" view: a strong medium bias so the user's most-consumed mediums
-# clearly lead the mixed feed (larger than the jitter amplitude on purpose).
-_BIAS_CAP_COMBINED_MEDIUM = 3.0
+_BIAS_CAP_GENRE  = 0.35
+_BIAS_CAP_ORIGIN = 0.25
+_BIAS_CAP_MEDIUM = 3.0    # only used by the aggregate "All" view
 _JITTER_AMPLITUDE    = 2.4
 _BIAS_MATCH_THRESHOLD = 0.25
 
@@ -336,89 +401,120 @@ def _scalar_bias(value: Optional[str], weights: dict[str, float], cap: float) ->
     return weights.get(value, 0.0) * cap
 
 
+# Every medium with a discovery provider. The aggregate "All" view reads the
+# cached row of each; a per-medium reroll fetches exactly one.
+ALL_MEDIUMS = [
+    "Anime", "Manga", "Film", "TV Show", "Game", "Book",
+    "Light Novel", "Web Novel", "Comic", "Visual Novel",
+]
+
+
+def _rank(
+    items:   list[ExploreItem],
+    profile: ConsumptionProfile,
+    *,
+    personalize: bool,
+    include_medium_axis: bool,
+    rng: Optional[random.Random],
+) -> list[ExploreItem]:
+    """Order ``items`` by popularity + genre/origin bias, plus an optional
+    medium-consumption bias (the aggregate "All" view) and optional jitter.
+
+    Pass ``rng`` for a fresh reroll (jittered, exploratory); pass ``None`` for
+    the deterministic "All" aggregate so its order is stable across reloads
+    until a medium is rerolled. Tags ``bias_matched`` for the "matches" hint.
+    """
+    biased = personalize and profile.sample_size > 0
+    gcap = _BIAS_CAP_GENRE  if biased else 0.0
+    ocap = _BIAS_CAP_ORIGIN if biased else 0.0
+    mcap = _BIAS_CAP_MEDIUM if (biased and include_medium_axis) else 0.0
+
+    genre_weights  = _normalised_weights(profile.genres)
+    origin_weights = _normalised_weights(profile.origins)
+    medium_weights = _normalised_weights(profile.mediums)
+
+    def bias_value(item: ExploreItem) -> float:
+        bias = 0.0
+        if gcap:
+            bias += _genre_bias(item, genre_weights, gcap)
+        if ocap:
+            bias += _scalar_bias(item.origin, origin_weights, ocap)
+        if mcap:
+            bias += _scalar_bias(item.medium, medium_weights, mcap)
+        return bias
+
+    for item in items:
+        item.bias_matched = bias_value(item) >= _BIAS_MATCH_THRESHOLD
+
+    def ranked_key(item: ExploreItem) -> float:
+        # Center popularity around 5/10 so a 7-rated item gets +2 and an
+        # unrated item is neutral.
+        pop = (item.external_rating or 5.0) - 5.0
+        jitter = rng.uniform(-_JITTER_AMPLITUDE, _JITTER_AMPLITUDE) if rng else 0.0
+        return pop + bias_value(item) + jitter
+
+    if rng:
+        # Pre-shuffle so providers don't bias the jittered sort toward whichever
+        # one returned its results first.
+        rng.shuffle(items)
+    items.sort(key=ranked_key, reverse=True)
+    return items
+
+
 # ── Per-(user, medium) result cache ───────────────────────────────────────────
 #
-# Stored in the ``explore_cache`` table. We only refresh on an explicit
-# request from the frontend (the Reroll button on the Explore page); every
-# other read returns the cached payload, after re-applying the live "in
-# library" filter so adding an entry on one tab doesn't leave it visible on
-# another.
+# Stored in the ``explore_cache`` table, one row per real medium (the "All"
+# view is computed live by aggregating these rows, never stored). Only a reroll
+# of that medium writes a row; a failed reroll keeps the previous items and
+# records ``reroll_failed``/``reroll_error``. Reads re-apply the live "in
+# library" / source filters so adding an entry on one tab doesn't leave it
+# visible on another.
 
-def _cache_key(medium: Optional[str], personalize: bool = True, combine_all: bool = True) -> str:
-    """Normalise a medium hint into the string used as the cache key.
-
-    Empty string is the cache key for the "All" sidebar tab. Neutral
-    (non-personalized) results are cached separately so changing ranking
-    preference never serves a stale ranking.
-    """
-    # The medium column is VARCHAR(50), so keep the key short.
-    base = medium or ""
-    if not personalize:
-        base += "|n"
-    # The combined-vs-legacy "All" views both key off the empty medium but
-    # return different sets, so flag the legacy one to cache them apart. Only
-    # matters for the combined view (a specific medium ignores combine_all).
-    if not medium and not combine_all:
-        base += "|L"
-    return base
-
-
-def _legacy_source_cache_key(
-    medium: Optional[str],
-    personalize: bool = True,
-    sources: Optional[set[str]] = None,
-    combine_all: bool = True,
-) -> Optional[str]:
-    """Old cache identity used before source filters became response-only."""
-    if not sources:
-        return None
-    digest = hashlib.sha1(",".join(sorted(sources)).encode()).hexdigest()[:10]
-    return _cache_key(medium, personalize, combine_all) + "|s" + digest
-
-
-def _read_cache(
-    db: Session,
-    username: str,
-    medium: Optional[str],
-    personalize: bool = True,
-    sources: Optional[set[str]] = None,
-    combine_all: bool = True,
-) -> Optional[list[ExploreItem]]:
-    keys = [_cache_key(medium, personalize, combine_all)]
-    legacy_key = _legacy_source_cache_key(medium, personalize, sources, combine_all)
-    if legacy_key:
-        keys.append(legacy_key)
-    for key in keys:
-        row = db.execute(
-            select(ExploreCache.items_json).where(
-                ExploreCache.username == username,
-                ExploreCache.medium == key,
-            )
-        ).first()
-        if not row:
-            continue
-        try:
-            raw = json.loads(row[0])
-            return [ExploreItem(**d) for d in raw]
-        except Exception as exc:
-            logger.warning("Discarding malformed explore cache row: %s", exc)
-            return None
-    return None
-
-
-def _write_cache(db: Session, username: str, medium: Optional[str], items: list[ExploreItem], personalize: bool = True, combine_all: bool = True) -> None:
-    payload = json.dumps([i.model_dump() for i in items])
-    key = _cache_key(medium, personalize, combine_all)
-    existing = db.execute(
+def _read_row(db: Session, username: str, medium: str) -> Optional[ExploreCache]:
+    return db.execute(
         select(ExploreCache).where(
             ExploreCache.username == username,
-            ExploreCache.medium   == key,
+            ExploreCache.medium   == medium,
         )
     ).scalar_one_or_none()
-    if existing is None:
-        db.add(ExploreCache(username=username, medium=key, items_json=payload))
+
+
+def _parse_items(items_json: str) -> list[ExploreItem]:
+    try:
+        return [ExploreItem(**d) for d in json.loads(items_json)]
+    except Exception as exc:
+        logger.warning("Discarding malformed explore cache row: %s", exc)
+        return []
+
+
+def _write_success(db: Session, username: str, medium: str, items: list[ExploreItem]) -> None:
+    """Store a fresh ranked set and clear any failed state."""
+    payload = json.dumps([i.model_dump() for i in items])
+    row = _read_row(db, username, medium)
+    if row is None:
+        db.add(ExploreCache(
+            username=username, medium=medium, items_json=payload,
+            reroll_failed=False, reroll_error=None,
+        ))
     else:
-        existing.items_json = payload
+        row.items_json   = payload
+        row.reroll_failed = False
+        row.reroll_error  = None
+    db.commit()
+
+
+def _mark_failed(db: Session, username: str, medium: str, error: str) -> None:
+    """Flag the last reroll as failed WITHOUT touching the cached items, so the
+    previous recommendations stay available for ``clear_failed``/restore."""
+    row = _read_row(db, username, medium)
+    if row is None:
+        db.add(ExploreCache(
+            username=username, medium=medium, items_json="[]",
+            reroll_failed=True, reroll_error=error,
+        ))
+    else:
+        row.reroll_failed = True
+        row.reroll_error  = error
     db.commit()
 
 
@@ -430,170 +526,123 @@ def _owned_entry_keys(db: Session, username: str) -> set[tuple[str, str]]:
     return {(t, m or "") for t, m in existing}
 
 
-# ── Main entry point ──────────────────────────────────────────────────────────
+# ── Public entry points ───────────────────────────────────────────────────────
 
-async def explore_media(
+async def reroll_medium(
     db: Session,
     *,
     username:    str,
-    medium:      Optional[str] = None,
-    explore_by:  str           = "all",
-    personalize: bool          = True,
-    combine_all: bool          = True,
+    medium:      str,
     sources:     Optional[set[str]] = None,
-    limit:       int           = 40,
+    personalize: bool = True,
+    limit:       int  = 40,
     seed:        Optional[int] = None,
-    refresh:     bool          = False,
 ) -> ExploreResponse:
-    """Return ranked explore items + a snapshot of the user's top consumed
-    genres / origins / mediums.
-
-    Caching: results are cached per ``(username, medium)``. ``refresh=True``
-    forces a fresh fetch and overwrites the cache; otherwise a cache hit
-    short-circuits the upstream API calls entirely.
-    """
-
-    if explore_by not in VALID_EXPLORE_BY:
-        explore_by = "all"
-
+    """Fetch a fresh recommendation set for one medium (the only provider-hitting
+    path). On success, store it and clear failure. On failure, keep the previous
+    cached items and record a provider-specific error message."""
     profile = _get_profile(db, username)
-    target_limit = max(limit, _MIN_RECOMMENDATIONS_PER_MEDIUM)
     owned = _owned_entry_keys(db, username)
-
-    all_mediums = [
-        "Anime", "Manga", "Film", "TV Show", "Game", "Book",
-        "Light Novel", "Web Novel", "Comic", "Visual Novel",
-    ]
-
-    # Decide which mediums would be queried — computed up front (independent of
-    # a cache hit) so the response cap below accounts for the real medium count
-    # whether this call fetches fresh or serves the cache.
-    combined_view = not (medium and medium in VALID_MEDIUMS)
-    if not combined_view:
-        mediums_to_query = [medium]
-    elif combine_all:
-        # New default "All": the union of every medium so the left-sidebar
-        # filter has the full set to slice. Ordering (below) still prioritises
-        # the user's most-consumed mediums when personalized.
-        mediums_to_query = list(all_mediums)
-    else:
-        # Legacy "All": its own recommender over the user's top mediums;
-        # neutral mode uses the full default mix for an even spread.
-        if personalize and profile.mediums:
-            mediums_to_query = [m for m, _ in profile.mediums.most_common(3)]
-        else:
-            mediums_to_query = []
-        if not mediums_to_query:
-            mediums_to_query = list(all_mediums)
-
-    # Drop any medium with no provider. Source availability is response-only so
-    # changing settings can reuse the same cached recommendation pool.
-    mediums_to_query = [m for m in mediums_to_query if _providers_for(m, None)]
-
-    # Each queried medium independently targets `target_limit` items — the
-    # budget is never split across mediums (a prior version divided
-    # `target_limit` by the medium count, which starved every medium down to
-    # ~10 items in combined "All" mode). The response cap below scales with the
-    # medium count instead, so the combined "All" feed can surface hundreds of
-    # recommendations in total while a single-medium fetch still respects the
-    # caller's `limit`.
-    response_limit = target_limit * max(len(mediums_to_query), 1) if combined_view else limit
-
-    if not refresh:
-        cached = _read_cache(db, username, medium, personalize, sources, combine_all)
-        if cached is not None:
-            return _finalise(db, username, profile, cached, response_limit, personalize, sources)
-
+    target = max(limit, _MIN_RECOMMENDATIONS_PER_MEDIUM)
     rng = random.Random(seed) if seed is not None else random.Random()
 
-    # Neutral mode runs discovery without genre hints so nothing is steered
-    # toward the user's tastes.
-    top_genre_names = [] if not personalize else [g for g, _ in profile.genres.most_common(5)]
-
-    # Pre-compute weighted dicts used by the bias scorers.
-    genre_weights  = _normalised_weights(profile.genres)
-    medium_weights = _normalised_weights(profile.mediums)
-    origin_weights = _normalised_weights(profile.origins)
-
-    if not personalize:
-        # Neutral recommender: no genre/medium/origin bias at all.
-        gcap, mcap, ocap = 0.0, 0.0, 0.0
-    elif explore_by == "genre":
-        gcap, mcap, ocap = _BIAS_CAP_GENRE, 0.0, 0.0
-    elif explore_by == "medium":
-        gcap, mcap, ocap = 0.0, _BIAS_CAP_MEDIUM, 0.0
-    elif explore_by == "origin":
-        gcap, mcap, ocap = 0.0, 0.0, _BIAS_CAP_ORIGIN
-    else:  # "all"
-        gcap = _BIAS_CAP_ALL_GENRE
-        mcap = _BIAS_CAP_ALL_MEDIUM
-        ocap = _BIAS_CAP_ALL_ORIGIN
-
-    # In the combined "All" view, the result mixes every medium, so order it so
-    # the user's most-consumed mediums float to the top (req: prioritise by
-    # medium consumption) while everything still shows. This medium bias is
-    # strong enough to dominate the gentle jitter, grouping preferred mediums up
-    # top without fully sorting by medium.
-    if personalize and combined_view and combine_all:
-        mcap = max(mcap, _BIAS_CAP_COMBINED_MEDIUM)
+    top_genres = [] if not personalize else [g for g, _ in profile.genres.most_common(5)]
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        tasks = []
-        target_per_medium = target_limit
-        for med in mediums_to_query:
-            medium_rng = random.Random(rng.randint(0, 2**31 - 1))
-            tasks.append(
-                _discover_medium_with_fallback(
-                    client, med, top_genre_names, medium_rng, target_per_medium, owned, None
-                )
-            )
-        groups = await asyncio.gather(*tasks, return_exceptions=True)
+        items, error = await _discover_medium_capturing(
+            client, medium, top_genres, rng, target, owned, None,
+        )
+        # Empty result: confirm with a base-API liveness check so a genuinely
+        # down provider (timeout, connection drop, or 5xx that the provider
+        # swallowed) reports the precise "… is down" message rather than a
+        # vague "no recommendations" fallback.
+        down_msg = None
+        if not items:
+            down_msg = await _provider_down_message(client, medium)
 
+    if not items:
+        msg = down_msg or error or "No new recommendations found. Try again later."
+        _mark_failed(db, username, medium, msg)
+        previous = _read_row(db, username, medium)
+        prev_items = _parse_items(previous.items_json) if previous else []
+        return _finalise(
+            db, username, profile, prev_items, target, personalize, sources,
+            reroll_failed=True, reroll_error=msg,
+        )
+
+    ranked = _rank(items, profile, personalize=personalize, include_medium_axis=False, rng=rng)
+    # `matches`/`in_library` are re-applied live at read time, so strip them
+    # before caching to keep the row small and avoid stale "in library" tags.
+    to_cache = [i.model_copy(update={"matches": [], "in_library": False}) for i in ranked]
+    _write_success(db, username, medium, to_cache)
+    return _finalise(db, username, profile, ranked, target, personalize, sources)
+
+
+def read_medium(
+    db: Session,
+    *,
+    username:    str,
+    medium:      str,
+    sources:     Optional[set[str]] = None,
+    personalize: bool = True,
+    limit:       int  = 40,
+) -> ExploreResponse:
+    """Return one medium's cached recommendations plus its failed-reroll state.
+    Never hits providers — a missing row yields an empty, non-failed response."""
+    profile = _get_profile(db, username)
+    row = _read_row(db, username, medium)
+    items = _parse_items(row.items_json) if row else []
+    return _finalise(
+        db, username, profile, items, limit, personalize, sources,
+        reroll_failed=bool(row and row.reroll_failed),
+        reroll_error=row.reroll_error if row else None,
+    )
+
+
+def read_all(
+    db: Session,
+    *,
+    username:    str,
+    sources:     Optional[set[str]] = None,
+    personalize: bool = True,
+    limit:       int  = 40,
+) -> ExploreResponse:
+    """Aggregate every medium's cached set into the "All" view, ordered by the
+    full bias (genre + origin + medium-consumption), deterministically so the
+    order is stable across reloads. Never hits providers, never fails."""
+    profile = _get_profile(db, username)
     combined: list[ExploreItem] = []
-    for g in groups:
-        if isinstance(g, Exception):
-            logger.warning("Explore provider exception: %s", g)
-            continue
-        combined.extend(g)
+    for row in db.execute(
+        select(ExploreCache.items_json).where(ExploreCache.username == username)
+    ).all():
+        combined.extend(_parse_items(row[0]))
 
     items = _dedupe_best(combined)
+    ranked = _rank(items, profile, personalize=personalize, include_medium_axis=True, rng=None)
+    response_limit = max(limit, _MIN_RECOMMENDATIONS_PER_MEDIUM * 4)
+    return _finalise(db, username, profile, ranked, response_limit, personalize, sources)
 
-    has_data = profile.sample_size > 0
-    bias_active = has_data and (gcap or mcap or ocap)
 
-    def bias_value(item: ExploreItem) -> float:
-        bias = 0.0
-        if bias_active:
-            if gcap:
-                bias += _genre_bias(item, genre_weights, gcap)
-            if mcap:
-                bias += _scalar_bias(item.medium, medium_weights, mcap)
-            if ocap:
-                bias += _scalar_bias(item.origin, origin_weights, ocap)
-        return bias
-
-    for item in items:
-        item.bias_matched = bias_value(item) >= _BIAS_MATCH_THRESHOLD
-
-    def ranked_key(item: ExploreItem) -> float:
-        # Center popularity around 5/10 so a 7-rated item gets +2 and an
-        # unrated item is neutral.
-        pop = (item.external_rating or 5.0) - 5.0
-        bias = bias_value(item)
-        return pop + bias + rng.uniform(-_JITTER_AMPLITUDE, _JITTER_AMPLITUDE)
-
-    # Pre-shuffle so providers don't bias the jittered sort toward whichever
-    # one returned its results first.
-    rng.shuffle(items)
-    items.sort(key=ranked_key, reverse=True)
-
-    # Persist the freshly-ranked list. ``matches`` and ``in_library`` are
-    # re-applied at read time, so we strip them before caching to keep the
-    # row small and avoid serving stale "in library" tags.
-    to_cache = [i.model_copy(update={"matches": [], "in_library": False}) for i in items]
-    _write_cache(db, username, medium, to_cache, personalize, combine_all)
-
-    return _finalise(db, username, profile, items, response_limit, personalize, sources)
+def clear_failed(
+    db: Session,
+    *,
+    username:    str,
+    medium:      str,
+    sources:     Optional[set[str]] = None,
+    personalize: bool = True,
+    limit:       int  = 40,
+) -> ExploreResponse:
+    """Restore previous results: clear the failed flag and return the cached
+    items. Does not reroll."""
+    row = _read_row(db, username, medium)
+    if row is not None and row.reroll_failed:
+        row.reroll_failed = False
+        row.reroll_error  = None
+        db.commit()
+    return read_medium(
+        db, username=username, medium=medium, sources=sources,
+        personalize=personalize, limit=limit,
+    )
 
 
 def _finalise(
@@ -604,11 +653,13 @@ def _finalise(
     limit:       int,
     personalize: bool = True,
     sources:     Optional[set[str]] = None,
+    *,
+    reroll_failed: bool = False,
+    reroll_error:  Optional[str] = None,
 ) -> ExploreResponse:
     """Apply live source/library filters, tag matches, and trim to ``limit``.
 
-    Used both for cache hits and freshly-fetched results so behaviour stays
-    consistent.
+    Used by every read path so behaviour stays consistent.
     """
     owned = _owned_entry_keys(db, username)
     source_filter = sources or set()
@@ -622,7 +673,9 @@ def _finalise(
         i.matches = profile.matches(i) if i.bias_matched else []
 
     return ExploreResponse(
-        items        = filtered[:limit],
-        affinity     = profile.snapshot(),
-        personalised = personalize and profile.sample_size > 0,
+        items         = filtered[:limit],
+        affinity      = profile.snapshot(),
+        personalised  = personalize and profile.sample_size > 0,
+        reroll_failed = reroll_failed,
+        reroll_error  = reroll_error,
     )

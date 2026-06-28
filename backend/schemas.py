@@ -203,8 +203,6 @@ _VALID_DEFAULT_SORT = {
     "title", "medium", "origin", "year", "status", "rating",
     "created_at", "updated_at", "completed_at",
 }
-_VALID_EXPLORE_BY = {"all", "genre", "medium", "origin"}
-
 # Canonical defaults for the single UI-preferences document. The frontend reads
 # a complete document (defaults deep-merged with the user's stored overrides).
 DEFAULT_UI: dict[str, Any] = {
@@ -270,15 +268,11 @@ DEFAULT_UI: dict[str, Any] = {
     },
     "explore": {
         "default_medium": None,
+        # Personalisation only orders results now: per-medium views are biased
+        # by genre/origin; the aggregate "All" view adds a medium-consumption
+        # bias so the user's most-consumed mediums float up. Off = neutral.
         "personalize": True,
         "hide_in_library": True,
-        "by": "all",                     # "all" | "genre" | "medium" | "origin"
-        # When True (default) the "All" view is the union of every medium's
-        # recommendations, mixed together, and the left-sidebar medium acts as a
-        # pure filter over that one set. When False it falls back to the legacy
-        # behaviour where "All" is its own recommender over the user's top
-        # mediums and each medium is a separate fetch.
-        "combine_all": True,
     },
 }
 
@@ -426,6 +420,9 @@ class ExploreResponse(BaseModel):
     affinity: AffinitySnapshot
     # 'true' iff personalisation was applied to ranking
     personalised: bool
+    # Per-medium reroll outcome (always cleared for the aggregate "All" view).
+    reroll_failed: bool = False
+    reroll_error:  Optional[str] = None
 
 # --- Stats Schemas ---
 class MediumCount(BaseModel):

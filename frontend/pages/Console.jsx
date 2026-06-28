@@ -31,11 +31,6 @@ const LIBRARY_SORT_FIELDS = [
   { key: 'completed_at', label: 'Completed' },
 ];
 const LIBRARY_PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
-const EXPLORE_BY_OPTIONS = [
-  { key: 'all', label: 'All' }, { key: 'genre', label: 'Genre' },
-  { key: 'medium', label: 'Medium' }, { key: 'origin', label: 'Origin' },
-];
-
 // Column catalogues (key → display label) per table/mode. View and Manage share
 // a single canonical ordering so the chips line up across both rows.
 const LIBRARY_VIEW_COLS = [
@@ -866,22 +861,14 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               onChange={v => saveUi({ explore: { default_medium: v || null } })}
               maxVisible={visibleMediums.length + 1} ariaLabel="Default medium" />
           </Row>
-          <Row title="Explore by">
-            <RowSelect value={exp.by}
-              options={EXPLORE_BY_OPTIONS.map(o => ({ value: o.key, label: o.label }))}
-              onChange={v => saveUi({ explore: { by: v } })} ariaLabel="Explore by" />
-          </Row>
           <Row title="Recommendations" stack>
             <div className="settings-chip-row">
               <ChipToggle label="Personalize" on={exp.personalize !== false}
                 onClick={() => saveUi({ explore: { personalize: !(exp.personalize !== false) } })}
-                title="Bias recommendations toward your consumption profile" />
+                title="Order recommendations by your consumption profile (genres/origins per medium; most-consumed mediums lead the All view)" />
               <ChipToggle label="Hide owned" on={exp.hide_in_library !== false}
                 onClick={() => saveUi({ explore: { hide_in_library: !(exp.hide_in_library !== false) } })}
                 title="Hide titles already in your library" />
-              <ChipToggle label="Combine all mediums" on={exp.combine_all !== false}
-                onClick={() => saveUi({ explore: { combine_all: !(exp.combine_all !== false) } })}
-                title="'All' mixes every medium's recommendations into one feed and the sidebar just filters it. Turn off for the legacy per-medium recommenders." />
             </div>
           </Row>
         </Section>

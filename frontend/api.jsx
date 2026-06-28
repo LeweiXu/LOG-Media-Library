@@ -382,9 +382,10 @@ export const runBackup       = () => req('/backup/run', { method: 'POST' });
 
 // ── Explore ───────────────────────────────────────────────────────────────────
 
-// Bias dimension and "hide owned" are server-side preferences read from the
-// user's settings — they are NOT passed as query params from the page.
-// `refresh: true` bypasses the per-medium cache on the server.
+// "Personalize" is a server-side preference read from the user's settings — it
+// is NOT passed as a query param from the page. Empty `medium` returns the
+// aggregate "All" view; a medium with `refresh: true` rerolls just that medium
+// (the only path that hits providers). Plain reads serve the cache.
 export const getExplore = ({ medium, limit, seed, refresh, sources } = {}) => {
   const params = { medium, limit, seed };
   if (refresh) params.refresh = 'true';
@@ -397,4 +398,13 @@ export const getExplore = ({ medium, limit, seed, refresh, sources } = {}) => {
     ),
   ).toString();
   return req(`/explore${qs ? '?' + qs : ''}`);
+};
+
+// Clear a medium's failed-reroll state and return its previous cached set
+// (the "display previous results" action). Does not reroll.
+export const restoreExplore = (medium, sources) => {
+  const params = { medium };
+  if (Array.isArray(sources) && sources.length) params.sources = sources.join(',');
+  const qs = new URLSearchParams(params).toString();
+  return req(`/explore/restore?${qs}`, { method: 'POST' });
 };

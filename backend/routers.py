@@ -30,7 +30,9 @@ from services.stats_service import get_stats
 from services.export_service import export_entries_csv
 from services.import_service import preview_import, confirm_import, auto_import_rows
 from services.import_mal_service import import_mal_rows, confirm_mal_import
-from services.explore_service import explore_media
+from services.explore_service import (
+    reroll_medium, read_medium, read_all, clear_failed, ALL_MEDIUMS,
+)
 from services.backup_service import run_backup_for_user
 from services.email_service import SMTPNotConfigured
 from services.cover_cache_service import (
@@ -485,30 +487,57 @@ async def imdb_detail(
 
 # ── Explore endpoint ──────────────────────────────────────────────────────────
 
+def _explore_personalize(current_user: User) -> bool:
+    explore_cfg = deep_merge_ui(current_user.ui_preferences)["explore"]
+    return explore_cfg.get("personalize", True) is not False
+
+
 @router.get("/explore", response_model=ExploreResponse)
 async def explore(
-    medium:  str  = Query("", description="Optional medium filter"),
+    medium:  str  = Query("", description="Medium filter; empty = aggregate 'All' view"),
     limit:   int  = Query(40, ge=1, le=200),
-    seed:    int  = Query(0,  ge=0, description="Shuffle seed; only consulted on a fresh fetch"),
-    refresh: bool = Query(False, description="Bypass and overwrite the per-medium cache"),
+    seed:    int  = Query(0,  ge=0, description="Shuffle seed; only consulted on a reroll"),
+    refresh: bool = Query(False, description="Reroll: fetch fresh recommendations for the medium"),
     sources: str  = Query("", description="Comma-separated available sources to draw from"),
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    ui = deep_merge_ui(current_user.ui_preferences)
-    explore_cfg = ui["explore"]
     source_set = {s for s in (sources or "").split(",") if s} or None
-    return await explore_media(
-        db,
-        username=current_user.username,
-        medium=medium or None,
-        explore_by=explore_cfg.get("by") or "all",
-        personalize=explore_cfg.get("personalize", True) is not False,
-        combine_all=explore_cfg.get("combine_all", True) is not False,
-        sources=source_set,
-        limit=limit,
-        seed=seed or None,
-        refresh=refresh,
+    personalize = _explore_personalize(current_user)
+
+    # Empty medium = the aggregate "All" view (read-only, never rerolls).
+    if not medium:
+        return read_all(
+            db, username=current_user.username,
+            sources=source_set, personalize=personalize, limit=limit,
+        )
+    if medium not in ALL_MEDIUMS:
+        raise HTTPException(status_code=400, detail="Unknown medium")
+    if refresh:
+        return await reroll_medium(
+            db, username=current_user.username, medium=medium,
+            sources=source_set, personalize=personalize, limit=limit, seed=seed or None,
+        )
+    return read_medium(
+        db, username=current_user.username, medium=medium,
+        sources=source_set, personalize=personalize, limit=limit,
+    )
+
+
+@router.post("/explore/restore", response_model=ExploreResponse)
+def explore_restore(
+    medium:  str = Query(..., description="Medium whose previous results to restore"),
+    sources: str = Query("", description="Comma-separated available sources to draw from"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Clear a medium's failed-reroll state and return its previous cached set."""
+    if medium not in ALL_MEDIUMS:
+        raise HTTPException(status_code=400, detail="Unknown medium")
+    source_set = {s for s in (sources or "").split(",") if s} or None
+    return clear_failed(
+        db, username=current_user.username, medium=medium,
+        sources=source_set, personalize=_explore_personalize(current_user),
     )
 
 # ── Backup endpoints ──────────────────────────────────────────────────────────

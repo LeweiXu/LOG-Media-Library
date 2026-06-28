@@ -58,12 +58,17 @@ class Entry(Base):
 
 
 class ExploreCache(Base):
-    """Per-(user, medium) cache of the latest Explore page results.
+    """Per-(user, medium) cache of one medium's Explore recommendations.
 
-    `medium` is "" for the "All" sidebar tab. Items are stored as a JSON list
-    of ExploreItem dicts in their already-ranked order. The Refresh button on
-    the Explore page is the only way to invalidate a row — otherwise reads
-    return the cached payload (with library titles re-filtered live).
+    `medium` always holds a real medium name now (e.g. "Anime") — the "All"
+    view is computed live by aggregating these rows, never stored. Items are a
+    JSON list of ExploreItem dicts in their already-ranked order. Only a reroll
+    of that medium writes a row; ordinary reads return the cached payload (with
+    library titles re-filtered live).
+
+    `reroll_failed`/`reroll_error` track the last reroll outcome so a failed
+    reroll can keep the previous items visible and surface a provider-specific
+    message until the user rerolls again or restores the previous results.
     """
     __tablename__ = "explore_cache"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -73,6 +78,10 @@ class ExploreCache(Base):
     )
     medium:     Mapped[str] = mapped_column(String(50), nullable=False, server_default="")
     items_json: Mapped[str] = mapped_column(Text, nullable=False)
+    reroll_failed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false",
+    )
+    reroll_error:  Mapped[str | None] = mapped_column(Text, nullable=True)
     cached_at:  Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
         onupdate=_utcnow, nullable=False,
