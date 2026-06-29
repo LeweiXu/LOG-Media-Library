@@ -229,10 +229,10 @@ function Row({ title, desc, stack, children }) {
   );
 }
 
-function Slider({ value, min, max, step = 1, onChange, format }) {
+function Slider({ value, min, max, step = 1, onChange, format, disabled }) {
   return (
     <div className="set-slider">
-      <input type="range" min={min} max={max} step={step} value={value}
+      <input type="range" min={min} max={max} step={step} value={value} disabled={disabled}
         onChange={e => onChange(Number(e.target.value))} />
       <span className="set-slider-val">{format ? format(value) : value}</span>
     </div>
@@ -666,16 +666,10 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
 
         {/* ── Import / Export ── */}
         <p className="console-group-label">Import / Export</p>
-        <ToolCard title="Import — CSV" desc="import a Logarium CSV with duplicate resolution">
-          <div className="console-tool-body"><ImportPanel onImported={reloadLists} /></div>
-        </ToolCard>
-        <ToolCard title="Import — Auto-search" desc="upload a list of titles; metadata is fetched automatically">
-          <div className="console-tool-body"><ImportAutoPanel onImported={reloadLists} /></div>
-        </ToolCard>
-        <ToolCard title="Import — MAL XML" desc="import a MyAnimeList anime/manga export">
-          <div className="console-tool-body"><ImportMalPanel onImported={reloadLists} /></div>
-        </ToolCard>
-        <Section title="Import - Settings">
+        <Section title="Import" desc="bring CSVs, a MyAnimeList export, or saved settings into your library">
+          <ImportPanel onImported={reloadLists} />
+          <ImportAutoPanel onImported={reloadLists} />
+          <ImportMalPanel onImported={reloadLists} />
           <Row title="Import settings" desc="Restore a Logarium settings JSON file. Library entries are not changed.">
             <div className="settings-import-actions">
               <input ref={settingsFileRef} type="file" accept=".json,application/json"
@@ -766,15 +760,19 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               onChange={v => saveUi({ dashboard: { completed_rows: Number(v) } })} ariaLabel="Recently completed rows" />
           </Row>
           <Row title="Current / Planned split" desc="Auto-balances the two top tables so whitespace after the longest title is even. Turn on Manual split to set the widths yourself." stack>
-            <div className="settings-chip-row">
-              <ChipToggle label="Manual split" on={dashManualSplit}
-                onClick={() => saveUi({ dashboard: { manual_split: !dashManualSplit } })} />
+            <div className="dash-split-control">
+              <div className="settings-chip-row">
+                <ChipToggle label="Manual split" on={dashManualSplit}
+                  onClick={() => saveUi({ dashboard: { manual_split: !dashManualSplit } })} />
+              </div>
+              <div className={`set-slider-fade${dashManualSplit ? ' is-active' : ''}`}
+                aria-hidden={!dashManualSplit}>
+                <Slider value={dash.split ?? DEFAULT_UI.dashboard.split} min={20} max={80} step={5}
+                  disabled={!dashManualSplit}
+                  onChange={n => saveUi({ dashboard: { split: n } })}
+                  format={n => `${n}% / ${100 - n}%`} />
+              </div>
             </div>
-            {dashManualSplit && (
-              <Slider value={dash.split ?? DEFAULT_UI.dashboard.split} min={20} max={80} step={5}
-                onChange={n => saveUi({ dashboard: { split: n } })}
-                format={n => `${n}% / ${100 - n}%`} />
-            )}
           </Row>
           <Row title="Fluid tables" desc="Fixed is the default; enable fluid sizing per dashboard table." stack>
             <div className="settings-chip-row">

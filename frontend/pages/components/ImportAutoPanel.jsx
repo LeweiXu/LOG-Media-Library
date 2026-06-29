@@ -96,26 +96,26 @@ export default function ImportAutoPanel({ onImported }) {
     setInterrupted(false);
   }
 
-  return (
-    <div className="console-tool-body">
-      {/* ── Pick stage ── */}
-      {stage === 'pick' && (
-        <div className="import-stage-center">
-          <p className="import-lead">
-            Upload a CSV with a <strong>title</strong> column. All other columns are optional.
-          </p>
-          <p className="mal-import-sub">
-            For each row, the app will search external sources to automatically fill in
-            cover art, year, origin, and other metadata. This uses the same CSV format
-            as a regular export — only the <code>title</code> field is required.
-          </p>
+  // Pick stage mirrors the "Import settings" row; later stages render full width.
+  if (stage === 'pick') {
+    return (
+      <div className="set-row">
+        <div className="set-row-label">
+          <span className="l-title">Import via auto-search</span>
+          <span className="l-desc">Upload a CSV with a title column; cover art, year, and other metadata are fetched automatically.</span>
+        </div>
+        <div className="set-row-control">
           <input ref={fileRef} className="hidden-file-input" type="file" accept=".csv" onChange={handleFile} />
           <button className="btn" onClick={() => fileRef.current.click()}>
-            Choose File
+            Choose CSV File
           </button>
         </div>
-      )}
+      </div>
+    );
+  }
 
+  return (
+    <div className="import-inline-body">
       {/* ── Confirm stage ── */}
       {stage === 'confirm' && (
         <div className="import-stage-center">

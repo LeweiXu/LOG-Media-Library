@@ -146,22 +146,26 @@ export default function ImportPanel({ onImported }) {
     && previewData.to_import.length === 0
     && previewData.conflicts.every((_, i) => (resolutions[i] ?? 'keep_db') === 'keep_db');
 
-  return (
-    <div className="console-tool-body">
-      <div className="import-body">
-        {/* ── Pick stage ── */}
-        {stage === 'pick' && (
-          <div className="import-center">
-            <p className="import-lead">Select a CSV file exported from this app.</p>
-            <p className="import-sub">
-              Each entry is checked for duplicates before importing. Exact duplicates are
-              skipped automatically; partial matches let you choose which version to keep.
-            </p>
-            <input ref={fileRef} type="file" accept=".csv" className="hidden-file" onChange={handleFile} />
-            <button className="btn" onClick={() => fileRef.current.click()}>Choose File</button>
-          </div>
-        )}
+  // Pick stage mirrors the "Import settings" row (label + desc + button); once a
+  // file is chosen the flow (preview / conflicts / done) renders full width below.
+  if (stage === 'pick') {
+    return (
+      <div className="set-row">
+        <div className="set-row-label">
+          <span className="l-title">Import CSV</span>
+          <span className="l-desc">Import a Logarium CSV. Duplicates are detected and conflicts are resolved before importing.</span>
+        </div>
+        <div className="set-row-control">
+          <input ref={fileRef} type="file" accept=".csv" className="hidden-file" onChange={handleFile} />
+          <button className="btn" onClick={() => fileRef.current.click()}>Choose CSV File</button>
+        </div>
+      </div>
+    );
+  }
 
+  return (
+    <div className="import-inline-body">
+      <div className="import-body">
         {/* ── Loading / importing stages ── */}
         {stage === 'loading' && (
           <div className="import-center import-status"><span className="loading-dots">Analysing file</span></div>

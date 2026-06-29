@@ -188,6 +188,17 @@
   gap: 0 24px;
   align-items: start;
 }
+/* Desktop: once the main column gets too narrow to hold both top tables side by
+   side (they'd otherwise spill under the right sidebar), stack Planned beneath
+   Current. Driven by the .main-content query container, so it reacts to the real
+   space available, not a viewport guess. The <=900px mobile rule handles phones. */
+@container (max-width: 760px) {
+  .dash-pair,
+  .dash-pair-skeleton {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px 0;
+  }
+}
 .dashboard-activity-title { margin-top: 18px; }
 
 /* ── Inline status select ────────────────────────────────────────────────── */

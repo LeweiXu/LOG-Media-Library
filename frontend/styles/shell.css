@@ -232,6 +232,10 @@
   overflow: auto;
   padding: 20px 24px;
   background: var(--bg);
+  /* Query container so the dashboard's side-by-side tables can stack based on
+     the real width available here, not a guessed viewport breakpoint (the
+     sidebars eat a fixed chunk, so viewport width alone is misleading). */
+  container-type: inline-size;
 }
 
 /* ── Right sidebar ───────────────────────────────────────────────────────── */

@@ -158,6 +158,7 @@ def _csv_to_typed(row: dict) -> dict:
         "progress":        _int(row.get("progress")),
         "total":           _int(row.get("total")),
         "created_at":      _dt(row.get("created_at")),
+        "updated_at":      _dt(row.get("updated_at")),
         "completed_at":    _dt(row.get("completed_at")),
         "external_url":    _str(row.get("external_url")),
         "genres":          _str(row.get("genres")),
@@ -314,6 +315,11 @@ def confirm_import(
         )
         if typed.get("created_at") is not None:
             entry_data["created_at"] = typed["created_at"]
+        # Preserve the CSV's updated_at on insert. INSERT doesn't fire the
+        # column's onupdate hook, so the explicit value sticks; only when the
+        # CSV omits it does the server_default stamp "now".
+        if typed.get("updated_at") is not None:
+            entry_data["updated_at"] = typed["updated_at"]
         db.add(Entry(**entry_data))
         created += 1
 
@@ -348,6 +354,11 @@ def confirm_import(
         entry.genres          = typed.get("genres")
         entry.external_rating = typed.get("external_rating")
         entry.custom_list     = typed.get("custom_list")
+        # Preserve the CSV's updated_at. Setting it explicitly puts the column in
+        # the UPDATE's SET clause, which suppresses the onupdate "now" stamp; if
+        # the CSV omits it, we leave the column alone and onupdate stamps "now".
+        if typed.get("updated_at") is not None:
+            entry.updated_at = typed["updated_at"]
         updated += 1
 
     db.commit()
@@ -357,8 +368,8 @@ def confirm_import(
 def import_csv_for_user(db: Session, csv_content: str, username: str) -> dict:
     """
     Import entries from a CSV exported by this app (all DB columns).
-    The `id` and `updated_at` columns are ignored. A valid CSV `created_at`
-    value is preserved; otherwise the database assigns the current timestamp.
+    The `id` column is ignored. Valid CSV `created_at` / `updated_at` values are
+    preserved; otherwise the database assigns the current timestamp.
     Returns {"created": N, "skipped": N}.
     """
     def _int(val: str | None) -> Optional[int]:
@@ -426,6 +437,9 @@ def import_csv_for_user(db: Session, csv_content: str, username: str) -> dict:
         created_at = _dt(row.get("created_at"))
         if created_at is not None:
             entry_data["created_at"] = created_at
+        updated_at = _dt(row.get("updated_at"))
+        if updated_at is not None:
+            entry_data["updated_at"] = updated_at
         db.add(Entry(**entry_data))
         created += 1
 

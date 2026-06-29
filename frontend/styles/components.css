@@ -507,6 +507,17 @@ html.light .skeleton-pie::after {
 .settings-import-actions .settings-msg {
   margin-bottom: 0;
 }
+/* Multi-stage import flows (CSV / auto-search / MAL) render full width below
+   their pick row once a file is chosen — no modal padding, just row spacing. */
+.import-inline-body {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.import-inline-body .import-body {
+  flex: none;
+  overflow: visible;
+  padding: 0;
+}
 
 .settings-choice-grid {
   display: grid;
@@ -893,6 +904,25 @@ html.light .skeleton-pie::after {
   min-width: 96px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* Manual-split control: the toggle, with its slider stacked underneath. */
+.dash-split-control {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+}
+/* The slider is always present under the toggle but faded + inert until the
+   Manual split toggle is on, then it fades back in. */
+.set-slider-fade {
+  opacity: 0.3;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.set-slider-fade.is-active {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 @media (max-width: 640px) {

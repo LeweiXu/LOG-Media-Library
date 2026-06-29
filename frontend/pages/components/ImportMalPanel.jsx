@@ -211,27 +211,26 @@ export default function ImportMalPanel({ onImported }) {
     );
   }
 
-  return (
-    <div className="console-tool-body">
-      {/* ── Pick stage ── */}
-      {stage === 'pick' && (
-        <div className="import-stage-center">
-          <p className="import-lead">
-            Upload your MyAnimeList XML export file.
-          </p>
-          <p className="mal-import-sub">
-            Go to <strong>myanimelist.net → Profile → Export My List</strong> and
-            download the XML file for your Anime or Manga list. Metadata will be
-            fetched from Jikan (MAL API) for each entry. Entries that closely match
-            your existing library will be flagged for review.
-          </p>
+  // Pick stage mirrors the "Import settings" row; later stages render full width.
+  if (stage === 'pick') {
+    return (
+      <div className="set-row">
+        <div className="set-row-label">
+          <span className="l-title">Import MAL XML</span>
+          <span className="l-desc">Import a MyAnimeList anime/manga XML export; metadata is fetched from Jikan. Export yours at myanimelist.net → Profile → Export My List.</span>
+        </div>
+        <div className="set-row-control">
           <input ref={fileRef} className="hidden-file-input" type="file" accept=".xml" onChange={handleFile} />
           <button className="btn" onClick={() => fileRef.current.click()}>
             Choose XML File
           </button>
         </div>
-      )}
+      </div>
+    );
+  }
 
+  return (
+    <div className="import-inline-body">
       {/* ── Confirm stage ── */}
       {stage === 'confirm' && (
         <div className="import-stage-center">
