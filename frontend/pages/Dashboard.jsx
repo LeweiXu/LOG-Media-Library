@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { getEntries, getStats, updateEntry } from '../api.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass, onCoverError } from '../utils.jsx';
@@ -21,6 +21,59 @@ const DASH_COL_META = {
   status:    { label: 'Status',    cls: 'col-status' },
   rating:    { label: 'Rating',    cls: 'col-rating' },
 };
+
+// ── Adaptive split measurement ──────────────────────────────────────────────
+// The two top tables (Current / Planned) use a fixed-title layout: the title
+// column soaks up all the slack while the data columns stay packed at content
+// width. A long title in one table forces the user to hand-tune the split so
+// that table gets more room. Instead we measure how much width each table
+// actually needs and hand out the leftover slack evenly, so the gap after the
+// longest title ends up roughly the same on both sides.
+let _measureCanvas = null;
+function measureTextWidth(text, font) {
+  if (!_measureCanvas) _measureCanvas = document.createElement('canvas');
+  const ctx = _measureCanvas.getContext('2d');
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
+function fontOf(el) {
+  const cs = getComputedStyle(el);
+  return `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+}
+
+// Width (px) a single dashboard table needs to show its longest title with no
+// leftover slack: title-cell padding + cover + cover gap + longest title text +
+// the data columns at their content width (with the elastic inter-column gap
+// stripped out, since that gap *is* the slack we're balancing).
+function tableNeed(table) {
+  const names = table.querySelectorAll('.media-name');
+  const row = table.querySelector('tbody tr');
+  if (!names.length || !row) return null;
+
+  const font = fontOf(names[0]);
+  let maxText = 0;
+  names.forEach(n => { maxText = Math.max(maxText, measureTextWidth(n.textContent, font)); });
+
+  const cells = Array.from(row.children);
+  const titleCell = cells[0];
+  const dataCells = cells.slice(1);
+
+  const tcs = getComputedStyle(titleCell);
+  const titlePad = parseFloat(tcs.paddingLeft) + parseFloat(tcs.paddingRight);
+  const cover = table.querySelector('.cover-thumb');
+  const coverW = cover ? cover.offsetWidth : 28;
+  const coverCell = table.querySelector('.cover-cell');
+  const coverGap = coverCell ? (parseFloat(getComputedStyle(coverCell).gap) || 0) : 10;
+
+  let dataWidth = 0;
+  if (dataCells.length) {
+    const gap = parseFloat(getComputedStyle(dataCells[0]).paddingLeft) || 0;
+    dataCells.forEach(c => { dataWidth += c.offsetWidth; });
+    dataWidth -= gap * dataCells.length;
+  }
+
+  return titlePad + coverW + coverGap + maxText + dataWidth;
+}
 
 function CoverThumb({ url, title }) {
   return (
@@ -52,6 +105,10 @@ export default function DashboardAlt({ onFilterChange }) {
   const [drawer,          setDrawer]          = useState('');
   const [barsReady,       setBarsReady]       = useState(false);
   const barsRef = useRef(null);
+  // Adaptive Current/Planned split (% width of Current). null = not measured yet
+  // or manual mode; the render falls back to the saved split in that case.
+  const [adaptiveSplit,   setAdaptiveSplit]   = useState(null);
+  const pairRef = useRef(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(''); }
@@ -174,7 +231,12 @@ export default function DashboardAlt({ onFilterChange }) {
 
   const s       = stats || {};
   const maxBar  = monthBarsData.length ? Math.max(...monthBarsData.map(m => m.count), 1) : 1;
-  const split   = Math.min(85, Math.max(15, dash.split ?? DEFAULT_UI.dashboard.split ?? 60));
+  const manualSplit = dash.manual_split ?? DEFAULT_UI.dashboard.manual_split;
+  const baseSplit   = dash.split ?? DEFAULT_UI.dashboard.split ?? 60;
+  // Default: use the measured adaptive split. Manual mode (or before the first
+  // measurement) falls back to the saved slider value.
+  const split   = Math.min(85, Math.max(15,
+    (!manualSplit && adaptiveSplit != null) ? adaptiveSplit : baseSplit));
 
   // ── Shared table rendering: every dashboard table supports the same column
   // catalogue; visibility is driven by the saved per-table column preference. ──
@@ -182,6 +244,44 @@ export default function DashboardAlt({ onFilterChange }) {
   const dashCols = table => (dash.columns?.[table] || DEFAULT_UI.dashboard.columns[table]).filter(c => DASH_COL_META[c]);
   const dashFixed = table => dash.fixed_tables?.[table] ?? DEFAULT_UI.dashboard.fixed_tables[table];
   const dashTableClass = table => `media-table dash-table-${table}${dashFixed(table) ? ' dash-fixed-title' : ''}`;
+
+  // Measure the two top tables and hand the leftover container slack out evenly,
+  // so the whitespace after each table's longest title comes out about equal.
+  const measureSplit = useCallback(() => {
+    const pair = pairRef.current;
+    if (!pair) return;
+    const tables = pair.querySelectorAll('table.media-table');
+    if (tables.length < 2) { setAdaptiveSplit(null); return; }   // an empty table — no pairing
+    const needCur  = tableNeed(tables[0]);
+    const needPlan = tableNeed(tables[1]);
+    if (needCur == null || needPlan == null) { setAdaptiveSplit(null); return; }
+    const gapBetween = parseFloat(getComputedStyle(pair).columnGap) || 0;
+    const available = pair.clientWidth - gapBetween;
+    if (available <= 0) return;
+    const slack = available - needCur - needPlan;
+    const curWidth = needCur + slack / 2;                         // equal slack on both sides
+    const pct = Math.round((curWidth / available) * 100);
+    setAdaptiveSplit(Math.min(80, Math.max(20, pct)));
+  }, []);
+
+  // Re-measure on data/column/size changes; a ResizeObserver covers window and
+  // sidebar resizes. Skipped entirely in manual mode (the saved split wins).
+  const colSig = JSON.stringify([dashCols('current'), dashCols('planned')]);
+  useLayoutEffect(() => {
+    if (manualSplit || loading) { setAdaptiveSplit(null); return undefined; }
+    measureSplit();
+    const pair = pairRef.current;
+    if (!pair || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => measureSplit());
+    ro.observe(pair);
+    return () => ro.disconnect();
+  }, [manualSplit, loading, current, planned, colSig, measureSplit]);
+
+  // Canvas text metrics depend on the web font; re-measure once it has loaded.
+  useEffect(() => {
+    if (manualSplit || loading || !document.fonts?.ready) return;
+    document.fonts.ready.then(() => measureSplit());
+  }, [manualSplit, loading, measureSplit]);
 
   function renderHead(table) {
     return (
@@ -408,6 +508,7 @@ export default function DashboardAlt({ onFilterChange }) {
           <>
           {/* Side-by-side layout for the two tables */}
             <div
+              ref={pairRef}
               className="dash-pair"
               style={{ '--dash-current-fr': `${split}fr`, '--dash-planned-fr': `${100 - split}fr` }}>
 

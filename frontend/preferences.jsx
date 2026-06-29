@@ -33,7 +33,11 @@ export const DEFAULT_UI = {
     current_rows: 5,
     planned_rows: 5,
     completed_rows: 20,
-    split: 60,   // % width of the "currently consuming" column vs "planned"
+    split: 60,   // % width of the "currently consuming" column vs "planned" (manual mode only)
+    // When false (default), the Current/Planned split is computed adaptively to
+    // even out the whitespace after the longest title in each table. When true,
+    // `split` above is used verbatim.
+    manual_split: false,
     fixed_tables: {
       current: true,
       planned: true,

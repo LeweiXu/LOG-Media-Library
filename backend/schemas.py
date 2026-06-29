@@ -244,7 +244,10 @@ DEFAULT_UI: dict[str, Any] = {
         "current_rows": 5,
         "planned_rows": 5,
         "completed_rows": 20,
-        "split": 60,                      # % width of the "currently consuming" column vs "planned"
+        "split": 60,                      # % width of the "currently consuming" column vs "planned" (manual mode only)
+        # When False (default) the split is computed adaptively on the client to
+        # even out whitespace after the longest title; when True, `split` is used.
+        "manual_split": False,
         "fixed_tables": {
             "current": True,
             "planned": True,

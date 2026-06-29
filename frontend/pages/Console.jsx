@@ -281,6 +281,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   const visibleMediums = ui.mediums?.visible ?? DEFAULT_UI.mediums.visible;
   const visibleMediumSet = new Set(visibleMediums);
   const dashFixed = table => dash.fixed_tables?.[table] ?? DEFAULT_UI.dashboard.fixed_tables[table];
+  const dashManualSplit = dash.manual_split ?? DEFAULT_UI.dashboard.manual_split;
 
   // ── Library tools state ──
   const extPresent = useExtensionPresent();
@@ -764,10 +765,16 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               options={ROW_OPTIONS.map(n => ({ value: n, label: String(n) }))}
               onChange={v => saveUi({ dashboard: { completed_rows: Number(v) } })} ariaLabel="Recently completed rows" />
           </Row>
-          <Row title="Current / Planned split" desc="Relative width of the two top tables." stack>
-            <Slider value={dash.split ?? DEFAULT_UI.dashboard.split} min={20} max={80} step={5}
-              onChange={n => saveUi({ dashboard: { split: n } })}
-              format={n => `${n}% / ${100 - n}%`} />
+          <Row title="Current / Planned split" desc="Auto-balances the two top tables so whitespace after the longest title is even. Turn on Manual split to set the widths yourself." stack>
+            <div className="settings-chip-row">
+              <ChipToggle label="Manual split" on={dashManualSplit}
+                onClick={() => saveUi({ dashboard: { manual_split: !dashManualSplit } })} />
+            </div>
+            {dashManualSplit && (
+              <Slider value={dash.split ?? DEFAULT_UI.dashboard.split} min={20} max={80} step={5}
+                onChange={n => saveUi({ dashboard: { split: n } })}
+                format={n => `${n}% / ${100 - n}%`} />
+            )}
           </Row>
           <Row title="Fluid tables" desc="Fixed is the default; enable fluid sizing per dashboard table." stack>
             <div className="settings-chip-row">
