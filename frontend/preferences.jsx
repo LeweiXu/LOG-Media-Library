@@ -49,9 +49,9 @@ export const DEFAULT_UI = {
       completed: true,
     },
     columns: {
-      current:   ['medium', 'progress', 'status', 'rating'],
+      current:   ['progress', 'status', 'rating'],
       planned:   ['medium', 'status'],
-      completed: ['medium', 'progress', 'completed', 'status', 'rating'],
+      completed: ['medium', 'completed', 'rating'],
     },
   },
   statistics: {

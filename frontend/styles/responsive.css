@@ -1,3 +1,15 @@
+/* ── Narrow desktop behaviour (>900px shell, constrained content) ─────────── */
+@media (min-width: 901px) {
+  /* Dashboard: stack Current/Planned when the desktop main column gets tight. */
+  @container (max-width: 1100px) {
+    .dash-pair,
+    .dash-pair-skeleton {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px 0;
+    }
+  }
+}
+
 @media (max-width: 900px) {
   /* App shell padding shrinks. */
   .topbar  { padding: 0 8px; gap: 0; }
@@ -125,11 +137,12 @@
   .cover-thumb { width: 24px; height: 34px; }
   .media-name { font-size: 12px; }
 
-  /* Dashboard: the side-by-side Current/Planned grid stacks. */
-  .dash-pair { grid-template-columns: minmax(0, 1fr) !important; gap: 14px !important; }
-  /* Skeleton dashboard grid stacks too (it's an inline style, so we override
-   * via this scoped helper class added on the wrapper). */
-  .dash-pair-skeleton { grid-template-columns: minmax(0, 1fr) !important; gap: 14px !important; }
+  /* Dashboard: stack Current/Planned inside the mobile shell too. */
+  .dash-pair,
+  .dash-pair-skeleton {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 14px !important;
+  }
 
   /* Stat boxes shrink on the right panel (when it's open as a drawer). */
   .stat-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -171,13 +184,10 @@
 
 /* ── Library: narrow-desktop sidebar collapse ────────────────────────────────
  * Above the ≤900px mobile breakpoint the Library's two fixed sidebars still
- * squeeze the (wide) table on smaller desktops. So at the same point the
- * Dashboard starts adapting — its dash-pair stacks when the main column drops to
- * ≤920px — collapse the Library's sidebars into openable drawers and give the
- * table the full width. 1434px ≈ that 920px main-column width once the sidebars
- * (210 + 256) and main padding (48) are added back: 920 + 210 + 256 + 48. Adjust
- * this number together with the Dashboard's `@container (max-width: 920px)` rule
- * in library-dashboard.css if you want the two pages to keep flipping together.
+ * squeeze the wide table on smaller desktops. Collapse those sidebars into
+ * openable drawers and give the table the full width. This is intentionally
+ * kept beside the Dashboard narrow-desktop rule above so the >900px layout
+ * behaviour lives in one file.
  * Scoped to .library-layout so only the Library page is affected; the ≤900px
  * block above still handles phones (drawers + column hiding). */
 @media (min-width: 901px) and (max-width: 1434px) {
