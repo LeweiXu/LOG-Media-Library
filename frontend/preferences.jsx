@@ -46,7 +46,7 @@ export const DEFAULT_UI = {
     fixed_tables: {
       current: true,
       planned: true,
-      completed: false,
+      completed: true,
     },
     columns: {
       current:   ['medium', 'progress', 'status', 'rating'],

@@ -868,7 +868,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               </div>
             </div>
           </Row>
-          <Row title="Fluid tables" desc="Fixed is the default; enable fluid sizing per dashboard table." stack>
+          <Row title="Fluid tables" desc="Enable fluid sizing per dashboard table." stack>
             <div className="settings-chip-row">
               <ChipToggle label="Current" on={!dashFixed('current')} onClick={() => toggleDashFluid('current')} />
               <ChipToggle label="Planned" on={!dashFixed('planned')} onClick={() => toggleDashFluid('planned')} />

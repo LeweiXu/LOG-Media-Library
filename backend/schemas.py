@@ -255,7 +255,7 @@ DEFAULT_UI: dict[str, Any] = {
         "fixed_tables": {
             "current": True,
             "planned": True,
-            "completed": False,
+            "completed": True,
         },
         "columns": {
             "current":   ["medium", "progress", "status", "rating"],
