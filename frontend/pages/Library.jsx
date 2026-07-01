@@ -4,7 +4,7 @@ import {
   getEntries, updateEntry, deleteEntry,
   getCustomLists, getEntryCounts, batchUpdateEntries, batchDeleteEntries,
 } from '../api.jsx';
-import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError, visibleMediumsFromPrefs } from '../utils.jsx';
+import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
@@ -40,10 +40,12 @@ const DEFAULT_ORDER = 'desc';
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 40;
 
-// Column registry shared by the view + manage tables. `sort` (when present) is
-// the entry field a column header sorts by; columns without it get a plain <th>.
-// Title is rendered separately and always pinned first; ordering of the rest is
-// driven by the saved `columns.{view,manage}` preference (set in Settings).
+// Column registry. `sort` (when present) is the entry field a column header
+// sorts by; columns without it get a plain <th>. Title is rendered separately
+// and always pinned first. The Standard group renders first, then the Extra
+// group, then Quick Actions. Group membership, order, and which are shown all
+// come from the saved `columns.{standard,additional,shown}` prefs (set by
+// dragging in Settings; extra columns are also toggleable in the sidebar).
 const LIB_COLS = {
   medium:      { label: 'Medium',      cls: 'col-medium',      sort: 'medium' },
   year:        { label: 'Year',        cls: 'col-year',        sort: 'year' },
@@ -136,9 +138,14 @@ export default function Library({ initialFilters = {} }) {
   const [lastEntryWarning, setLastEntryWarning] = useState(null);
 
   const [drawer, setDrawer] = useState('');
-  // View toggles + per-mode columns come from the saved UI preferences.
+  // View toggles + column selection are seeded from saved prefs, then mirrored
+  // locally so sidebar toggles feel instant (the save is fired in the background).
   const [showActions, setShowActions] = useState(false);
   const [fixTitle, setFixTitle] = useState(true);
+  // Which columns are currently shown. Mirrored locally so the sidebar's extra-
+  // column toggles feel instant; the save is fired in the background.
+  const [shownCols, setShownCols] = useState(() =>
+    libPrefs.columns?.shown ?? DEFAULT_UI.library.columns.shown);
   const toggleQuickActions = () => setShowActions(prev => {
     const next = !prev;
     updateUi({ library: { quick_actions: next } });
@@ -149,6 +156,17 @@ export default function Library({ initialFilters = {} }) {
     updateUi({ library: { fix_title: next } });
     return next;
   });
+  function toggleShownColumn(col) {
+    setShownCols(prev => {
+      const next = new Set(prev);
+      next.has(col) ? next.delete(col) : next.add(col);
+      // Keep a tidy order (standard group first, then extra) — membership is
+      // what actually drives rendering, but a stable order avoids churn.
+      const ordered = [...stdOrder, ...addOrder].filter(c => next.has(c));
+      updateUi({ library: { columns: { shown: ordered } } });
+      return ordered;
+    });
+  }
   // Apply saved preferences once they load (first time only); URL params win.
   const prefsSyncedRef = useRef(false);
   useEffect(() => {
@@ -156,6 +174,7 @@ export default function Library({ initialFilters = {} }) {
     prefsSyncedRef.current = true;
     setShowActions(!!libPrefs.quick_actions);
     setFixTitle(!!libPrefs.fix_title);
+    setShownCols(libPrefs.columns?.shown ?? DEFAULT_UI.library.columns.shown);
     if (!urlHadModeRef.current && (libPrefs.default_mode === 'view' || libPrefs.default_mode === 'manage')) {
       setMode(libPrefs.default_mode);
     }
@@ -168,9 +187,15 @@ export default function Library({ initialFilters = {} }) {
     setSettingsApplied(true);
   }, [prefsLoaded, libPrefs]);
 
-  // Ordered list of columns per mode (saved order, filtered to known columns).
-  const viewCols   = (libPrefs.columns?.view   || DEFAULT_UI.library.columns.view).filter(c => LIB_COLS[c]);
-  const manageCols = (libPrefs.columns?.manage || DEFAULT_UI.library.columns.manage).filter(c => LIB_COLS[c]);
+  // Active columns: shown standard columns first (in their saved order), then
+  // shown extra columns. Group membership + order come from Settings (read live);
+  // `shownCols` is mirrored locally so the sidebar's extra toggles feel instant.
+  // Multi-select shows the exact same columns — it only adds the select checkbox
+  // and swaps inline-edit cells for read-only ones.
+  const stdOrder = (libPrefs.columns?.standard   ?? DEFAULT_UI.library.columns.standard).filter(c => LIB_COLS[c]);
+  const addOrder = (libPrefs.columns?.additional ?? DEFAULT_UI.library.columns.additional).filter(c => LIB_COLS[c]);
+  const shownSet = new Set(shownCols);
+  const activeCols = [...new Set([...stdOrder, ...addOrder])].filter(c => shownSet.has(c));
 
   const [search,       setSearch]       = useState(() => searchParams.get('q') || (!hasUrlParams ? initialFilters.title : '') || '');
   const [statusFilter, setStatusFilter] = useState(() => validParam(searchParams.get('status'), STATUSES, !hasUrlParams ? initialFilters.status || '' : ''));
@@ -798,12 +823,15 @@ export default function Library({ initialFilters = {} }) {
     </>
   );
 
-  const skeletonHeaders = isManage
-    ? ['Sel', 'Title', 'Status', 'Medium', 'Rating', 'Progress', 'Updated', 'Custom List', ...(showActions ? ['Actions'] : [])]
-    : ['Title', 'Medium', 'Year', 'Progress', 'Status', 'Rating', 'Updated', 'Completed', ...(showActions ? ['Actions'] : [])];
+  const skeletonHeaders = [
+    ...(isManage ? ['Sel'] : []),
+    'Title',
+    ...activeCols.map(c => LIB_COLS[c].label),
+    ...(showActions ? ['Actions'] : []),
+  ];
 
   return (
-    <div className="layout-3col" data-drawer={drawer}>
+    <div className="layout-3col library-layout" data-drawer={drawer}>
       {drawer && <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />}
 
       {/* ── Left sidebar ── */}
@@ -939,7 +967,8 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && isManage && (
           <div className="table-size-scope">
-            <table className={`media-table library-table manage-entry-table${fixedTableClass}`} data-mobile-show="status">
+            <table className={`media-table library-table manage-entry-table${fixedTableClass}`} data-mobile-show="status"
+              style={tableGapVars(activeCols, { actions: showActions, select: true })}>
               <thead>
                 <tr>
                   <th className="col-select">
@@ -949,7 +978,7 @@ export default function Library({ initialFilters = {} }) {
                     </button>
                   </th>
                   <SortTh field="title">Title</SortTh>
-                  {manageCols.map(renderHead)}
+                  {activeCols.map(renderHead)}
                   {showActions && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
@@ -975,7 +1004,7 @@ export default function Library({ initialFilters = {} }) {
                         <span className="media-name">{entry.title}</span>
                       </div>
                     </td>
-                    {manageCols.map(c => renderManageCell(entry, c))}
+                    {activeCols.map(c => renderManageCell(entry, c))}
                     {showActions && (
                       <td className="action-cell" onClick={ev => ev.stopPropagation()}>
                         <div className="action-cell-inner">
@@ -1005,11 +1034,12 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && !isManage && (
           <div className="table-size-scope">
-            <table className={`media-table library-table${fixedTableClass}`} data-mobile-show={mobileShow}>
+            <table className={`media-table library-table${fixedTableClass}`} data-mobile-show={mobileShow}
+              style={tableGapVars(activeCols, { actions: showActions })}>
               <thead>
                 <tr>
                   <SortTh field="title">Title</SortTh>
-                  {viewCols.map(renderHead)}
+                  {activeCols.map(renderHead)}
                   {showActions && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
@@ -1026,7 +1056,7 @@ export default function Library({ initialFilters = {} }) {
                           <span className="media-name">{e.title}</span>
                         </div>
                       </td>
-                      {viewCols.map(c => renderViewCell(e, c))}
+                      {activeCols.map(c => renderViewCell(e, c))}
                       {showActions && (
                         <td className="action-cell" onClick={ev => ev.stopPropagation()}>
                           <div className="action-cell-inner">
@@ -1107,6 +1137,17 @@ export default function Library({ initialFilters = {} }) {
           <span className="source-box">{!fixTitle ? '[x]' : '[ ]'}</span>
           Fluid Table
         </button>
+
+        {addOrder.length > 0 && <p className="panel-title library-view-title">Extra Columns</p>}
+        {addOrder.map(col => (
+          <button key={col} type="button"
+            className={`source-chip library-view-chip${shownSet.has(col) ? ' is-on' : ''}`}
+            onClick={() => toggleShownColumn(col)}
+            title={`Show the ${LIB_COLS[col].label} column`}>
+            <span className="source-box">{shownSet.has(col) ? '[x]' : '[ ]'}</span>
+            {LIB_COLS[col].label}
+          </button>
+        ))}
 
         <div className="library-sidebar-section">
           <p className="panel-title">At a Glance</p>

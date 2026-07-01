@@ -48,6 +48,35 @@ export const STATUS_LABELS = {
 export const statusLabel   = (s) => STATUS_LABELS[s] ?? s;
 export const badgeClass    = (s) => `badge badge-${s}`;
 
+// ── Adaptive inter-column gap ────────────────────────────────────────────────
+// The fixed-title tables (Library + Dashboard) space their data columns with a
+// gap that grows as the table gets wider. How much room the data columns need
+// depends on how many are shown and how wide each is, so we feed those two facts
+// into CSS as `--col-count` / `--col-data` and let the clamp in
+// library-dashboard.css do the rest (see the knobs documented there).
+//
+// Approximate per-column footprint (px). Mirrors the fixed-title min-widths in
+// library-dashboard.css — keep roughly in sync if you change those. It only has
+// to be close: the CSS `--col-gap-*` knobs absorb any slack.
+export const TABLE_COL_WIDTH = {
+  medium: 92, year: 66, progress: 112, status: 132, rating: 84,
+  updated: 102, completed: 112, custom_list: 236,
+};
+export const TABLE_ACTION_WIDTH = 140;   // Quick-Actions column
+export const TABLE_SELECT_WIDTH = 34;    // multi-select checkbox column
+
+// Build the inline CSS vars a fixed-title table needs for its adaptive gaps.
+// `cols` are the data columns (excluding the pinned Title). `actions` adds the
+// Quick-Actions column (it takes a gap too); `select` adds the multi-select
+// checkbox column (it does NOT take a gap, but still eats width).
+export function tableGapVars(cols, { actions = false, select = false } = {}) {
+  const gapCount = cols.length + (actions ? 1 : 0);
+  let dataWidth = cols.reduce((sum, c) => sum + (TABLE_COL_WIDTH[c] ?? 90), 0);
+  if (actions) dataWidth += TABLE_ACTION_WIDTH;
+  if (select)  dataWidth += TABLE_SELECT_WIDTH;
+  return { '--col-count': Math.max(gapCount, 1), '--col-data': `${dataWidth}px` };
+}
+
 /**
  * Generic fallback cover, used when a cover image fails to load (e.g. the many
  * NovelUpdates covers that 404/403 behind Cloudflare and can't be hotlinked).

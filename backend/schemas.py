@@ -235,9 +235,13 @@ DEFAULT_UI: dict[str, Any] = {
         "entries_per_page": 40,
         "fix_title": True,
         "quick_actions": False,
+        # Library table columns: two ordered groups the user assigns by dragging.
+        # `standard` shows by default, `additional` is off by default; `shown` is
+        # which columns actually render (standard group first, then additional).
         "columns": {
-            "view":   ["medium", "year", "progress", "status", "rating", "updated", "completed"],
-            "manage": ["status", "medium", "rating", "progress", "updated", "custom_list"],
+            "standard":   ["medium", "status", "rating", "completed"],
+            "additional": ["year", "progress", "custom_list", "updated"],
+            "shown":      ["medium", "status", "rating", "completed"],
         },
     },
     "dashboard": {

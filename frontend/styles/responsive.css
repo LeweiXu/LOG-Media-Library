@@ -168,3 +168,36 @@
   .stats-pie-layout { flex-direction: column; align-items: stretch; }
   .stats-pie-layout .recharts-wrapper { align-self: center; }
 }
+
+/* ── Library: narrow-desktop sidebar collapse ────────────────────────────────
+ * Above the ≤900px mobile breakpoint the Library's two fixed sidebars still
+ * squeeze the (wide) table on smaller desktops. So at the same point the
+ * Dashboard starts adapting — its dash-pair stacks when the main column drops to
+ * ≤920px — collapse the Library's sidebars into openable drawers and give the
+ * table the full width. 1434px ≈ that 920px main-column width once the sidebars
+ * (210 + 256) and main padding (48) are added back: 920 + 210 + 256 + 48. Adjust
+ * this number together with the Dashboard's `@container (max-width: 920px)` rule
+ * in library-dashboard.css if you want the two pages to keep flipping together.
+ * Scoped to .library-layout so only the Library page is affected; the ≤900px
+ * block above still handles phones (drawers + column hiding). */
+@media (min-width: 901px) and (max-width: 1434px) {
+  .library-layout { grid-template-columns: minmax(0, 1fr) !important; }
+  .library-layout .sidebar-left,
+  .library-layout .sidebar-right {
+    position: fixed;
+    top: 40px;            /* below topbar */
+    bottom: 0;
+    width: 300px;
+    max-width: 84vw;
+    z-index: 95;
+    transition: transform 0.22s ease;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
+  }
+  .library-layout .sidebar-left  { left: 0;  transform: translateX(-100%); border-right: 1px solid var(--border); }
+  .library-layout .sidebar-right { right: 0; transform: translateX(100%);  border-left:  1px solid var(--border); }
+  .library-layout[data-drawer="left"]  .sidebar-left  { transform: translateX(0); }
+  .library-layout[data-drawer="right"] .sidebar-right { transform: translateX(0); }
+  .library-layout[data-drawer="left"]  .drawer-backdrop,
+  .library-layout[data-drawer="right"] .drawer-backdrop { display: block; }
+  .library-layout .drawer-toggle { display: inline-flex; align-items: center; }
+}

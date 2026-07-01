@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { getEntries, getStats, updateEntry } from '../api.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass, onCoverError } from '../utils.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass, onCoverError, tableGapVars } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
@@ -518,7 +518,8 @@ export default function DashboardAlt({ onFilterChange }) {
                 {current.length === 0
                 ? <div className="dash-empty">No active entries.</div>
                 : (
-                    <table className={dashTableClass('current')} data-mobile-show="progress">
+                    <table className={dashTableClass('current')} data-mobile-show="progress"
+                      style={tableGapVars(dashCols('current'))}>
                     <thead>{renderHead('current')}</thead>
                     <tbody>
                         {current.slice(0, dash.current_rows).map(e => renderRow(e, 'current', 'select'))}
@@ -534,7 +535,8 @@ export default function DashboardAlt({ onFilterChange }) {
                 {planned.length === 0
                 ? <div className="dash-empty">No planned entries.</div>
                 : (
-                    <table className={dashTableClass('planned')}>
+                    <table className={dashTableClass('planned')}
+                      style={tableGapVars(dashCols('planned'))}>
                     <thead>{renderHead('planned')}</thead>
                     <tbody>
                         {planned.slice(0, dash.planned_rows).map(e => renderRow(e, 'planned', 'select'))}
@@ -551,7 +553,8 @@ export default function DashboardAlt({ onFilterChange }) {
       {recent.length === 0
       ? <div className="dash-empty dash-empty-flush">No completed entries yet.</div>
       : (
-        <table className={dashTableClass('completed')} data-mobile-show="completed">
+        <table className={dashTableClass('completed')} data-mobile-show="completed"
+                style={tableGapVars(dashCols('completed'))}>
                 <thead>{renderHead('completed')}</thead>
                 <tbody>
                     {recent.slice(0, dash.completed_rows).map(e => renderRow(e, 'completed', 'badge'))}

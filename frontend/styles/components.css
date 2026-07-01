@@ -1141,6 +1141,27 @@ html.light .skeleton-pie::after {
 .col-chip.is-over { border-color: var(--accent); box-shadow: -2px 0 0 var(--accent); }
 .col-chip.is-over-after { border-color: var(--accent); box-shadow: 2px 0 0 var(--accent); }
 
+/* Two-zone column editor: Standard / Extra rows you drag chips between. */
+.col-zones { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.col-zone { display: flex; flex-direction: column; gap: 6px; }
+.col-zone-label {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+/* A drop target even when empty, so a zone can be cleared out / filled up.
+   Transparent so it blends with the section surface (not the black page bg);
+   the dashed border is what marks it as a drop area. */
+.col-zone-row {
+  min-height: 34px;
+  align-content: flex-start;
+  padding: 5px;
+  border: 1px dashed var(--border);
+  background: transparent;
+}
+.col-zone-empty { font-size: 11px; color: var(--dim); padding: 3px 4px; }
+
 @media (max-width: 720px) {
   .source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

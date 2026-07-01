@@ -31,17 +31,12 @@ const LIBRARY_SORT_FIELDS = [
   { key: 'completed_at', label: 'Completed' },
 ];
 const LIBRARY_PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
-// Column catalogues (key → display label) per table/mode. View and Manage share
-// a single canonical ordering so the chips line up across both rows.
-const LIBRARY_VIEW_COLS = [
-  ['medium', 'Medium'], ['year', 'Year'], ['progress', 'Progress'],
-  ['status', 'Status'], ['rating', 'Rating'], ['updated', 'Updated'],
-  ['completed', 'Completed'], ['custom_list', 'Custom List'],
-];
-const LIBRARY_MANAGE_COLS = [
-  ['medium', 'Medium'], ['year', 'Year'], ['progress', 'Progress'],
-  ['status', 'Status'], ['rating', 'Rating'], ['updated', 'Updated'],
-  ['completed', 'Completed'], ['custom_list', 'Custom List'],
+// Full library column catalogue (key → display label). The user assigns each to
+// the Standard or Extra group and orders them by dragging; this list is only the
+// label lookup + fallback order for any column not yet placed in either group.
+const LIBRARY_COLS = [
+  ['medium', 'Medium'], ['status', 'Status'], ['rating', 'Rating'], ['completed', 'Completed'],
+  ['year', 'Year'], ['progress', 'Progress'], ['custom_list', 'Custom List'], ['updated', 'Updated'],
 ];
 // Every dashboard table can pick from the same full catalogue (order mirrors
 // DASH_COL_ORDER in Dashboard.jsx).
@@ -178,6 +173,105 @@ function ColumnOrderEditor({ cols, selected, onChange }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Two-zone drag editor for the library columns. Every catalogue column is a
+// chip living in one of two rows — Standard or Extra — with an [x]/[ ] toggle
+// for whether it's shown. Drag a chip within a row to reorder, or across to
+// reassign its group; drop on the row's empty space to append. Fully controlled:
+// each change calls onChange({ standard, additional, shown }) with the full
+// group lists (order preserved even for hidden columns) plus the shown set.
+function TwoZoneColumnEditor({ cols, standard, additional, shown, onChange }) {
+  const labelOf = Object.fromEntries(cols);
+  const catalogKeys = cols.map(([key]) => key);
+  const valid = key => labelOf[key] !== undefined;
+
+  // Derive the two rows from props. Standard wins if a key somehow lands in both;
+  // any catalogue column not placed anywhere falls into Extra so it's reachable.
+  const std = standard.filter(valid);
+  const stdSet = new Set(std);
+  const placed = new Set([...std, ...additional.filter(valid)]);
+  const extra = [
+    ...additional.filter(key => valid(key) && !stdSet.has(key)),
+    ...catalogKeys.filter(key => !placed.has(key)),
+  ];
+  const shownSet = new Set(shown.filter(valid));
+
+  const [dragKey, setDragKey] = useState(null);
+  const [overKey, setOverKey] = useState(null);
+
+  function commit(nextStd, nextExtra, nextShown) {
+    const shownArr = [...nextStd, ...nextExtra].filter(key => nextShown.has(key));
+    onChange({ standard: nextStd, additional: nextExtra, shown: shownArr });
+  }
+
+  function toggle(key) {
+    const next = new Set(shownSet);
+    next.has(key) ? next.delete(key) : next.add(key);
+    commit(std, extra, next);
+  }
+
+  function move(targetZone, targetKey) {
+    if (!dragKey || dragKey === targetKey) { setDragKey(null); setOverKey(null); return; }
+    const s = std.filter(key => key !== dragKey);
+    const e = extra.filter(key => key !== dragKey);
+    const arr = targetZone === 'standard' ? s : e;
+    let idx;
+    if (targetKey == null) {
+      idx = arr.length;
+    } else {
+      const origArr = targetZone === 'standard' ? std : extra;
+      const movingDown = origArr.indexOf(dragKey) !== -1 && origArr.indexOf(dragKey) < origArr.indexOf(targetKey);
+      idx = arr.indexOf(targetKey);
+      if (idx < 0) idx = arr.length;
+      else if (movingDown) idx += 1;
+    }
+    arr.splice(idx, 0, dragKey);
+    commit(targetZone === 'standard' ? arr : s, targetZone === 'standard' ? e : arr, shownSet);
+    setDragKey(null); setOverKey(null);
+  }
+
+  const chip = (key, zone) => {
+    const on = shownSet.has(key);
+    const isOver = overKey === key;
+    const origArr = zone === 'standard' ? std : extra;
+    const dropAfter = isOver && dragKey && origArr.indexOf(dragKey) !== -1 && origArr.indexOf(dragKey) < origArr.indexOf(key);
+    return (
+      <button key={key} type="button" draggable
+        className={`source-chip col-chip${on ? ' is-on' : ''}${dragKey === key ? ' is-dragging' : ''}${isOver && !dropAfter ? ' is-over' : ''}${dropAfter ? ' is-over-after' : ''}`}
+        onDragStart={e => { setDragKey(key); e.dataTransfer.effectAllowed = 'move'; }}
+        onDragEnter={e => { e.preventDefault(); if (dragKey) setOverKey(key); }}
+        onDragOver={e => e.preventDefault()}
+        onDragEnd={() => { setDragKey(null); setOverKey(null); }}
+        onDrop={e => { e.preventDefault(); e.stopPropagation(); move(zone, key); }}
+        onClick={() => toggle(key)}
+        title="Drag to reorder or move between rows · click to show/hide">
+        <span className="col-chip-grip" aria-hidden="true">⠿</span>
+        <span className="source-box">{on ? '[x]' : '[ ]'}</span>
+        {labelOf[key]}
+      </button>
+    );
+  };
+
+  const zone = (label, zoneKey, keys) => (
+    <div className="col-zone">
+      <span className="col-zone-label">{label}</span>
+      <div className="settings-chip-row col-zone-row"
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); move(zoneKey, null); }}>
+        {keys.length === 0
+          ? <span className="col-zone-empty">Drag columns here</span>
+          : keys.map(key => chip(key, zoneKey))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="col-zones">
+      {zone('Standard', 'standard', std)}
+      {zone('Extra', 'extra', extra)}
     </div>
   );
 }
@@ -816,9 +910,9 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               options={LIBRARY_PAGE_SIZE_OPTIONS.map(s => ({ value: s, label: String(s) }))}
               onChange={v => saveUi({ library: { entries_per_page: Number(v) } })} ariaLabel="Entries per page" />
           </Row>
-          <Row title="Default mode" desc="View or Manage when the library opens.">
+          <Row title="Default mode" desc="Normal view or Multi-select when the library opens.">
             <RowSelect value={lib.default_mode}
-              options={[{ value: 'view', label: 'View' }, { value: 'manage', label: 'Manage' }]}
+              options={[{ value: 'view', label: 'View' }, { value: 'manage', label: 'Multi-select' }]}
               onChange={v => saveUi({ library: { default_mode: v } })} ariaLabel="Default library mode" />
           </Row>
           <Row title="Table behaviour" stack>
@@ -827,13 +921,15 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               <ChipToggle label="Quick Actions" on={!!lib.quick_actions} onClick={() => saveUi({ library: { quick_actions: !lib.quick_actions } })} />
             </div>
           </Row>
-          <Row title="View columns" desc="Drag to reorder · click to toggle." stack>
-            <ColumnOrderEditor cols={LIBRARY_VIEW_COLS} selected={lib.columns?.view ?? DEFAULT_UI.library.columns.view}
-              onChange={next => setColumns('library', 'view', next)} />
-          </Row>
-          <Row title="Manage columns" stack>
-            <ColumnOrderEditor cols={LIBRARY_MANAGE_COLS} selected={lib.columns?.manage ?? DEFAULT_UI.library.columns.manage}
-              onChange={next => setColumns('library', 'manage', next)} />
+          <Row title="Columns"
+            desc="Drag a column into Standard (shown by default) or Extra (opt-in, also toggleable from the library sidebar). Order within each row sets column order; click a chip to show/hide it."
+            stack>
+            <TwoZoneColumnEditor
+              cols={LIBRARY_COLS}
+              standard={lib.columns?.standard ?? DEFAULT_UI.library.columns.standard}
+              additional={lib.columns?.additional ?? DEFAULT_UI.library.columns.additional}
+              shown={lib.columns?.shown ?? DEFAULT_UI.library.columns.shown}
+              onChange={next => saveUi({ library: { columns: next } })} />
           </Row>
         </Section>
 

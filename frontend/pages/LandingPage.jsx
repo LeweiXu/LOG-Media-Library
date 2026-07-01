@@ -36,7 +36,7 @@ export default function LandingPage({ onOpenAuth }) {
 
         <p className="landing-demo">
           <span className="landing-prompt">&gt;</span>{' '}
-          try{' '}
+          try login{' '}
           <span className="landing-demo-cred">demo_user</span>
           {' / '}
           <span className="landing-demo-cred">password1</span>

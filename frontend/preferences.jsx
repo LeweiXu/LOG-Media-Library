@@ -24,9 +24,14 @@ export const DEFAULT_UI = {
     entries_per_page: 40,
     fix_title: true,
     quick_actions: false,
+    // Library table columns. Two ordered groups the user assigns by dragging:
+    // `standard` (shown by default) and `additional` (extra, off by default,
+    // toggleable from the library sidebar). `shown` is which columns actually
+    // render; order within each group comes from these arrays, standard first.
     columns: {
-      view:   ['medium', 'year', 'progress', 'status', 'rating', 'updated', 'completed'],
-      manage: ['status', 'medium', 'rating', 'progress', 'updated', 'custom_list'],
+      standard:   ['medium', 'status', 'rating', 'completed'],
+      additional: ['year', 'progress', 'custom_list', 'updated'],
+      shown:      ['medium', 'status', 'rating', 'completed'],
     },
   },
   dashboard: {
