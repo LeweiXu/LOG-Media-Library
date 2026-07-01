@@ -35,7 +35,7 @@ const BULK_FIELDS = [
 ];
 
 const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
-const DEFAULT_SORT = 'updated_at';
+const DEFAULT_SORT = 'completed_at';
 const DEFAULT_ORDER = 'desc';
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 40;

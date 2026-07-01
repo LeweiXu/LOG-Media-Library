@@ -231,7 +231,7 @@ DEFAULT_UI: dict[str, Any] = {
     },
     "library": {
         "default_mode": "view",          # "view" | "manage"
-        "default_sort": "updated_at",
+        "default_sort": "completed_at",
         "entries_per_page": 40,
         "fix_title": True,
         "quick_actions": False,

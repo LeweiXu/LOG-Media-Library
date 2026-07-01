@@ -1,7 +1,7 @@
 /* ── Narrow desktop behaviour (>900px shell, constrained content) ─────────── */
 @media (min-width: 901px) {
   /* Dashboard: stack Current/Planned when the desktop main column gets tight. */
-  @container (max-width: 1100px) {
+  @container (max-width: 1434px) {
     .dash-pair,
     .dash-pair-skeleton {
       grid-template-columns: minmax(0, 1fr);

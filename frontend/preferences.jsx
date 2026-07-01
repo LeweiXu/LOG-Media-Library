@@ -20,7 +20,7 @@ export const DEFAULT_UI = {
   },
   library: {
     default_mode: 'view',
-    default_sort: 'updated_at',
+    default_sort: 'completed_at',
     entries_per_page: 40,
     fix_title: true,
     quick_actions: false,
