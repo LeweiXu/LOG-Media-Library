@@ -956,6 +956,21 @@ html.light .skeleton-pie::after {
   margin-bottom: 5px;
 }
 
+/* Marks a field a refresh re-fetched with a value differing from the saved one.
+   Amber square tag, mirroring the terminal [x]/badge look — no rounded corners. */
+.form-changed-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  vertical-align: middle;
+  cursor: help;
+}
+
 .form-input {
   width: 100%;
   background: var(--bg);

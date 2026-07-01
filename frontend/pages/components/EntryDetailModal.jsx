@@ -1,7 +1,43 @@
 import { useState } from 'react';
-import { deleteEntry } from '../../api.jsx';
+import { deleteEntry, fetchByUrl, fetchChapterCount, fetchImdbDetail } from '../../api.jsx';
 import { statusLabel, fmtDate, progressLabel, onCoverError } from '../../utils.jsx';
 import EntryFormModal from './EntryFormModal.jsx';
+import { entryToForm } from './EntryForm.jsx';
+import { resultToEntry } from './searchSources.js';
+
+// Fields the source query can refresh. User-owned fields (status, rating,
+// progress, notes, custom_list, completed_at) are never touched by a refresh.
+const REFRESHABLE_FIELDS = [
+  'title', 'medium', 'origin', 'year', 'total', 'cover_url',
+  'external_url', 'genres', 'external_rating', 'external_id', 'source',
+];
+
+// Some providers only give a page's core data and rely on a secondary lookup to
+// fill the rest — the same enrichment EntryForm does on add, replicated here so a
+// refresh gets those fields too (add-time effects are gated to non-edit). Mutates
+// `merged` in place, filling only blanks so it never clobbers fetched values.
+async function enrichFromSecondarySources(merged) {
+  // Jikan (MAL) manga often ships no chapter total — pull it from MangaUpdates.
+  if (merged.source === 'jikan' && merged.medium === 'Manga' && !merged.total && merged.title) {
+    try {
+      const res = await fetchChapterCount(merged.title);
+      if (res?.total) merged.total = res.total;
+    } catch { /* best-effort */ }
+  }
+  // IMDb suggestions carry no rating/episode count — resolve them by id.
+  if (merged.source === 'imdb' && merged.external_id && (!merged.external_rating || !merged.total)) {
+    try {
+      const d = await fetchImdbDetail(merged.external_id);
+      if (d) {
+        if (!merged.external_rating && d.external_rating != null) merged.external_rating = d.external_rating;
+        if (!merged.total && d.total != null) merged.total = d.total;
+        if (!merged.year && d.year != null) merged.year = d.year;
+        if (!merged.cover_url && d.cover_url) merged.cover_url = d.cover_url;
+        if (!merged.genres && d.genres) merged.genres = d.genres;
+      }
+    } catch { /* best-effort */ }
+  }
+}
 
 function cleanUrl(url) {
   try {
@@ -18,6 +54,52 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
   const [confirmDelete,   setConfirmDelete]   = useState(false);
   const [deleting,        setDeleting]        = useState(false);
   const [deleteError,     setDeleteError]     = useState('');
+  const [refreshing,      setRefreshing]      = useState(false);
+  const [refreshError,    setRefreshError]    = useState('');
+  // When set, the edit modal opens pre-filled with freshly-fetched source data.
+  // `changed` maps each differing field to its previous (saved) value.
+  const [refreshData,     setRefreshData]     = useState(null);
+
+  async function handleRefresh() {
+    if (!current.external_url) {
+      setRefreshError('This entry has no source URL to refresh from.');
+      return;
+    }
+    setRefreshing(true);
+    setRefreshError('');
+    try {
+      const results = await fetchByUrl(current.external_url);
+      const item = Array.isArray(results) ? results[0] : results;
+      if (!item) {
+        setRefreshError('The source returned nothing for this entry.');
+        return;
+      }
+      // Overlay only the source-derived fields that actually came back, so a
+      // sparse result never wipes existing data with blanks.
+      const fetched = resultToEntry(item);
+      const merged = { ...current };
+      for (const field of REFRESHABLE_FIELDS) {
+        const value = fetched[field];
+        if (value !== '' && value != null) merged[field] = value;
+      }
+      await enrichFromSecondarySources(merged);
+      // Diff in form representation so types line up (e.g. year 2019 vs "2019").
+      const before = entryToForm(current);
+      const after  = entryToForm(merged);
+      const changed = {};
+      for (const field of REFRESHABLE_FIELDS) {
+        if (String(before[field] ?? '') !== String(after[field] ?? '')) {
+          changed[field] = before[field] ?? '';
+        }
+      }
+      setRefreshData({ entry: merged, changed });
+      setEditing(true);
+    } catch (err) {
+      setRefreshError(err.message || String(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function handleDelete() {
     setDeleting(true);
@@ -36,9 +118,10 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
   if (editing) {
     return (
       <EntryFormModal
-        entry={current}
-        onClose={() => setEditing(false)}
-        onSaved={(updated) => { setCurrent(updated); onUpdated(updated); setEditing(false); }}
+        entry={refreshData?.entry || current}
+        changedFields={refreshData?.changed}
+        onClose={() => { setEditing(false); setRefreshData(null); }}
+        onSaved={(updated) => { setCurrent(updated); onUpdated(updated); setEditing(false); setRefreshData(null); }}
         onDeleted={(id) => { onDeleted(id); onClose(); }}
       />
     );
@@ -144,9 +227,9 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
             <span>Updated: {fmtDate(current.updated_at)}</span>
           </div>
 
-          {deleteError && (
+          {(deleteError || refreshError) && (
             <div className="settings-msg settings-msg-error entry-detail-error">
-              {deleteError}
+              {deleteError || refreshError}
             </div>
           )}
           <div className="entry-detail-actions">
@@ -169,7 +252,14 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
               </button>
             )}
             <div className="entry-detail-primary-actions">
-              <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
+              <button type="button" className="btn btn-outline"
+                onClick={handleRefresh}
+                disabled={refreshing || !current.external_url}
+                title={current.external_url
+                  ? 'Re-fetch details from the source and review changes'
+                  : 'No source URL to refresh from'}>
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
               <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
             </div>
           </div>

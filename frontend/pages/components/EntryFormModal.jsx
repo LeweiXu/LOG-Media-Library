@@ -10,7 +10,7 @@ import EntryForm, { formToPayload } from './EntryForm.jsx';
  *   onSaved   - called with the created/updated entry object
  *   onDeleted - called with the deleted entry id
  */
-export default function EntryFormModal({ entry = null, onClose, onSaved, onDeleted }) {
+export default function EntryFormModal({ entry = null, onClose, onSaved, onDeleted, changedFields = null }) {
   const isEdit = Boolean(entry?.id);
 
   async function handleSubmit(form) {
@@ -39,6 +39,7 @@ export default function EntryFormModal({ entry = null, onClose, onSaved, onDelet
         <div className="modal-body">
           <EntryForm
             entry={entry}
+            changedFields={changedFields}
             onCancel={onClose}
             onSubmit={handleSubmit}
             onDelete={handleDelete}

@@ -66,8 +66,17 @@ export default function EntryForm({
   cancelLabel = 'Cancel',
   leftAction = null,
   showDelete = false,
+  changedFields = null,
 }) {
   const isEdit = Boolean(entry?.id);
+
+  // Marker shown next to a label when a refresh fetched a value that differs
+  // from the saved entry. The old value rides along in the tooltip.
+  const diffTag = (field) => {
+    if (!changedFields || !(field in changedFields)) return null;
+    const was = changedFields[field] === '' || changedFields[field] == null ? '—' : changedFields[field];
+    return <span className="form-changed-tag" title={`was: ${was}`}>changed</span>;
+  };
   const { prefs } = usePreferences();
   const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
   const ratingStep = prefs.rating_step ?? DEFAULT_UI.rating_step;
@@ -202,7 +211,7 @@ export default function EntryForm({
     <>
     <form onSubmit={handleSubmit}>
       <div className="form-row">
-        <label className="form-label">Title *</label>
+        <label className="form-label">Title * {diffTag('title')}</label>
         <input className="form-input" value={form.title}
           placeholder="Title"
           onChange={e => setField('title', e.target.value)} />
@@ -210,7 +219,7 @@ export default function EntryForm({
 
       <div className="form-row-2 entry-form-spaced">
         <div>
-          <label className="form-label">Medium</label>
+          <label className="form-label">Medium {diffTag('medium')}</label>
           <CustomSelect
             value={form.medium}
             options={[
@@ -296,7 +305,7 @@ export default function EntryForm({
 
       <div className="form-row-2 entry-form-spaced">
         <div>
-          <label className="form-label">Origin</label>
+          <label className="form-label">Origin {diffTag('origin')}</label>
           <CustomSelect
             value={form.origin}
             options={[
@@ -308,7 +317,7 @@ export default function EntryForm({
           />
         </div>
         <div>
-          <label className="form-label">Year</label>
+          <label className="form-label">Year {diffTag('year')}</label>
           <input className="form-input" type="number" value={form.year}
             placeholder="2024"
             onChange={e => setField('year', e.target.value)} />
@@ -323,7 +332,7 @@ export default function EntryForm({
             onChange={e => setField('progress', e.target.value)} />
         </div>
         <div>
-          <label className="form-label">Total</label>
+          <label className="form-label">Total {diffTag('total')}</label>
           <input className="form-input" type="number" min="0" value={form.total}
             placeholder={fetching ? 'fetching…' : '12'}
             onChange={e => setField('total', e.target.value)} />
@@ -339,7 +348,7 @@ export default function EntryForm({
             onCommit={() => setField('rating', form.rating === '' ? '' : String(roundToStep(form.rating, ratingStep)))} />
         </div>
         <div>
-          <label className="form-label">Source Rating</label>
+          <label className="form-label">Source Rating {diffTag('external_rating')}</label>
           <input className="form-input" type="number" min="0" max="100" step="0.1"
             value={form.external_rating} placeholder={fetching === 'imdb' ? 'fetching…' : '-'}
             onChange={e => setField('external_rating', e.target.value)} />
@@ -347,14 +356,14 @@ export default function EntryForm({
       </div>
 
       <div className="form-row">
-        <label className="form-label">Cover URL</label>
+        <label className="form-label">Cover URL {diffTag('cover_url')}</label>
         <input className="form-input" value={form.cover_url}
           placeholder="https://..."
           onChange={e => setField('cover_url', e.target.value)} />
       </div>
 
       <div className="form-row">
-        <label className="form-label">Source URL</label>
+        <label className="form-label">Source URL {diffTag('external_url')}</label>
         <input className="form-input" value={form.external_url}
           placeholder="https://novelupdates.com/series/..."
           onChange={e => setField('external_url', e.target.value)} />
@@ -366,7 +375,7 @@ export default function EntryForm({
       </div>
 
       <div className="form-row">
-        <label className="form-label">Genres</label>
+        <label className="form-label">Genres {diffTag('genres')}</label>
         <input className="form-input" value={form.genres}
           placeholder="e.g. Action, Comedy, Drama"
           onChange={e => setField('genres', e.target.value)}
