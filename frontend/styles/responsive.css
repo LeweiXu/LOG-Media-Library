@@ -1,16 +1,370 @@
-/* ── Narrow desktop behaviour (>900px shell, constrained content) ─────────── */
-@media (min-width: 901px) {
-  /* Dashboard: stack Current/Planned when the desktop main column gets tight. */
-  @container (max-width: 1434px) {
-    .dash-pair,
-    .dash-pair-skeleton {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 18px 0;
-    }
+/* ──────────────────────────────────────────────────────────────────────────
+ * RESPONSIVE CONTROL PANEL
+ *
+ * CSS cannot use variables inside @media conditions, so breakpoint numbers are
+ * repeated in the media queries below. Edit the values in this top section to
+ * change behaviour per tier.
+ *
+ * Tiers:
+ *   mobile/tablet:       <=900px
+ *   narrow desktop:      901px-1434px
+ *   normal desktop:      1435px-1919px
+ *   wide desktop:        >=1920px
+ *
+ * Sidebars:
+ *   visible in grid:     track = sidebar width, position = static,
+ *                        transform/open-transform = none, indicator = none
+ *   hidden hover panel:  track = 0px, position = fixed,
+ *                        transform = offscreen, open-transform = translateX(0),
+ *                        indicator = flex
+ * ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --resp-left-sidebar-width: 210px;
+  --resp-right-sidebar-width: 256px;
+  --resp-hover-sidebar-width: 300px;
+  --resp-hover-sidebar-max-width: 84vw;
+  --resp-mobile-sidebar-width: 84vw;
+  --resp-mobile-sidebar-max-width: 320px;
+  --resp-sidebar-top: 40px;
+  --resp-hover-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
+  --resp-sidebar-hover-zone-width: 36px;
+  --resp-sidebar-indicator-size: 3px;      /* dash thickness */
+  --resp-sidebar-indicator-height: 40px;   /* dash length (grows on hover) */
+  --resp-sidebar-indicator-offset: 6px;    /* dash inset from the screen edge */
+
+  --resp-sidebar-track-hidden: 0px;
+  --resp-sidebar-position-visible: static;
+  --resp-sidebar-position-hidden: fixed;
+  --resp-sidebar-width-visible: auto;
+  --resp-sidebar-width-hidden: var(--resp-hover-sidebar-width);
+  --resp-sidebar-transform-visible: none;
+  --resp-sidebar-transform-left-hidden: translateX(-100%);
+  --resp-sidebar-transform-right-hidden: translateX(100%);
+  --resp-sidebar-transform-open: translateX(0);
+  --resp-sidebar-shadow-visible: none;
+  --resp-sidebar-shadow-hidden: var(--resp-hover-shadow);
+  --resp-sidebar-indicator-visible: none;
+  --resp-sidebar-indicator-hidden: flex;
+
+  /* NOTE: the side-by-side template is NOT defined here. It must reference the
+     per-instance --dash-current-fr / --dash-planned-fr that Dashboard.jsx sets
+     inline on .dash-pair (auto/manual split). A var() inside a :root variable
+     resolves against :root, where those inline vars don't exist, so it would
+     always fall back to 60/40. Instead the side-by-side value lives directly in
+     the .dash-pair rule below (as the fallback of --dashboard-pair-template), so
+     the inline split vars resolve on .dash-pair itself. */
+  --resp-dashboard-pair-stacked: minmax(0, 1fr);
+  --resp-dashboard-pair-gap-side-by-side: 0 24px;
+  --resp-dashboard-pair-gap-stacked: 18px 0;
+  --resp-dashboard-pair-gap-mobile: 14px;
+
+  --resp-explore-recs-3col: repeat(3, minmax(0, 1fr));
+  --resp-explore-recs-2col: repeat(2, minmax(0, 1fr));
+  --resp-explore-recs-1col: minmax(0, 1fr);
+  --resp-source-grid-2col: repeat(2, minmax(0, 1fr));
+  --resp-source-wide-grid-4col: repeat(4, minmax(0, 1fr));
+  --resp-source-wide-grid-3col: repeat(3, minmax(0, 1fr));
+  --resp-source-wide-grid-2col: repeat(2, minmax(0, 1fr));
+  --resp-settings-choice-grid-mobile: 1fr;
+  --resp-quickadd-medium-tablet: repeat(3, minmax(0, 1fr));
+  --resp-quickadd-medium-phone: repeat(2, minmax(0, 1fr));
+  --resp-manage-list-mobile-width: 108px;
+  --resp-completion-date-phone-template: minmax(0, 1fr) 94px;
+  --resp-completion-date-phone-select-width: 94px;
+
+  /* default / wide desktop (>=1920px) */
+  --dashboard-left-track: var(--resp-left-sidebar-width);
+  --dashboard-right-track: var(--resp-right-sidebar-width);
+  --dashboard-left-position: var(--resp-sidebar-position-visible);
+  --dashboard-right-position: var(--resp-sidebar-position-visible);
+  --dashboard-left-width: var(--resp-sidebar-width-visible);
+  --dashboard-right-width: var(--resp-sidebar-width-visible);
+  --dashboard-left-transform: var(--resp-sidebar-transform-visible);
+  --dashboard-right-transform: var(--resp-sidebar-transform-visible);
+  --dashboard-left-open-transform: var(--resp-sidebar-transform-visible);
+  --dashboard-right-open-transform: var(--resp-sidebar-transform-visible);
+  --dashboard-left-shadow: var(--resp-sidebar-shadow-visible);
+  --dashboard-right-shadow: var(--resp-sidebar-shadow-visible);
+  --dashboard-left-indicator-display: var(--resp-sidebar-indicator-visible);
+  --dashboard-right-indicator-display: var(--resp-sidebar-indicator-visible);
+  /* --dashboard-pair-template intentionally unset at wide desktop → the
+     .dash-pair rule falls back to the inline split (side by side). */
+  --dashboard-pair-gap: var(--resp-dashboard-pair-gap-side-by-side);
+
+  --library-left-track: var(--resp-left-sidebar-width);
+  --library-right-track: var(--resp-right-sidebar-width);
+  --library-left-position: var(--resp-sidebar-position-visible);
+  --library-right-position: var(--resp-sidebar-position-visible);
+  --library-left-width: var(--resp-sidebar-width-visible);
+  --library-right-width: var(--resp-sidebar-width-visible);
+  --library-left-transform: var(--resp-sidebar-transform-visible);
+  --library-right-transform: var(--resp-sidebar-transform-visible);
+  --library-left-open-transform: var(--resp-sidebar-transform-visible);
+  --library-right-open-transform: var(--resp-sidebar-transform-visible);
+  --library-left-shadow: var(--resp-sidebar-shadow-visible);
+  --library-right-shadow: var(--resp-sidebar-shadow-visible);
+  --library-left-indicator-display: var(--resp-sidebar-indicator-visible);
+  --library-right-indicator-display: var(--resp-sidebar-indicator-visible);
+
+  --explore-left-track: var(--resp-left-sidebar-width);
+  --explore-right-track: var(--resp-right-sidebar-width);
+  --explore-left-position: var(--resp-sidebar-position-visible);
+  --explore-right-position: var(--resp-sidebar-position-visible);
+  --explore-left-width: var(--resp-sidebar-width-visible);
+  --explore-right-width: var(--resp-sidebar-width-visible);
+  --explore-left-transform: var(--resp-sidebar-transform-visible);
+  --explore-right-transform: var(--resp-sidebar-transform-visible);
+  --explore-left-open-transform: var(--resp-sidebar-transform-visible);
+  --explore-right-open-transform: var(--resp-sidebar-transform-visible);
+  --explore-left-shadow: var(--resp-sidebar-shadow-visible);
+  --explore-right-shadow: var(--resp-sidebar-shadow-visible);
+  --explore-left-indicator-display: var(--resp-sidebar-indicator-visible);
+  --explore-right-indicator-display: var(--resp-sidebar-indicator-visible);
+  --explore-grid-template: var(--resp-explore-recs-3col);
+}
+
+/* Responsive measurement scopes. */
+.main-content,
+.table-size-scope {
+  container-type: inline-size;
+}
+
+/* Tier 1: mobile/tablet (<=900px). Layout is handled in the mobile block below. */
+@media (max-width: 900px) {
+  :root {
+    --dashboard-pair-template: var(--resp-dashboard-pair-stacked);
+    --dashboard-pair-gap: var(--resp-dashboard-pair-gap-mobile);
+    --explore-grid-template: var(--resp-explore-recs-2col);
   }
 }
 
+/* Tier 2: narrow desktop/laptop (901px-1434px). */
+@media (min-width: 901px) and (max-width: 1434px) {
+  :root {
+    --dashboard-left-track: var(--resp-sidebar-track-hidden);
+    --dashboard-right-track: var(--resp-right-sidebar-width);
+    --dashboard-left-position: var(--resp-sidebar-position-hidden);
+    --dashboard-left-width: var(--resp-sidebar-width-hidden);
+    --dashboard-left-transform: var(--resp-sidebar-transform-left-hidden);
+    --dashboard-left-open-transform: var(--resp-sidebar-transform-open);
+    --dashboard-left-shadow: var(--resp-sidebar-shadow-hidden);
+    --dashboard-left-indicator-display: var(--resp-sidebar-indicator-hidden);
+    --dashboard-pair-template: var(--resp-dashboard-pair-stacked);
+    --dashboard-pair-gap: var(--resp-dashboard-pair-gap-stacked);
+
+    --library-left-track: var(--resp-sidebar-track-hidden);
+    --library-right-track: var(--resp-sidebar-track-hidden);
+    --library-left-position: var(--resp-sidebar-position-hidden);
+    --library-right-position: var(--resp-sidebar-position-hidden);
+    --library-left-width: var(--resp-sidebar-width-hidden);
+    --library-right-width: var(--resp-sidebar-width-hidden);
+    --library-left-transform: var(--resp-sidebar-transform-left-hidden);
+    --library-right-transform: var(--resp-sidebar-transform-right-hidden);
+    --library-left-open-transform: var(--resp-sidebar-transform-open);
+    --library-right-open-transform: var(--resp-sidebar-transform-open);
+    --library-left-shadow: var(--resp-sidebar-shadow-hidden);
+    --library-right-shadow: var(--resp-sidebar-shadow-hidden);
+    --library-left-indicator-display: var(--resp-sidebar-indicator-hidden);
+    --library-right-indicator-display: var(--resp-sidebar-indicator-hidden);
+
+    --explore-grid-template: var(--resp-explore-recs-2col);
+  }
+}
+
+/* Tier 3: normal desktop (1435px-1919px). Dashboard keeps BOTH sidebars visible
+   (defaults) and stacks the Current/Planned tables instead — side by side is
+   reserved for the widest screens (Tier 4). */
+@media (min-width: 1435px) and (max-width: 1919px) {
+  :root {
+    --dashboard-pair-template: var(--resp-dashboard-pair-stacked);
+    --dashboard-pair-gap: var(--resp-dashboard-pair-gap-stacked);
+    --explore-grid-template: var(--resp-explore-recs-2col);
+  }
+}
+
+/* Tier 4: wide / large desktop (>=1920px). Uses the default :root values. */
+
+/* ── Desktop consumers (>=901px) ─────────────────────────────────────────── */
+@media (min-width: 901px) {
+  .drawer-toggle { display: none !important; }
+  .drawer-backdrop { display: none !important; }
+
+  .dashboard-layout {
+    grid-template-columns: var(--dashboard-left-track) minmax(0, 1fr) var(--dashboard-right-track);
+  }
+  .library-layout {
+    grid-template-columns: var(--library-left-track) minmax(0, 1fr) var(--library-right-track);
+  }
+  .explore-layout {
+    grid-template-columns: var(--explore-left-track) minmax(0, 1fr) var(--explore-right-track);
+  }
+  .dashboard-layout .sidebar-left,
+  .library-layout .sidebar-left,
+  .explore-layout .sidebar-left {
+    grid-column: 1;
+  }
+  .dashboard-layout .main-content,
+  .library-layout .main-content,
+  .explore-layout .main-content {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .dashboard-layout .sidebar-right,
+  .library-layout .sidebar-right,
+  .explore-layout .sidebar-right {
+    grid-column: 3;
+  }
+
+  .dashboard-layout .sidebar-left,
+  .library-layout .sidebar-left,
+  .explore-layout .sidebar-left {
+    top: var(--resp-sidebar-top);
+    bottom: 0;
+    left: 0;
+    max-width: var(--resp-hover-sidebar-max-width);
+    z-index: 95;
+    transition: transform 0.18s ease;
+  }
+  .dashboard-layout .sidebar-right,
+  .library-layout .sidebar-right,
+  .explore-layout .sidebar-right {
+    top: var(--resp-sidebar-top);
+    right: 0;
+    bottom: 0;
+    max-width: var(--resp-hover-sidebar-max-width);
+    z-index: 95;
+    transition: transform 0.18s ease;
+  }
+
+  .dashboard-layout .sidebar-left {
+    position: var(--dashboard-left-position);
+    width: var(--dashboard-left-width);
+    transform: var(--dashboard-left-transform);
+    box-shadow: var(--dashboard-left-shadow);
+  }
+  .dashboard-layout .sidebar-right {
+    position: var(--dashboard-right-position);
+    width: var(--dashboard-right-width);
+    transform: var(--dashboard-right-transform);
+    box-shadow: var(--dashboard-right-shadow);
+  }
+  .library-layout .sidebar-left {
+    position: var(--library-left-position);
+    width: var(--library-left-width);
+    transform: var(--library-left-transform);
+    box-shadow: var(--library-left-shadow);
+  }
+  .library-layout .sidebar-right {
+    position: var(--library-right-position);
+    width: var(--library-right-width);
+    transform: var(--library-right-transform);
+    box-shadow: var(--library-right-shadow);
+  }
+  .explore-layout .sidebar-left {
+    position: var(--explore-left-position);
+    width: var(--explore-left-width);
+    transform: var(--explore-left-transform);
+    box-shadow: var(--explore-left-shadow);
+  }
+  .explore-layout .sidebar-right {
+    position: var(--explore-right-position);
+    width: var(--explore-right-width);
+    transform: var(--explore-right-transform);
+    box-shadow: var(--explore-right-shadow);
+  }
+
+  .sidebar-hover-zone {
+    position: fixed;
+    top: var(--resp-sidebar-top);
+    bottom: 0;
+    z-index: 96;
+    display: none;
+    width: var(--resp-sidebar-hover-zone-width);
+    border: 0;
+    background: transparent;
+    color: var(--dim);
+    cursor: default;
+    transform: none;
+  }
+  /* A slim vertical dash marking a hidden sidebar — no box, no arrow. It brightens
+     to the accent and lengthens on hover. */
+  .sidebar-hover-zone::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: var(--resp-sidebar-indicator-size);
+    height: var(--resp-sidebar-indicator-height);
+    background: var(--border2);
+    transform: translateY(-50%);
+    transition: background 0.14s ease, height 0.14s ease;
+    pointer-events: none;
+  }
+  .sidebar-hover-zone:hover::after {
+    background: var(--accent);
+    height: calc(var(--resp-sidebar-indicator-height) + 16px);
+  }
+  .sidebar-hover-zone span {
+    display: none;
+  }
+  .sidebar-hover-zone-left { left: 0; }
+  .sidebar-hover-zone-right { right: 0; }
+  .sidebar-hover-zone-left::after { left: var(--resp-sidebar-indicator-offset); }
+  .sidebar-hover-zone-right::after { right: var(--resp-sidebar-indicator-offset); }
+
+  .dashboard-layout .sidebar-hover-zone-left { display: var(--dashboard-left-indicator-display); }
+  .dashboard-layout .sidebar-hover-zone-right { display: var(--dashboard-right-indicator-display); }
+  .library-layout .sidebar-hover-zone-left { display: var(--library-left-indicator-display); }
+  .library-layout .sidebar-hover-zone-right { display: var(--library-right-indicator-display); }
+  .explore-layout .sidebar-hover-zone-left { display: var(--explore-left-indicator-display); }
+  .explore-layout .sidebar-hover-zone-right { display: var(--explore-right-indicator-display); }
+
+  .dashboard-layout .sidebar-hover-zone-left:hover + .sidebar-left,
+  .dashboard-layout .sidebar-left:hover { transform: var(--dashboard-left-open-transform); }
+  .dashboard-layout .sidebar-hover-zone-right:hover + .sidebar-right,
+  .dashboard-layout .sidebar-right:hover { transform: var(--dashboard-right-open-transform); }
+  .library-layout .sidebar-hover-zone-left:hover + .sidebar-left,
+  .library-layout .sidebar-left:hover { transform: var(--library-left-open-transform); }
+  .library-layout .sidebar-hover-zone-right:hover + .sidebar-right,
+  .library-layout .sidebar-right:hover { transform: var(--library-right-open-transform); }
+  .explore-layout .sidebar-hover-zone-left:hover + .sidebar-left,
+  .explore-layout .sidebar-left:hover { transform: var(--explore-left-open-transform); }
+  .explore-layout .sidebar-hover-zone-right:hover + .sidebar-right,
+  .explore-layout .sidebar-right:hover { transform: var(--explore-right-open-transform); }
+
+  /* Fallback = side by side, driven by the inline auto/manual split vars on
+     .dash-pair. Tiers that want stacking set --dashboard-pair-template. */
+  .dash-pair,
+  .dash-pair-skeleton {
+    grid-template-columns: var(--dashboard-pair-template, var(--dash-current-fr, 60fr) var(--dash-planned-fr, 40fr));
+    gap: var(--dashboard-pair-gap);
+  }
+
+  .explore-grid {
+    grid-template-columns: var(--explore-grid-template);
+  }
+
+  .batch-mobile { display: none; }
+  .media-table .manage-list-select { min-width: 0; }
+}
+
+/* ── Shared responsive details owned by this file ────────────────────────── */
+@media (max-width: 1100px) {
+  .source-select-wide .source-grid {
+    grid-template-columns: var(--resp-source-wide-grid-4col);
+  }
+}
+
+@media (max-width: 860px) {
+  .source-select-wide .source-grid {
+    grid-template-columns: var(--resp-source-wide-grid-3col);
+  }
+}
+
+/* ── Mobile/tablet shell (<=900px) ───────────────────────────────────────── */
 @media (max-width: 900px) {
+  .sidebar-hover-zone { display: none !important; }
+
   /* App shell padding shrinks. */
   .topbar  { padding: 0 8px; gap: 0; }
   .topbar-logo { margin-right: 6px; font-size: 13px; flex-shrink: 0; }
@@ -48,13 +402,13 @@
   .sidebar-left,
   .sidebar-right {
     position: fixed;
-    top: 40px;            /* below topbar */
+    top: var(--resp-sidebar-top);
     bottom: 0;
-    width: 84vw;
-    max-width: 320px;
+    width: var(--resp-mobile-sidebar-width);
+    max-width: var(--resp-mobile-sidebar-max-width);
     z-index: 95;
     transition: transform 0.22s ease;
-    box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--resp-hover-shadow);
   }
   .sidebar-left  { left: 0;  transform: translateX(-100%); border-right: 1px solid var(--border); }
   .sidebar-right { right: 0; transform: translateX( 100%); border-left:  1px solid var(--border); }
@@ -72,6 +426,10 @@
 
   /* Page header tightens and the +Add button shrinks. */
   .page-head { margin-bottom: 14px; padding-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  .page-head-left { gap: 8px; }
+  .page-head-left > .page-title { order: 1; }
+  .page-head-left > .drawer-toggle { order: 2; }
+  .page-head-left > .page-desc { order: 3; }
   .page-title { font-size: 14px; }
   .page-desc  { display: none; }
   .page-head .btn { padding: 5px 10px; font-size: 11px; }
@@ -81,6 +439,10 @@
   .filter-bar select { font-size: 11px; }
   .library-manage-sort,
   .library-manage-order { display: none; }
+  .custom-select.manage-list-select.custom-select-fit,
+  .inline-list-create.manage-list-select {
+    width: var(--resp-manage-list-mobile-width);
+  }
 
   /* ── Mobile column hiding on the Library/Dashboard tables ──
    * Every <th>/<td> opts in via a class like `.col-medium`. By default on
@@ -137,11 +499,19 @@
   .cover-thumb { width: 24px; height: 34px; }
   .media-name { font-size: 12px; }
 
+  .quickadd-medium-grid {
+    grid-template-columns: var(--resp-quickadd-medium-tablet);
+  }
+
   /* Dashboard: stack Current/Planned inside the mobile shell too. */
   .dash-pair,
   .dash-pair-skeleton {
-    grid-template-columns: minmax(0, 1fr) !important;
-    gap: 14px !important;
+    grid-template-columns: var(--dashboard-pair-template, var(--dash-current-fr, 60fr) var(--dash-planned-fr, 40fr)) !important;
+    gap: var(--dashboard-pair-gap) !important;
+  }
+
+  .explore-grid {
+    grid-template-columns: var(--explore-grid-template);
   }
 
   /* Stat boxes shrink on the right panel (when it's open as a drawer). */
@@ -182,38 +552,41 @@
   .stats-pie-layout .recharts-wrapper { align-self: center; }
 }
 
-/* ── Library/Explore: narrow-desktop sidebar collapse ───────────────────────
- * Above the ≤900px mobile breakpoint these pages' two fixed sidebars squeeze
- * the main content on smaller desktops. Collapse those sidebars into openable
- * drawers and give the content the full width. */
-@media (min-width: 901px) and (max-width: 1434px) {
-  .library-layout,
-  .explore-layout { grid-template-columns: minmax(0, 1fr) !important; }
-  .library-layout .sidebar-left,
-  .library-layout .sidebar-right,
-  .explore-layout .sidebar-left,
-  .explore-layout .sidebar-right {
-    position: fixed;
-    top: 40px;            /* below topbar */
-    bottom: 0;
-    width: 300px;
-    max-width: 84vw;
-    z-index: 95;
-    transition: transform 0.22s ease;
-    box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
+@media (max-width: 720px) {
+  .source-grid {
+    grid-template-columns: var(--resp-source-grid-2col);
   }
-  .library-layout .sidebar-left,
-  .explore-layout .sidebar-left { left: 0;  transform: translateX(-100%); border-right: 1px solid var(--border); }
-  .library-layout .sidebar-right,
-  .explore-layout .sidebar-right { right: 0; transform: translateX(100%);  border-left:  1px solid var(--border); }
-  .library-layout[data-drawer="left"]  .sidebar-left  { transform: translateX(0); }
-  .library-layout[data-drawer="right"] .sidebar-right { transform: translateX(0); }
-  .explore-layout[data-drawer="left"]  .sidebar-left  { transform: translateX(0); }
-  .explore-layout[data-drawer="right"] .sidebar-right { transform: translateX(0); }
-  .library-layout[data-drawer="left"]  .drawer-backdrop,
-  .library-layout[data-drawer="right"] .drawer-backdrop,
-  .explore-layout[data-drawer="left"]  .drawer-backdrop,
-  .explore-layout[data-drawer="right"] .drawer-backdrop { display: block; }
-  .library-layout .drawer-toggle,
-  .explore-layout .drawer-toggle { display: inline-flex; align-items: center; }
+  .source-select-wide .source-grid {
+    grid-template-columns: var(--resp-source-wide-grid-2col);
+  }
+  .explore-grid {
+    grid-template-columns: var(--resp-explore-recs-1col);
+  }
+}
+
+@media (max-width: 640px) {
+  .set-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .set-row-control { width: 100%; }
+  .settings-choice-grid-explore {
+    grid-template-columns: var(--resp-settings-choice-grid-mobile);
+  }
+  .quickadd-medium-grid {
+    grid-template-columns: var(--resp-quickadd-medium-phone);
+  }
+}
+
+@media (max-width: 480px) {
+  .quickadd-completion-date {
+    grid-template-columns: var(--resp-completion-date-phone-template);
+  }
+  .quickadd-completion-date .custom-select {
+    width: var(--resp-completion-date-phone-select-width);
+  }
+  .quickadd-completion-date .icon-btn {
+    grid-column: 1 / -1;
+  }
 }

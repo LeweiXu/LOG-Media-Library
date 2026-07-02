@@ -6,6 +6,6 @@
 @import './styles/components.css';
 @import './styles/library-dashboard.css';
 @import './styles/statistics-explore.css';
-@import './styles/responsive.css';
 @import './styles/tools-add-custom.css';
+@import './styles/responsive.css';
 @import './styles/light.css';

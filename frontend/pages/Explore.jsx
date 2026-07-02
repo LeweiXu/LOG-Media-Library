@@ -441,6 +441,9 @@ export default function Explore() {
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
       )}
+      <div className="sidebar-hover-zone sidebar-hover-zone-left" aria-hidden="true">
+        <span>medium</span>
+      </div>
       {/* ── Left sidebar: medium filter ─────────────────────────────────── */}
       <aside className="sidebar-left">
         <div className="sidebar-section">
@@ -629,6 +632,9 @@ export default function Explore() {
       </main>
 
       {/* ── Right sidebar: affinity snapshot + actions ────────────────────── */}
+      <div className="sidebar-hover-zone sidebar-hover-zone-right" aria-hidden="true">
+        <span>taste</span>
+      </div>
       <aside className="sidebar-right">
         <div className="panel-title">Your library</div>
         {!affinity || affinity.sample_size === 0 ? (

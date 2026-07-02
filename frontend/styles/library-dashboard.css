@@ -28,7 +28,6 @@
 
 /* ── Library page ───────────────────────────────────────────────────────── */
 .table-size-scope {
-  container-type: inline-size;
   min-width: 0;
 }
 

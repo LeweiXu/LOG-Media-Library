@@ -840,6 +840,9 @@ export default function Library({ initialFilters = {} }) {
     <div className="layout-3col library-layout" data-drawer={drawer}>
       {drawer && <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />}
 
+      <div className="sidebar-hover-zone sidebar-hover-zone-left" aria-hidden="true">
+        <span>filters</span>
+      </div>
       {/* ── Left sidebar ── */}
       <div className="sidebar-left">
         <div className="sidebar-section">
@@ -1105,6 +1108,9 @@ export default function Library({ initialFilters = {} }) {
       </div>
 
       {/* ── Right sidebar ── */}
+      <div className="sidebar-hover-zone sidebar-hover-zone-right" aria-hidden="true">
+        <span>tools</span>
+      </div>
       <div className="sidebar-right">
         {/* Manage (multi-select) replaces Sort with the batch-edit tools in place. */}
         {isManage ? (

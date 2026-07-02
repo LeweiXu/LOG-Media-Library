@@ -37,12 +37,6 @@
 /* Batch controls match the small topbar button size (no full-width stretch). */
 .batch-panel .batch-select { padding: 3px 9px; font-size: 11px; }
 .batch-panel .batch-actions .icon-btn { padding: 3px 9px; font-size: 11px; }
-/* The batch panel renders in the sidebar on desktop; the mobile copy in the
-   main column is hidden above the breakpoint. Scoped to a min-width query (not
-   a plain rule) so it never overrides the max-width:720 rule that reveals it on
-   mobile, regardless of source order. */
-@media (min-width: 901px) { .batch-mobile { display: none; } }
-
 /* Small Apply button — accent-coloured sibling to the small .icon-btn delete. */
 .icon-btn.accent { border-color: rgba(var(--accent-rgb), 0.5); color: var(--accent); }
 .icon-btn.accent:hover { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
@@ -54,9 +48,6 @@
 .icon-btn.edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
 
 .media-table .col-select { width: 34px; text-align: center; }
-@media (min-width: 901px) {
-  .media-table .manage-list-select { min-width: 0; }
-}
 /* Selected row gets a blue tint plus a continuous accent outline around the
    whole entry. Inset box-shadows draw the border without nudging layout. */
 .media-table tr.row-selected td { background: rgba(var(--accent-rgb), 0.08); }
@@ -692,12 +683,6 @@ input[type="radio"]:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Mediums: 5 columns / 2 rows on desktop. */
 .quickadd-medium-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-@media (max-width: 900px) {
-  .quickadd-medium-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-@media (max-width: 640px) {
-  .quickadd-medium-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 
 /* Card: the info column is capped to the cover height and clips its synopsis,
    so the title→synopsis block always spans exactly the height of the cover. */
@@ -938,22 +923,6 @@ a.quickadd-title:hover { color: var(--accent); }
 .quickadd-completion-date .custom-select {
   width: 110px;
 }
-@media (max-width: 900px) {
-  .filter-bar .library-manage-sort { display: none; }
-  .manage-list-select { width: 108px; }
-}
-@media (max-width: 480px) {
-  .quickadd-completion-date {
-    grid-template-columns: minmax(0, 1fr) 94px;
-  }
-  .quickadd-completion-date .custom-select {
-    width: 94px;
-  }
-  .quickadd-completion-date .icon-btn {
-    grid-column: 1 / -1;
-  }
-}
-
 .quickadd-err { color: var(--red); font-size: 11px; margin-top: 10px; }
 
 .quickadd-actions {

@@ -379,10 +379,13 @@ export default function DashboardAlt({ onFilterChange }) {
   }
 
   return (
-    <div className="layout-3col" data-drawer={drawer}>
+    <div className="layout-3col dashboard-layout" data-drawer={drawer}>
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
       )}
+      <div className="sidebar-hover-zone sidebar-hover-zone-left" aria-hidden="true">
+        <span>filters</span>
+      </div>
       {/* ── Left sidebar ── */}
       <div className="sidebar-left">
         <div className="sidebar-section">
@@ -572,6 +575,9 @@ export default function DashboardAlt({ onFilterChange }) {
       </div>
 
       {/* ── Right sidebar ── */}
+      <div className="sidebar-hover-zone sidebar-hover-zone-right" aria-hidden="true">
+        <span>summary</span>
+      </div>
       <div className="sidebar-right">
         <ExtensionUpdateLink />
         <p className="panel-title">Summary</p>

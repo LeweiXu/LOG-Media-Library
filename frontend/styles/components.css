@@ -925,17 +925,6 @@ html.light .skeleton-pie::after {
   pointer-events: auto;
 }
 
-@media (max-width: 640px) {
-  .set-row { flex-direction: column; align-items: stretch; gap: 10px; }
-  .set-row-control { width: 100%; }
-}
-
-@media (max-width: 640px) {
-  .settings-choice-grid-explore {
-    grid-template-columns: 1fr;
-  }
-}
-
 .modal-footer {
   display: flex;
   gap: 8px;
@@ -1162,10 +1151,6 @@ html.light .skeleton-pie::after {
 }
 .col-zone-empty { font-size: 11px; color: var(--dim); padding: 3px 4px; }
 
-@media (max-width: 720px) {
-  .source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
 /* ── Terminal selection primitives (see components/terminal.jsx) ───────────── */
 .term-box {
   flex-shrink: 0;
@@ -1345,12 +1330,3 @@ html.light .skeleton-pie::after {
 /* Wide variant — the Explore page's main column is far wider than the
    add-entry modal, so the source chips get more columns there. */
 .source-select-wide .source-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-@media (max-width: 1100px) {
-  .source-select-wide .source-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (max-width: 860px) {
-  .source-select-wide .source-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-@media (max-width: 720px) {
-  .source-select-wide .source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
