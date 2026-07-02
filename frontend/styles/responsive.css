@@ -168,6 +168,20 @@
     --library-left-indicator-display: var(--resp-sidebar-indicator-hidden);
     --library-right-indicator-display: var(--resp-sidebar-indicator-hidden);
 
+    --explore-left-track: var(--resp-sidebar-track-hidden);
+    --explore-right-track: var(--resp-sidebar-track-hidden);
+    --explore-left-position: var(--resp-sidebar-position-hidden);
+    --explore-right-position: var(--resp-sidebar-position-hidden);
+    --explore-left-width: var(--resp-sidebar-width-hidden);
+    --explore-right-width: var(--resp-sidebar-width-hidden);
+    --explore-left-transform: var(--resp-sidebar-transform-left-hidden);
+    --explore-right-transform: var(--resp-sidebar-transform-right-hidden);
+    --explore-left-open-transform: var(--resp-sidebar-transform-open);
+    --explore-right-open-transform: var(--resp-sidebar-transform-open);
+    --explore-left-shadow: var(--resp-sidebar-shadow-hidden);
+    --explore-right-shadow: var(--resp-sidebar-shadow-hidden);
+    --explore-left-indicator-display: var(--resp-sidebar-indicator-hidden);
+    --explore-right-indicator-display: var(--resp-sidebar-indicator-hidden);
     --explore-grid-template: var(--resp-explore-recs-2col);
   }
 }
