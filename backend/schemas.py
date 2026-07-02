@@ -235,6 +235,10 @@ DEFAULT_UI: dict[str, Any] = {
         "entries_per_page": 40,
         "fix_title": True,
         "quick_actions": False,
+        "sidebars": {
+            "left": False,
+            "right": False,
+        },
         # Library table columns: two ordered groups the user assigns by dragging.
         # `standard` shows by default, `additional` is off by default; `shown` is
         # which columns actually render (standard group first, then additional).
@@ -248,6 +252,10 @@ DEFAULT_UI: dict[str, Any] = {
         "current_rows": 5,
         "planned_rows": 5,
         "completed_rows": 20,
+        "sidebars": {
+            "left": False,
+            "right": False,
+        },
         "split": 60,                      # % width of the "currently consuming" column vs "planned" (manual mode only)
         # When False (default) the split is computed adaptively on the client to
         # even out whitespace after the longest title; when True, `split` is used.
@@ -282,6 +290,10 @@ DEFAULT_UI: dict[str, Any] = {
     },
     "explore": {
         "default_medium": None,
+        "sidebars": {
+            "left": False,
+            "right": False,
+        },
         # Personalisation only orders results now: per-medium views are biased
         # by genre/origin; the aggregate "All" view adds a medium-consumption
         # bias so the user's most-consumed mediums float up. Off = neutral.

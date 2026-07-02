@@ -80,6 +80,7 @@ export default function Library({ initialFilters = {} }) {
 
   const { prefs, loaded: prefsLoaded, updateUi } = usePreferences();
   const libPrefs = prefs.library || DEFAULT_UI.library;
+  const sidebarClass = `${libPrefs.sidebars?.left ? ' always-show-left' : ''}${libPrefs.sidebars?.right ? ' always-show-right' : ''}`;
   const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
   const visibleMediumSet = useMemo(() => new Set(visibleMediums), [visibleMediums]);
 
@@ -834,7 +835,7 @@ export default function Library({ initialFilters = {} }) {
   ];
 
   return (
-    <div className="layout-3col library-layout" data-drawer={drawer}>
+    <div className={`layout-3col library-layout${sidebarClass}`} data-drawer={drawer}>
       {drawer && <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />}
 
       <div className="sidebar-hover-zone sidebar-hover-zone-left" aria-hidden="true">

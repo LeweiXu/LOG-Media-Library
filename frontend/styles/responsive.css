@@ -162,29 +162,77 @@
 
 /* ── Normal desktop (1435px-1919px) ─────────────────────────────────────── */
 @media (min-width: 1435px) and (max-width: 1919px) {
-  .dashboard-layout {
-    grid-template-columns: 0 minmax(0, 1fr) 256px;
+  .dashboard-layout .dash-pair,
+  .dashboard-layout .dash-pair-skeleton {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px 0;
   }
-  .dashboard-layout .sidebar-left {
+
+  .library-layout {
+    grid-template-columns: 210px minmax(0, 1fr) 0;
+  }
+  .library-layout .sidebar-right {
     position: fixed;
     top: 40px;
+    right: 0;
     bottom: 0;
-    left: 0;
     width: 300px;
     max-width: 84vw;
     z-index: 95;
-    transform: translateX(-100%);
+    transform: translateX(100%);
     box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
     transition: transform 0.18s ease;
   }
-  .dashboard-layout .sidebar-hover-zone-left { display: block; }
-  .dashboard-layout .sidebar-hover-zone-left:hover + .sidebar-left,
-  .dashboard-layout .sidebar-left:hover {
+  .library-layout .sidebar-hover-zone-right { display: block; }
+  .library-layout .sidebar-hover-zone-right:hover + .sidebar-right,
+  .library-layout .sidebar-right:hover {
     transform: translateX(0);
   }
 
   .explore-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Manual desktop sidebar overrides ──────────────────────────────────── */
+@media (min-width: 901px) and (max-width: 1434px) {
+  .dashboard-layout.always-show-left {
+    grid-template-columns: 210px minmax(0, 1fr) 256px;
+  }
+
+  .library-layout.always-show-left:not(.always-show-right),
+  .explore-layout.always-show-left:not(.always-show-right) {
+    grid-template-columns: 210px minmax(0, 1fr) 0;
+  }
+  .library-layout.always-show-right:not(.always-show-left),
+  .explore-layout.always-show-right:not(.always-show-left) {
+    grid-template-columns: 0 minmax(0, 1fr) 256px;
+  }
+  .library-layout.always-show-left.always-show-right,
+  .explore-layout.always-show-left.always-show-right {
+    grid-template-columns: 210px minmax(0, 1fr) 256px;
+  }
+}
+
+@media (min-width: 1435px) and (max-width: 1919px) {
+  .library-layout.always-show-right {
+    grid-template-columns: 210px minmax(0, 1fr) 256px;
+  }
+}
+
+@media (min-width: 901px) {
+  .always-show-left .sidebar-left,
+  .always-show-right .sidebar-right {
+    position: static;
+    width: auto;
+    max-width: none;
+    transform: none;
+    box-shadow: none;
+    transition: none;
+  }
+  .always-show-left .sidebar-hover-zone-left,
+  .always-show-right .sidebar-hover-zone-right {
+    display: none !important;
   }
 }
 
@@ -314,9 +362,7 @@
   .media-table[data-mobile-show~="updated"]     th.col-updated,
   .media-table[data-mobile-show~="updated"]     td.col-updated,
   .media-table[data-mobile-show~="completed"]   th.col-completed,
-  .media-table[data-mobile-show~="completed"]   td.col-completed,
-  .media-table[data-mobile-show~="custom_list"] th.col-custom-list,
-  .media-table[data-mobile-show~="custom_list"] td.col-custom-list {
+  .media-table[data-mobile-show~="completed"]   td.col-completed {
     display: table-cell;
   }
   .media-table th, .media-table td { padding: 6px 4px; }

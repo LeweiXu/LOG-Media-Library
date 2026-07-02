@@ -8,7 +8,7 @@ import AddEntryModal from './components/AddEntryModal.jsx';
 import AddEntryPanel from './components/AddEntryPanel.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { useExtensionPresent, extensionGoodreadsExplore, extensionNuExplore, mergeResults } from '../extensionBridge.js';
-import { usePreferences } from '../preferences.jsx';
+import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it on a reroll.
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
@@ -152,9 +152,11 @@ export default function Explore() {
   const extPresent = useExtensionPresent();
 
   const { prefs } = usePreferences();
+  const expPrefs = prefs.explore || DEFAULT_UI.explore;
+  const sidebarClass = `${expPrefs.sidebars?.left ? ' always-show-left' : ''}${expPrefs.sidebars?.right ? ' always-show-right' : ''}`;
   const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
   const visibleMediumSet = useMemo(() => new Set(visibleMediums), [visibleMediums]);
-  const personalize = prefs?.explore?.personalize !== false;
+  const personalize = expPrefs.personalize !== false;
 
   const thisMediumRerolling = !!medium && rerollingMediums.has(medium);
 
@@ -437,7 +439,7 @@ export default function Explore() {
   }
 
   return (
-    <div className="layout-3col explore-layout" data-drawer={drawer}>
+    <div className={`layout-3col explore-layout${sidebarClass}`} data-drawer={drawer}>
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
       )}

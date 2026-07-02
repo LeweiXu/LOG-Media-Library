@@ -376,6 +376,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   const visibleMediumSet = new Set(visibleMediums);
   const dashFixed = table => dash.fixed_tables?.[table] ?? DEFAULT_UI.dashboard.fixed_tables[table];
   const dashManualSplit = dash.manual_split ?? DEFAULT_UI.dashboard.manual_split;
+  const sidebarOn = (section, side) => ui[section]?.sidebars?.[side] ?? DEFAULT_UI[section].sidebars[side];
 
   // ── Library tools state ──
   const extPresent = useExtensionPresent();
@@ -443,6 +444,9 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
 
   function toggleDashFluid(table) {
     saveUi({ dashboard: { fixed_tables: { [table]: !dashFixed(table) } } });
+  }
+  function toggleSidebar(section, side) {
+    saveUi({ [section]: { sidebars: { [side]: !sidebarOn(section, side) } } });
   }
 
   async function exportCSV() {
@@ -875,6 +879,12 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               <ChipToggle label="Recently Completed" on={!dashFixed('completed')} onClick={() => toggleDashFluid('completed')} />
             </div>
           </Row>
+          <Row title="Always show sidebars" desc="Override automatic desktop sidebar hiding on the Dashboard page." stack>
+            <div className="settings-chip-row">
+              <ChipToggle label="Left sidebar" on={sidebarOn('dashboard', 'left')} onClick={() => toggleSidebar('dashboard', 'left')} />
+              <ChipToggle label="Right sidebar" on={sidebarOn('dashboard', 'right')} onClick={() => toggleSidebar('dashboard', 'right')} />
+            </div>
+          </Row>
           <Row title="Current columns" desc="Drag to reorder · click to toggle." stack>
             <ColumnOrderEditor cols={DASH_COLS} selected={dashColSel('current')}
               onChange={next => setColumns('dashboard', 'current', next)} />
@@ -919,6 +929,12 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
             <div className="settings-chip-row">
               <ChipToggle label="Fluid Table" on={!lib.fix_title} onClick={() => saveUi({ library: { fix_title: !lib.fix_title } })} />
               <ChipToggle label="Quick Actions" on={!!lib.quick_actions} onClick={() => saveUi({ library: { quick_actions: !lib.quick_actions } })} />
+            </div>
+          </Row>
+          <Row title="Always show sidebars" desc="Override automatic desktop sidebar hiding on the Library page." stack>
+            <div className="settings-chip-row">
+              <ChipToggle label="Left sidebar" on={sidebarOn('library', 'left')} onClick={() => toggleSidebar('library', 'left')} />
+              <ChipToggle label="Right sidebar" on={sidebarOn('library', 'right')} onClick={() => toggleSidebar('library', 'right')} />
             </div>
           </Row>
           <Row title="Columns"
@@ -970,6 +986,12 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
               <ChipToggle label="Hide owned" on={exp.hide_in_library !== false}
                 onClick={() => saveUi({ explore: { hide_in_library: !(exp.hide_in_library !== false) } })}
                 title="Hide titles already in your library" />
+            </div>
+          </Row>
+          <Row title="Always show sidebars" desc="Override automatic desktop sidebar hiding on the Explore page." stack>
+            <div className="settings-chip-row">
+              <ChipToggle label="Left sidebar" on={sidebarOn('explore', 'left')} onClick={() => toggleSidebar('explore', 'left')} />
+              <ChipToggle label="Right sidebar" on={sidebarOn('explore', 'right')} onClick={() => toggleSidebar('explore', 'right')} />
             </div>
           </Row>
         </Section>

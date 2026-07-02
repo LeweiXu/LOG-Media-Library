@@ -90,6 +90,7 @@ function CoverThumb({ url, title }) {
 export default function DashboardAlt({ onFilterChange }) {
   const { prefs } = usePreferences();
   const dash = prefs.dashboard || DEFAULT_UI.dashboard;
+  const sidebarClass = `${dash.sidebars?.left ? ' always-show-left' : ''}${dash.sidebars?.right ? ' always-show-right' : ''}`;
   const [stats,           setStats]           = useState(null);
   const [current,         setCurrent]         = useState([]);
   const [planned,         setPlanned]         = useState([]);
@@ -379,7 +380,7 @@ export default function DashboardAlt({ onFilterChange }) {
   }
 
   return (
-    <div className="layout-3col dashboard-layout" data-drawer={drawer}>
+    <div className={`layout-3col dashboard-layout${sidebarClass}`} data-drawer={drawer}>
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
       )}

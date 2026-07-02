@@ -71,7 +71,7 @@
                             Raise ⇒ columns stay tight until the table is wider.
         --col-gap-max     : hard per-gap ceiling so it never gets absurd.
      (--col-count / --col-data are data, not knobs — they come from the table.) */
-  --col-gap-fill: 0.5;
+  --col-gap-fill: 0.4;
   --col-gap-reserve: 200px;
   --col-gap-max: 100px;
   --fixed-table-col-gap: clamp(0px, calc(var(--col-gap-fill) * (100cqw - var(--col-gap-reserve) - var(--col-data, 0px)) / var(--col-count, 1)), var(--col-gap-max));
