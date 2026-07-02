@@ -182,18 +182,17 @@
   .stats-pie-layout .recharts-wrapper { align-self: center; }
 }
 
-/* ── Library: narrow-desktop sidebar collapse ────────────────────────────────
- * Above the ≤900px mobile breakpoint the Library's two fixed sidebars still
- * squeeze the wide table on smaller desktops. Collapse those sidebars into
- * openable drawers and give the table the full width. This is intentionally
- * kept beside the Dashboard narrow-desktop rule above so the >900px layout
- * behaviour lives in one file.
- * Scoped to .library-layout so only the Library page is affected; the ≤900px
- * block above still handles phones (drawers + column hiding). */
+/* ── Library/Explore: narrow-desktop sidebar collapse ───────────────────────
+ * Above the ≤900px mobile breakpoint these pages' two fixed sidebars squeeze
+ * the main content on smaller desktops. Collapse those sidebars into openable
+ * drawers and give the content the full width. */
 @media (min-width: 901px) and (max-width: 1434px) {
-  .library-layout { grid-template-columns: minmax(0, 1fr) !important; }
+  .library-layout,
+  .explore-layout { grid-template-columns: minmax(0, 1fr) !important; }
   .library-layout .sidebar-left,
-  .library-layout .sidebar-right {
+  .library-layout .sidebar-right,
+  .explore-layout .sidebar-left,
+  .explore-layout .sidebar-right {
     position: fixed;
     top: 40px;            /* below topbar */
     bottom: 0;
@@ -203,11 +202,18 @@
     transition: transform 0.22s ease;
     box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
   }
-  .library-layout .sidebar-left  { left: 0;  transform: translateX(-100%); border-right: 1px solid var(--border); }
-  .library-layout .sidebar-right { right: 0; transform: translateX(100%);  border-left:  1px solid var(--border); }
+  .library-layout .sidebar-left,
+  .explore-layout .sidebar-left { left: 0;  transform: translateX(-100%); border-right: 1px solid var(--border); }
+  .library-layout .sidebar-right,
+  .explore-layout .sidebar-right { right: 0; transform: translateX(100%);  border-left:  1px solid var(--border); }
   .library-layout[data-drawer="left"]  .sidebar-left  { transform: translateX(0); }
   .library-layout[data-drawer="right"] .sidebar-right { transform: translateX(0); }
+  .explore-layout[data-drawer="left"]  .sidebar-left  { transform: translateX(0); }
+  .explore-layout[data-drawer="right"] .sidebar-right { transform: translateX(0); }
   .library-layout[data-drawer="left"]  .drawer-backdrop,
-  .library-layout[data-drawer="right"] .drawer-backdrop { display: block; }
-  .library-layout .drawer-toggle { display: inline-flex; align-items: center; }
+  .library-layout[data-drawer="right"] .drawer-backdrop,
+  .explore-layout[data-drawer="left"]  .drawer-backdrop,
+  .explore-layout[data-drawer="right"] .drawer-backdrop { display: block; }
+  .library-layout .drawer-toggle,
+  .explore-layout .drawer-toggle { display: inline-flex; align-items: center; }
 }

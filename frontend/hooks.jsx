@@ -1,4 +1,25 @@
 import { useEffect, useRef } from 'react';
+import { BASE, clearBackendNetworkError, hadBackendNetworkError, markBackendNetworkError } from './api.jsx';
+
+const BACKEND_RECOVERY_TIMEOUT_MS = 5000;
+
+function timeoutSignal(ms) {
+  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(ms)
+    : undefined;
+}
+
+async function backendReachable() {
+  try {
+    const res = await fetch(`${BASE}/`, {
+      cache: 'no-store',
+      signal: timeoutSignal(BACKEND_RECOVERY_TIMEOUT_MS),
+    });
+    return res.ok || res.status < 500;
+  } catch {
+    return false;
+  }
+}
 
 // Re-run `onFocus` whenever the user returns to the app — either by switching
 // back to this browser tab (`visibilitychange`) or by refocusing the window
@@ -13,23 +34,45 @@ export function useRevalidateOnFocus(onFocus, enabled = true) {
   const cbRef = useRef(onFocus);
   cbRef.current = onFocus;
   const lastRef = useRef(0);
+  const probingRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return undefined;
-    const fire = () => {
+    const fire = async (force = false) => {
       if (document.visibilityState === 'hidden') return;
       // `focus` and `visibilitychange` can both fire for the same return; collapse
       // the burst so we don't double-fetch.
       const now = Date.now();
-      if (now - lastRef.current < 800) return;
+      if (!force && now - lastRef.current < 800) return;
       lastRef.current = now;
-      cbRef.current();
+
+      if (navigator.onLine === false) {
+        markBackendNetworkError();
+        return;
+      }
+
+      if (hadBackendNetworkError()) {
+        if (probingRef.current) return;
+        probingRef.current = true;
+        const reachable = await backendReachable();
+        probingRef.current = false;
+        if (!reachable) return;
+        clearBackendNetworkError();
+        window.location.reload();
+        return;
+      }
+
+      const ok = await cbRef.current();
+      if (ok === false) markBackendNetworkError();
     };
     const onVis = () => { if (document.visibilityState === 'visible') fire(); };
+    const onOnline = () => fire(true);
     window.addEventListener('focus', fire);
+    window.addEventListener('online', onOnline);
     document.addEventListener('visibilitychange', onVis);
     return () => {
       window.removeEventListener('focus', fire);
+      window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVis);
     };
   }, [enabled]);

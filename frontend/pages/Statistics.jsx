@@ -176,8 +176,11 @@ export default function Statistics() {
     try {
       const data = await getStats();
       setStats(data);
+      setError('');
+      return true;
     } catch (err) {
       if (!silent) setError(err.message);
+      return false;
     } finally {
       if (!silent) setLoading(false);
     }

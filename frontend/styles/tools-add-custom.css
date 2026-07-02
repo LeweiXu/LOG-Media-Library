@@ -920,6 +920,17 @@ a.quickadd-title:hover { color: var(--accent); }
 .inline-list-create.manage-list-select {
   width: 168px;
 }
+.inline-list-create.manage-list-select {
+  box-sizing: border-box;
+  align-items: stretch;
+}
+.inline-list-create.manage-list-select .inline-list-create-input {
+  flex: 1 1 auto;
+  width: auto;
+}
+.inline-list-create.manage-list-select .inline-list-create-cancel {
+  flex: 0 0 auto;
+}
 .custom-list-select-menu .custom-select-option {
   align-items: flex-start;
 }

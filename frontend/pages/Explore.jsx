@@ -437,7 +437,7 @@ export default function Explore() {
   }
 
   return (
-    <div className="layout-3col" data-drawer={drawer}>
+    <div className="layout-3col explore-layout" data-drawer={drawer}>
       {drawer && (
         <div className="drawer-backdrop" onClick={() => setDrawer('')} aria-hidden="true" />
       )}

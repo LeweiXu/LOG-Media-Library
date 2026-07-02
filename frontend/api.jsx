@@ -1,17 +1,38 @@
 export const BASE = import.meta.env.VITE_API_BASE;
 
 const getToken = () => localStorage.getItem('auth_token');
+const BACKEND_NETWORK_ERROR_KEY = 'logarium_backend_network_error';
+
+export function markBackendNetworkError() {
+  try { sessionStorage.setItem(BACKEND_NETWORK_ERROR_KEY, '1'); } catch { /* ignore */ }
+}
+
+export function clearBackendNetworkError() {
+  try { sessionStorage.removeItem(BACKEND_NETWORK_ERROR_KEY); } catch { /* ignore */ }
+}
+
+export function hadBackendNetworkError() {
+  try { return sessionStorage.getItem(BACKEND_NETWORK_ERROR_KEY) === '1'; }
+  catch { return false; }
+}
 
 async function req(path, options = {}) {
   const token = getToken();
-  const res = await fetch(`${BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-    ...options,
-  });
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+      ...options,
+    });
+  } catch (err) {
+    if (err?.name !== 'AbortError') markBackendNetworkError();
+    throw err;
+  }
+  clearBackendNetworkError();
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`${res.status} ${res.statusText}: ${text}`);

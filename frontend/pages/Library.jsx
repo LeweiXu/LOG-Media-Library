@@ -336,7 +336,7 @@ export default function Library({ initialFilters = {} }) {
       setLoading(false);
       setError('');
       prefetchNearbyPages(params, cached.total);
-      return;
+      return true;
     }
 
     if (!silent) { setLoading(true); setError(''); }
@@ -345,10 +345,13 @@ export default function Library({ initialFilters = {} }) {
       if (requestId !== loadSeqRef.current) return;
       setEntries(data.items);
       setTotal(data.total);
+      setError('');
       prefetchNearbyPages(params, data.total);
+      return true;
     } catch (e) {
       if (requestId !== loadSeqRef.current) return;
       if (!silent) setError(e.message);
+      return false;
     } finally {
       if (requestId !== loadSeqRef.current) return;
       if (!silent) setLoading(false);
@@ -409,11 +412,14 @@ export default function Library({ initialFilters = {} }) {
 
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
   // Fully silent — updates entries and list counts in place without flashing.
-  useRevalidateOnFocus(() => {
+  useRevalidateOnFocus(async () => {
     invalidateLibraryCache();
-    loadLists({ silent: true });
-    loadCounts({ silent: true });
-    load(true, { useCache: false });
+    const [ok] = await Promise.all([
+      load(true, { useCache: false }),
+      loadLists({ silent: true }),
+      loadCounts({ silent: true }),
+    ]);
+    return ok;
   });
 
   function handleSort(field) {

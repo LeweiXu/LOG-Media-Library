@@ -269,7 +269,7 @@ DEFAULT_UI: dict[str, Any] = {
         "sections": {
             "summary": True,
             "consumed": True,
-            "added": True,
+            "added": False,
             "by_medium": True,
             "completion": True,
             "backlog": True,

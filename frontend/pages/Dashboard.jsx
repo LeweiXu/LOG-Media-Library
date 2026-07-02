@@ -132,6 +132,7 @@ export default function DashboardAlt({ onFilterChange }) {
       setCurrent(currentItems);
       setPlanned(plannedItems);
       setRecent(completedItems);
+      setError('');
 
       const acts = [
         ...completedItems.slice(0, 6).map(e => ({ type: 'completed', entry: e, time: e.updated_at || e.completed_at })),
@@ -144,8 +145,10 @@ export default function DashboardAlt({ onFilterChange }) {
         .sort((a, b) => new Date(b.time) - new Date(a.time))
         .slice(0, 8);
       setActivity(acts);
+      return true;
     } catch (e) {
       if (!silent) setError(e.message);
+      return false;
     } finally {
       if (!silent) setLoading(false);
     }
@@ -463,7 +466,7 @@ export default function DashboardAlt({ onFilterChange }) {
           <div className="state-block">
             <div className="state-title">Connection Error</div>
             <div className="state-detail">{error}</div>
-            <button className="btn btn-outline state-retry-btn" onClick={load}>Retry</button>
+            <button className="btn btn-outline state-retry-btn" onClick={() => load()}>Retry</button>
           </div>
         )}
 

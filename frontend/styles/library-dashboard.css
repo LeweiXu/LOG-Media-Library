@@ -124,7 +124,7 @@
      tables sit side by side so each container is only ~half the main column and
      usually has just 2–4 columns — a higher fill + smaller reserve lets the gap
      appear generously at the narrower widths these tables actually get. */
-  --col-gap-fill: 0.3;
+  --col-gap-fill: 0.25;
   --col-gap-reserve: 150px;
   --col-gap-max: 90px;
   --fixed-table-col-gap: clamp(0px, calc(var(--col-gap-fill) * (100cqw - var(--col-gap-reserve) - var(--col-data, 0px)) / var(--col-count, 1)), var(--col-gap-max));

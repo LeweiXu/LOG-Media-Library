@@ -60,7 +60,7 @@ export const DEFAULT_UI = {
     sections: {
       summary: true,
       consumed: true,
-      added: true,
+      added: false,
       by_medium: true,
       completion: true,
       backlog: true,
