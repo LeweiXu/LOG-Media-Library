@@ -643,10 +643,7 @@ export default function Library({ initialFilters = {} }) {
   // At-a-glance figures for the right sidebar, derived from the global counts.
   const completionPct = counts._total ? Math.round((counts.completed || 0) / counts._total * 100) : 0;
 
-  const mobileShow = ({
-    title: 'status', medium: 'medium', rating: 'completed',
-    status: 'status', year: 'year', updated_at: 'updated', completed_at: 'completed',
-  })[sort] || 'status';
+  const mobileShow = sort === 'completed_at' ? 'completed' : 'rating';
   const fixedTableClass = fixTitle ? ' is-fixed-title' : '';
 
   // ── Column rendering (order from saved prefs; Title pinned separately) ──
@@ -976,7 +973,7 @@ export default function Library({ initialFilters = {} }) {
 
         {!error && !loading && entries.length > 0 && isManage && (
           <div className="table-size-scope">
-            <table className={`media-table library-table manage-entry-table${fixedTableClass}`} data-mobile-show="status"
+            <table className={`media-table library-table manage-entry-table${fixedTableClass}`} data-mobile-show={mobileShow}
               style={tableGapVars(activeCols, { actions: showActions, select: true })}>
               <thead>
                 <tr>

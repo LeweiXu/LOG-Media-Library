@@ -541,7 +541,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 {planned.length === 0
                 ? <div className="dash-empty">No planned entries.</div>
                 : (
-                    <table className={dashTableClass('planned')}
+                    <table className={dashTableClass('planned')} data-mobile-show="medium status"
                       style={tableGapVars(dashCols('planned'))}>
                     <thead>{renderHead('planned')}</thead>
                     <tbody>
