@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getCustomLists, fetchChapterCount, fetchImdbDetail } from '../../api.jsx';
 import { ORIGINS, STATUSES, statusLabel, inferSourceFromUrl, roundToStep, visibleMediumsFromPrefs } from '../../utils.jsx';
 import { usePreferences, DEFAULT_UI } from '../../preferences.jsx';
+import { extensionNuSeries } from '../../extensionBridge.js';
 import CustomListField from './CustomListField.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import NumberStepper from './NumberStepper.jsx';
@@ -113,7 +114,8 @@ export default function EntryForm({
 
   // While an on-add field is being fetched from another source we flag it so the
   // relevant input shows a "fetching…" placeholder instead of looking empty.
-  // 'total' = manga chapters / IMDb episodes; 'imdb' also fills the source rating.
+  // 'total' = manga chapters / IMDb episodes; 'imdb' also fills the source rating;
+  // 'cover' = NovelUpdates full cover URL via the extension.
   const [fetching, setFetching] = useState('');
 
   // For a MAL/Jikan manga being added with no chapter total (MAL leaves ongoing
@@ -159,6 +161,36 @@ export default function EntryForm({
       })
       .catch(() => { /* non-critical */ })
       .finally(() => { if (!cancelled) setFetching(''); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // NovelUpdates listing/search pages often expose a small listing thumbnail.
+  // When adding a NU result, ask the extension to open the series page first-
+  // party and replace it with the full cover URL before creation.
+  useEffect(() => {
+    if (isEdit) return;
+    if (entry?.source !== 'novelupdates' || !entry?.external_url) return;
+    let cancelled = false;
+    const listingCover = entry.cover_url || '';
+    setFetching('cover');
+    setFormState(f => (f.cover_url === listingCover ? { ...f, cover_url: '' } : f));
+    extensionNuSeries(entry.external_url)
+      .then(detail => {
+        const fullCover = detail?.cover_url || '';
+        if (cancelled) return;
+        setFormState(f => {
+          if (f.cover_url && f.cover_url !== listingCover) return f;
+          return { ...f, cover_url: fullCover || listingCover };
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFormState(f => (f.cover_url ? f : { ...f, cover_url: listingCover }));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setFetching('');
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -358,7 +390,7 @@ export default function EntryForm({
       <div className="form-row">
         <label className="form-label">Cover URL {diffTag('cover_url')}</label>
         <input className="form-input" value={form.cover_url}
-          placeholder="https://..."
+          placeholder={fetching === 'cover' ? 'fetching…' : 'https://...'}
           onChange={e => setField('cover_url', e.target.value)} />
       </div>
 
@@ -418,8 +450,8 @@ export default function EntryForm({
         </div>
         <div className="entry-form-primary-actions">
           {onCancel && <button type="button" className="btn btn-outline" onClick={onCancel}>{cancelLabel}</button>}
-          <button type="submit" className="btn" disabled={saving}>
-            {saving ? savingLabel : submitLabel || (isEdit ? 'Save' : 'Add Entry')}
+          <button type="submit" className="btn" disabled={saving || fetching === 'cover'}>
+            {saving ? savingLabel : fetching === 'cover' ? 'fetching...' : submitLabel || (isEdit ? 'Save' : 'Add Entry')}
           </button>
         </div>
       </div>

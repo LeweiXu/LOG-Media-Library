@@ -114,7 +114,10 @@ export function extensionGoodreadsExplore(genre, timeoutMs = 25000) {
 
 let _nuExpReqId = 0;
 
-export function extensionNuExplore(rank = '', timeoutMs = 30000) {
+export function extensionNuExplore(options = {}, timeoutMs = 45000) {
+  const { rank = '', seed = 0, limit = 30 } = typeof options === 'string'
+    ? { rank: options }
+    : (options || {});
   if (!extensionPresent()) return Promise.resolve([]);
   return new Promise((resolve) => {
     const id = ++_nuExpReqId;
@@ -128,7 +131,35 @@ export function extensionNuExplore(rank = '', timeoutMs = 30000) {
       resolve(d.ok && Array.isArray(d.results) ? d.results : []);
     }
     window.addEventListener('message', onMsg);
-    post({ type: 'exploreNu', id, rank: rank || '', token: localStorage.getItem('auth_token'), apiBase: BASE });
+    post({
+      type: 'exploreNu', id, rank: rank || '', seed, limit,
+      token: localStorage.getItem('auth_token'), apiBase: BASE,
+    });
+  });
+}
+
+// ── NovelUpdates series detail (full cover upgrade) ──────────────────────────
+
+let _nuSeriesReqId = 0;
+
+export function extensionNuSeries(url, timeoutMs = 30000) {
+  if (!extensionPresent() || !url) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const id = ++_nuSeriesReqId;
+    const cleanup = () => { clearTimeout(timer); window.removeEventListener('message', onMsg); };
+    const timer = setTimeout(() => { cleanup(); resolve(null); }, timeoutMs);
+    function onMsg(e) {
+      if (e.source !== window) return;
+      const d = e.data;
+      if (!d || d.logarium !== true || d.dir !== 'fromExt' || d.type !== 'nuSeriesResult' || d.id !== id) return;
+      cleanup();
+      resolve(d.ok && d.entry ? d.entry : null);
+    }
+    window.addEventListener('message', onMsg);
+    post({
+      type: 'nuSeries', id, url,
+      token: localStorage.getItem('auth_token'), apiBase: BASE,
+    });
   });
 }
 

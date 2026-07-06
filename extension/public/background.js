@@ -52,9 +52,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Cloudflare-blocked server-side) and return parsed recommendation items,
   // caching each (cross-site-403) cover so it displays on the website.
   if (msg && msg.type === 'exploreNu') {
-    exploreNovelUpdates(msg.rank, msg.token, msg.apiBase)
+    exploreNovelUpdates(msg.rank, msg.token, msg.apiBase, msg.seed, msg.limit)
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'explore failed' }));
+    return true;
+  }
+  // NovelUpdates detail upgrade: open a series page first-party and return the
+  // full-resolution cover URL from the series page before the website creates
+  // an entry from a listing-page recommendation.
+  if (msg && msg.type === 'nuSeries' && msg.url) {
+    scrapeNovelUpdatesSeries(msg.url, msg.token, msg.apiBase)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'series scrape failed' }));
     return true;
   }
   // ── Overlay-mode delegation ──
@@ -454,11 +463,55 @@ async function searchNovelUpdates(query, token, apiBase) {
   return { ok: true, results };
 }
 
-// NovelUpdates Explore: open a Top-Series ranking in a background tab, scrape
-// the same `.search_main_box_nu` listing as the Series Finder (so synopsis +
-// covers come through), and cache covers first-party. `rank` selects the NU
-// ranking (popmonth / sixmonths / popular); defaults to this month's popular.
-async function exploreNovelUpdates(rank, token, apiBase) {
+// NovelUpdates Explore: mirror the backend discovery loop. It shuffles logical
+// pages 1..10 using the reroll seed, maps those pages to NU ranking modes, opens
+// each ranking first-party in the background, de-dupes by title|medium, and
+// stops once enough unique recommendations have been collected.
+async function exploreNovelUpdates(rank, token, apiBase, seed, limit) {
+  const target = Math.max(Number(limit) || 30, 30);
+  const ranks = rank ? [rank] : shuffledNuRanks(seed);
+  const combined = [];
+  const seen = new Set();
+
+  for (const r of ranks) {
+    const results = await scrapeNovelUpdatesRanking(r);
+    for (const item of results) {
+      const key = `${(item.title || '').toLowerCase().trim()}|${item.medium || ''}`;
+      if (!key.trim() || seen.has(key)) continue;
+      seen.add(key);
+      combined.push(item);
+      if (combined.length >= target) break;
+    }
+    if (combined.length >= target) break;
+  }
+
+  // Cache covers first-party so the cross-site 403 falls back to our cached copy.
+  if (token && apiBase && combined.length) {
+    await cacheCoversBatch(combined.map((r2) => r2.cover_url).filter(Boolean), token, apiBase);
+  }
+  return { ok: true, results: combined };
+}
+
+function shuffledNuRanks(seed) {
+  const pages = Array.from({ length: 10 }, (_, i) => i + 1);
+  const rng = mulberry32(Number(seed) >>> 0);
+  for (let i = pages.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pages[i], pages[j]] = [pages[j], pages[i]];
+  }
+  return pages.map(page => page === 2 ? 'sixmonths' : page === 3 ? 'popular' : 'popmonth');
+}
+
+function mulberry32(seed) {
+  return function next() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+async function scrapeNovelUpdatesRanking(rank) {
   const r = ['popmonth', 'sixmonths', 'popular'].includes(rank) ? rank : 'popmonth';
   const url = `https://www.novelupdates.com/series-ranking/?rank=${r}`;
   const tab = await chrome.tabs.create({ url, active: false });
@@ -479,11 +532,7 @@ async function exploreNovelUpdates(rank, token, apiBase) {
     try { await chrome.tabs.remove(tab.id); } catch { /* ignore */ }
   }
 
-  // Cache covers first-party so the cross-site 403 falls back to our cached copy.
-  if (token && apiBase && results.length) {
-    await cacheCoversBatch(results.map((r2) => r2.cover_url).filter(Boolean), token, apiBase);
-  }
-  return { ok: true, results };
+  return results;
 }
 
 // Cache a batch of covers concurrently. All NU search covers share one host, so
@@ -550,7 +599,7 @@ function scrapeNuSearchResults() {
   };
 
   const results = [];
-  for (const box of Array.from(document.querySelectorAll('div.search_main_box_nu')).slice(0, 15)) {
+  for (const box of Array.from(document.querySelectorAll('div.search_main_box_nu')).slice(0, 20)) {
     const titleA = box.querySelector('div.search_title a');
     if (!titleA) continue;
     const title = titleA.textContent.trim();          // textContent decodes &#8211; etc.
@@ -747,6 +796,17 @@ async function scrapeInTab(url, isCancelled) {
     try { await chrome.tabs.remove(tab.id); } catch { /* ignore */ }
   }
   return null;
+}
+
+async function scrapeNovelUpdatesSeries(url, token, apiBase) {
+  const entry = await scrapeInTab(url);
+  if (entry && entry.cover_url && token && apiBase) {
+    try {
+      const cover = await fetchCoverData(entry.cover_url);
+      if (cover.ok) await apiUploadCover(apiBase, token, entry.cover_url, cover.blob);
+    } catch { /* cover caching is best-effort; the URL is still useful */ }
+  }
+  return entry ? { ok: true, entry } : { ok: false, reason: 'nofind' };
 }
 
 // Self-contained NovelUpdates series-page scraper, injected into the page world

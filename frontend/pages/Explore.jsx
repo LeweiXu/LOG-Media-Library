@@ -63,8 +63,9 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
   if (rerollTasks[targetMedium]) return rerollTasks[targetMedium];
   rerollStartedAt[targetMedium] = Date.now();
   const task = (async () => {
+    const seed = newSeed();
     const data = await getExplore({
-      medium: targetMedium, limit: EXPLORE_FETCH_LIMIT, seed: newSeed(), refresh: true, sources: want,
+      medium: targetMedium, limit: EXPLORE_FETCH_LIMIT, seed, refresh: true, sources: want,
     });
     let entry = cacheEntryFromData(data, want, personalize);
     // Cloudflare/WAF-blocked sources can come back empty server-side; if the
@@ -81,7 +82,7 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
       } else if (targetMedium === 'Web Novel' && want.includes('novelupdates')) {
         const nuMissing = !recs.some(it => it.source === 'novelupdates');
         if (data.reroll_failed || nuMissing) {
-          extra = await extensionNuExplore();
+          extra = await extensionNuExplore({ seed, limit: EXPLORE_FETCH_LIMIT });
           if (extra.length) {
             entry = data.reroll_failed
               ? { ...entry, items: extra, rerollFailed: false, rerollError: '' }
