@@ -463,27 +463,29 @@ async function searchNovelUpdates(query, token, apiBase) {
   return { ok: true, results };
 }
 
-// NovelUpdates Explore: mirror the backend discovery loop. It shuffles logical
-// pages 1..10 using the reroll seed, maps those pages to NU ranking modes, opens
-// each ranking first-party in the background, de-dupes by title|medium, and
-// stops once enough unique recommendations have been collected.
+// NovelUpdates Explore: build a broad pool of ranking pages (5 rank modes × 10
+// pages), sample it with a bias toward smaller page numbers, scrape at most
+// three tabs at once, de-dupe by title|medium, and stop once enough unique
+// recommendations have been collected.
 async function exploreNovelUpdates(rank, token, apiBase, seed, limit) {
   const target = Math.max(Number(limit) || 30, 30);
-  const ranks = rank ? [rank] : shuffledNuRanks(seed);
+  const candidates = rank
+    ? [{ rank, page: 1 }]
+    : sampleNuRankingPages(seed, Math.min(50, Math.max(12, Math.ceil(target / 4))));
   const combined = [];
   const seen = new Set();
 
-  for (const r of ranks) {
-    const results = await scrapeNovelUpdatesRanking(r);
+  await runLimited(candidates, 3, async ({ rank: r, page }) => {
+    if (combined.length >= target) return;
+    const results = await scrapeNovelUpdatesRanking(r, page);
     for (const item of results) {
+      if (combined.length >= target) return;
       const key = `${(item.title || '').toLowerCase().trim()}|${item.medium || ''}`;
       if (!key.trim() || seen.has(key)) continue;
       seen.add(key);
       combined.push(item);
-      if (combined.length >= target) break;
     }
-    if (combined.length >= target) break;
-  }
+  });
 
   // Cache covers first-party so the cross-site 403 falls back to our cached copy.
   if (token && apiBase && combined.length) {
@@ -492,14 +494,32 @@ async function exploreNovelUpdates(rank, token, apiBase, seed, limit) {
   return { ok: true, results: combined };
 }
 
-function shuffledNuRanks(seed) {
-  const pages = Array.from({ length: 10 }, (_, i) => i + 1);
+function sampleNuRankingPages(seed, count) {
+  const ranks = ['week', 'month', 'popmonth', 'sixmonths', 'popular'];
   const rng = mulberry32(Number(seed) >>> 0);
-  for (let i = pages.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [pages[i], pages[j]] = [pages[j], pages[i]];
+  const pool = [];
+  for (const rank of ranks) {
+    for (let page = 1; page <= 10; page++) {
+      // Exponential-key weighted sample without replacement. Lower pages get a
+      // larger weight, but every rank/page remains reachable.
+      const weight = 1 / Math.pow(page, 1.35);
+      pool.push({ rank, page, key: -Math.log(Math.max(rng(), Number.EPSILON)) / weight });
+    }
   }
-  return pages.map(page => page === 2 ? 'sixmonths' : page === 3 ? 'popular' : 'popmonth');
+  pool.sort((a, b) => a.key - b.key);
+  return pool.slice(0, count).map(({ rank, page }) => ({ rank, page }));
+}
+
+async function runLimited(items, concurrency, worker) {
+  let index = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    for (;;) {
+      const current = items[index++];
+      if (!current) return;
+      await worker(current);
+    }
+  });
+  await Promise.all(runners);
 }
 
 function mulberry32(seed) {
@@ -511,9 +531,10 @@ function mulberry32(seed) {
   };
 }
 
-async function scrapeNovelUpdatesRanking(rank) {
-  const r = ['popmonth', 'sixmonths', 'popular'].includes(rank) ? rank : 'popmonth';
-  const url = `https://www.novelupdates.com/series-ranking/?rank=${r}`;
+async function scrapeNovelUpdatesRanking(rank, page = 1) {
+  const r = ['week', 'month', 'popmonth', 'sixmonths', 'popular'].includes(rank) ? rank : 'popmonth';
+  const pg = Math.max(1, Math.min(Number(page) || 1, 10));
+  const url = `https://www.novelupdates.com/series-ranking/?rank=${r}&pg=${pg}`;
   const tab = await chrome.tabs.create({ url, active: false });
   let results = [];
   try {

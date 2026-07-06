@@ -224,7 +224,11 @@ async def _call_discover_provider(
     medium: str,
     top_genres: list[str],
     page: int,
+    seed: Optional[int] = None,
+    target_visible: int = _MIN_RECOMMENDATIONS_PER_MEDIUM,
 ) -> list[ExploreItem]:
+    if fn is _discover_novelupdates:
+        return await fn(client, medium, page, seed=seed, target=target_visible)
     if fn in (_discover_google_books, _discover_goodreads, _discover_imdb):
         return await fn(client, medium, top_genres, page)
     return await fn(client, medium, page)
@@ -345,7 +349,10 @@ async def _discover_medium_capturing(
 
         for page in pages:
             try:
-                items = await _call_discover_provider(fn, client, medium, top_genres, page)
+                items = await _call_discover_provider(
+                    fn, client, medium, top_genres, page,
+                    seed=rng.getrandbits(32), target_visible=target_visible,
+                )
             except Exception as exc:
                 logger.warning("Explore provider exception for %s: %s", medium, exc)
                 if first_error is None:

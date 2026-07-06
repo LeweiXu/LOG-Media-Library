@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import random
 import re
 from typing import Optional
 from urllib.parse import urlparse
@@ -220,16 +221,39 @@ async def search_novelupdates(
         return []
 
 
-# Page index → which "Top Series" ranking URL to scrape. Cycling these on
-# Refresh gives the user a different mix instead of the same 25 titles.
-_NU_RANK_BY_PAGE = {1: "popmonth", 2: "sixmonths", 3: "popular"}
+_NU_EXPLORE_RANKS = ("week", "month", "popmonth", "sixmonths", "popular")
+_NU_EXPLORE_MAX_PAGE = 10
+_NU_EXPLORE_CONCURRENCY = 3
 
 
-async def _discover_novelupdates(client, medium: str, page: int = 1):
+def _sample_nu_ranking_pages(seed: Optional[int], count: int) -> list[tuple[str, int]]:
+    """Weighted sample of NU ranking pages, biased toward smaller page numbers."""
+    rng = random.Random(seed)
+    pool: list[tuple[float, str, int]] = []
+    for rank in _NU_EXPLORE_RANKS:
+        for pg in range(1, _NU_EXPLORE_MAX_PAGE + 1):
+            # Exponential-key weighted sampling without replacement. Lower pages
+            # have more weight, but every rank/page remains reachable.
+            weight = 1 / (pg ** 1.35)
+            pool.append((rng.expovariate(weight), rank, pg))
+    pool.sort(key=lambda x: x[0])
+    return [(rank, pg) for _, rank, pg in pool[:count]]
+
+
+async def _discover_novelupdates(
+    client,
+    medium: str,
+    page: int = 1,
+    *,
+    seed: Optional[int] = None,
+    target: int = 30,
+):
     """Scrape NovelUpdates' Top Series rankings as Explore candidates.
 
     NU has no public API, so we go through the same Cloudflare-bypass path
     as ``search_novelupdates`` (curl_cffi in a thread, since it's blocking).
+    Discovery samples from 5 rank modes × 10 pages with a bias toward lower
+    page numbers, then fetches at most three pages concurrently.
     Returns ExploreItems for the Web Novel medium only.
     """
     # Local imports — keep ExploreItem off the search-provider import path.
@@ -240,17 +264,96 @@ async def _discover_novelupdates(client, medium: str, page: int = 1):
     if medium != "Web Novel":
         return []
 
-    rank = _NU_RANK_BY_PAGE.get(page, "popmonth")
     url = "https://www.novelupdates.com/series-ranking/"
-    params = {"rank": rank}
+    sample_count = min(50, max(12, (max(target, 1) + 3) // 4))
+    candidates = _sample_nu_ranking_pages(seed if seed is not None else page, sample_count)
 
-    def _do_scrape() -> list[ExploreItem]:
+    def _parse_box(box) -> Optional[ExploreItem]:
+        title_tag = box.select_one("div.search_title a")
+        if not title_tag:
+            return None
+        display_title = title_tag.get_text(strip=True)
+        series_url = title_tag.get("href") or None
+
+        sid_span = box.select_one('span.rl_icons_en[id^="sid"]')
+        series_id = sid_span.get("id", "")[3:] if sid_span else ""
+        if not series_id and series_url:
+            series_id = series_url.rstrip("/").split("/")[-1]
+
+        img = box.select_one("div.search_img_nu img")
+        cover_url: Optional[str] = None
+        if img:
+            src = img.get("src") or img.get("data-src") or ""
+            cover_url = _normalise_cover_url(src)
+
+        chapters: Optional[int] = None
+        last_updated: Optional[str] = None
+        for stat_span in box.select("span.ss_desk"):
+            icon = stat_span.select_one("i[title]")
+            if not icon:
+                continue
+            icon_title = icon.get("title", "")
+            stat_text = stat_span.get_text(strip=True)
+            if icon_title == "Chapter Count":
+                m = re.search(r"(\d+)", stat_text)
+                if m:
+                    chapters = int(m.group(1))
+            elif icon_title == "Last Updated":
+                m = re.search(r"(\d{2}-\d{2}-\d{4})", stat_text)
+                if m:
+                    last_updated = m.group(1)
+
+        genres: list[str] = []
+        for genre_link in box.select(".search_genre a[href*='/genre/']"):
+            g = _genre_from_href(genre_link.get("href", ""))
+            if g:
+                genres.append(g)
+
+        origin_code = box.select_one(".search_ratings span")
+        origin = (
+            _NU_ORIGIN_MAP.get(origin_code.get_text(strip=True).upper())
+            if origin_code else None
+        )
+        ratings_box = box.select_one(".search_ratings")
+        external_rating = (
+            _external_rating_from_text(ratings_box.get_text(" ", strip=True))
+            if ratings_box else None
+        )
+
+        year: Optional[int] = None
+        if last_updated:
+            m = re.search(r"(\d{4})$", last_updated)
+            if m:
+                year = int(m.group(1))
+
+        description = _synopsis_from_box(box)
+        if not description and genres:
+            description = "Genres: " + ", ".join(genres)
+
+        return ExploreItem(
+            title=display_title,
+            medium="Web Novel",
+            origin=origin,
+            year=year,
+            cover_url=cover_url,
+            total=chapters,
+            external_id=series_id,
+            source="novelupdates",
+            description=description,
+            external_url=series_url,
+            genres=", ".join(genres) or None,
+            external_rating=external_rating,
+        )
+
+    def _do_scrape(rank: str, pg: int) -> list[ExploreItem]:
         try:
-            r = cffi_requests.get(url, params=params, timeout=15, impersonate="chrome")
+            r = cffi_requests.get(
+                url, params={"rank": rank, "pg": pg}, timeout=15, impersonate="chrome"
+            )
             if r.status_code == 403 or r.headers.get("cf-mitigated") == "challenge":
                 logger.warning(
                     "NovelUpdates discover blocked by Cloudflare challenge "
-                    "(HTTP %s) — skipping.", r.status_code,
+                    "(rank=%s pg=%s HTTP %s) — skipping.", rank, pg, r.status_code,
                 )
                 return []
             r.raise_for_status()
@@ -262,87 +365,39 @@ async def _discover_novelupdates(client, medium: str, page: int = 1):
         out: list[ExploreItem] = []
 
         for box in soup.select("div.search_main_box_nu")[:20]:
-            title_tag = box.select_one("div.search_title a")
-            if not title_tag:
-                continue
-            display_title = title_tag.get_text(strip=True)
-            series_url = title_tag.get("href") or None
-
-            sid_span = box.select_one('span.rl_icons_en[id^="sid"]')
-            series_id = sid_span.get("id", "")[3:] if sid_span else ""
-            if not series_id and series_url:
-                series_id = series_url.rstrip("/").split("/")[-1]
-
-            img = box.select_one("div.search_img_nu img")
-            cover_url: Optional[str] = None
-            if img:
-                src = img.get("src") or img.get("data-src") or ""
-                cover_url = _normalise_cover_url(src)
-
-            chapters: Optional[int] = None
-            last_updated: Optional[str] = None
-            for stat_span in box.select("span.ss_desk"):
-                icon = stat_span.select_one("i[title]")
-                if not icon:
-                    continue
-                icon_title = icon.get("title", "")
-                stat_text = stat_span.get_text(strip=True)
-                if icon_title == "Chapter Count":
-                    m = re.search(r"(\d+)", stat_text)
-                    if m:
-                        chapters = int(m.group(1))
-                elif icon_title == "Last Updated":
-                    m = re.search(r"(\d{2}-\d{2}-\d{4})", stat_text)
-                    if m:
-                        last_updated = m.group(1)
-
-            genres: list[str] = []
-            for genre_link in box.select(".search_genre a[href*='/genre/']"):
-                g = _genre_from_href(genre_link.get("href", ""))
-                if g:
-                    genres.append(g)
-
-            origin_code = box.select_one(".search_ratings span")
-            origin = (
-                _NU_ORIGIN_MAP.get(origin_code.get_text(strip=True).upper())
-                if origin_code else None
-            )
-            ratings_box = box.select_one(".search_ratings")
-            external_rating = (
-                _external_rating_from_text(ratings_box.get_text(" ", strip=True))
-                if ratings_box else None
-            )
-
-            year: Optional[int] = None
-            if last_updated:
-                m = re.search(r"(\d{4})$", last_updated)
-                if m:
-                    year = int(m.group(1))
-
-            description = _synopsis_from_box(box)
-            if not description and genres:
-                description = "Genres: " + ", ".join(genres)
-
-            out.append(ExploreItem(
-                title=display_title,
-                medium="Web Novel",
-                origin=origin,
-                year=year,
-                cover_url=cover_url,
-                total=chapters,
-                external_id=series_id,
-                source="novelupdates",
-                description=description,
-                external_url=series_url,
-                genres=", ".join(genres) or None,
-                external_rating=external_rating,
-            ))
+            item = _parse_box(box)
+            if item:
+                out.append(item)
 
         return out
 
+    async def _fetch_one(rank: str, pg: int) -> list[ExploreItem]:
+        async with sem:
+            return await loop.run_in_executor(None, _do_scrape, rank, pg)
+
     loop = asyncio.get_event_loop()
+    sem = asyncio.Semaphore(_NU_EXPLORE_CONCURRENCY)
     try:
-        return await loop.run_in_executor(None, _do_scrape)
+        groups = await asyncio.gather(
+            *(_fetch_one(rank, pg) for rank, pg in candidates),
+            return_exceptions=True,
+        )
     except Exception as exc:
         logger.warning("NovelUpdates discover executor error: %s", exc)
         return []
+
+    combined: list[ExploreItem] = []
+    seen: set[tuple[str, str]] = set()
+    for group in groups:
+        if isinstance(group, Exception):
+            logger.warning("NovelUpdates discover page error: %s", group)
+            continue
+        for item in group:
+            key = (item.title.lower().strip(), item.medium or "")
+            if not key[0] or key in seen:
+                continue
+            seen.add(key)
+            combined.append(item)
+            if len(combined) >= target:
+                return combined
+    return combined
