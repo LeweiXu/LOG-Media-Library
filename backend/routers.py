@@ -17,7 +17,7 @@ from schemas import (
     UserCreate, UserRead, Token, ChangePassword,
     UserSettings, UserSettingsUpdate,
     DuplicateCheckRequest, DuplicateCheckResponse,
-    ExploreResponse,
+    ExploreCacheWriteRequest, ExploreResponse,
     deep_merge, deep_merge_ui,
 )
 from services import entry_service
@@ -31,7 +31,8 @@ from services.export_service import export_entries_csv
 from services.import_service import preview_import, confirm_import, auto_import_rows
 from services.import_mal_service import import_mal_rows, confirm_mal_import
 from services.explore_service import (
-    reroll_medium, read_medium, read_all, clear_failed, ALL_MEDIUMS,
+    reroll_medium, read_medium, read_all, clear_failed, write_external_success,
+    ALL_MEDIUMS,
 )
 from services.backup_service import run_backup_for_user
 from services.email_service import SMTPNotConfigured
@@ -549,6 +550,29 @@ def explore_restore(
     return clear_failed(
         db, username=current_user.username, medium=medium,
         sources=source_set, personalize=_explore_personalize(current_user),
+    )
+
+
+@router.post("/explore/cache", response_model=ExploreResponse)
+def explore_cache_write(
+    payload: ExploreCacheWriteRequest,
+    sources: str = Query("", description="Comma-separated available sources to draw from"),
+    limit:   int = Query(120, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Persist successful client/extension fallback results for a medium."""
+    if payload.medium not in ALL_MEDIUMS:
+        raise HTTPException(status_code=400, detail="Unknown medium")
+    source_set = {s for s in (sources or "").split(",") if s} or None
+    return write_external_success(
+        db,
+        username=current_user.username,
+        medium=payload.medium,
+        items=payload.items,
+        sources=source_set,
+        personalize=_explore_personalize(current_user),
+        limit=limit,
     )
 
 # ── Backup endpoints ──────────────────────────────────────────────────────────

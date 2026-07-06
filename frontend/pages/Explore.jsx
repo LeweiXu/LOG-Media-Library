@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getExplore, restoreExplore } from '../api.jsx';
+import { getExplore, restoreExplore, writeExploreCache } from '../api.jsx';
 import { MEDIUMS, statusLabel, onCoverError, visibleMediumsFromPrefs } from '../utils.jsx';
 import { loadAvailableSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
@@ -84,9 +84,18 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
         if (data.reroll_failed || nuMissing) {
           extra = await extensionNuExplore({ seed, limit: EXPLORE_FETCH_LIMIT });
           if (extra.length) {
-            entry = data.reroll_failed
-              ? { ...entry, items: extra, rerollFailed: false, rerollError: '' }
-              : { ...entry, items: mergeResults(entry.items, extra) };
+            const items = data.reroll_failed ? extra : mergeResults(entry.items, extra);
+            try {
+              const persisted = await writeExploreCache({
+                medium: targetMedium,
+                items,
+                sources: want,
+                limit: EXPLORE_FETCH_LIMIT,
+              });
+              entry = cacheEntryFromData(persisted, want, personalize);
+            } catch {
+              entry = { ...entry, items, rerollFailed: false, rerollError: '' };
+            }
           }
         }
       }

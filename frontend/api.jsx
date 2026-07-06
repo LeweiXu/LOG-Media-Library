@@ -431,3 +431,14 @@ export const restoreExplore = (medium, sources) => {
   const qs = new URLSearchParams(params).toString();
   return req(`/explore/restore?${qs}`, { method: 'POST' });
 };
+
+export const writeExploreCache = ({ medium, items, sources, limit } = {}) => {
+  const params = {};
+  if (Array.isArray(sources) && sources.length) params.sources = sources.join(',');
+  if (limit) params.limit = String(limit);
+  const qs = new URLSearchParams(params).toString();
+  return req(`/explore/cache${qs ? '?' + qs : ''}`, {
+    method: 'POST',
+    body: JSON.stringify({ medium, items: Array.isArray(items) ? items : [] }),
+  });
+};

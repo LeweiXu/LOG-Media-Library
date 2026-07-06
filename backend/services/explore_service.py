@@ -606,6 +606,32 @@ def read_medium(
     )
 
 
+def write_external_success(
+    db: Session,
+    *,
+    username:    str,
+    medium:      str,
+    items:       list[ExploreItem],
+    sources:     Optional[set[str]] = None,
+    personalize: bool = True,
+    limit:       int  = 40,
+) -> ExploreResponse:
+    """Persist client/extension fallback recommendations as a successful reroll.
+
+    Extension fallbacks fetch first-party results for providers blocked from the
+    backend. Once those results arrive, they should replace the failed cache row
+    and clear ``reroll_failed`` exactly like a backend-successful reroll.
+    """
+    profile = _get_profile(db, username)
+    cleaned = [
+        item.model_copy(update={"matches": [], "in_library": False})
+        for item in _dedupe_best(items)
+        if item.medium == medium and item.source
+    ]
+    _write_success(db, username, medium, cleaned)
+    return _finalise(db, username, profile, cleaned, limit, personalize, sources)
+
+
 def read_all(
     db: Session,
     *,

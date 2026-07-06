@@ -450,6 +450,10 @@ class ExploreResponse(BaseModel):
     reroll_failed: bool = False
     reroll_error:  Optional[str] = None
 
+class ExploreCacheWriteRequest(BaseModel):
+    medium: str
+    items: list[ExploreItem]
+
 # --- Stats Schemas ---
 class MediumCount(BaseModel):
     medium: str
