@@ -432,6 +432,17 @@ export const restoreExplore = (medium, sources) => {
   return req(`/explore/restore?${qs}`, { method: 'POST' });
 };
 
+function cleanExploreItem(item) {
+  const cleanInt = (value) => (value === '' || value == null ? null : Number.parseInt(value, 10));
+  const cleanFloat = (value) => (value === '' || value == null ? null : Number.parseFloat(value));
+  return {
+    ...item,
+    year: cleanInt(item?.year),
+    total: cleanInt(item?.total),
+    external_rating: cleanFloat(item?.external_rating),
+  };
+}
+
 export const writeExploreCache = ({ medium, items, sources, limit } = {}) => {
   const params = {};
   if (Array.isArray(sources) && sources.length) params.sources = sources.join(',');
@@ -439,6 +450,9 @@ export const writeExploreCache = ({ medium, items, sources, limit } = {}) => {
   const qs = new URLSearchParams(params).toString();
   return req(`/explore/cache${qs ? '?' + qs : ''}`, {
     method: 'POST',
-    body: JSON.stringify({ medium, items: Array.isArray(items) ? items : [] }),
+    body: JSON.stringify({
+      medium,
+      items: Array.isArray(items) ? items.map(cleanExploreItem) : [],
+    }),
   });
 };

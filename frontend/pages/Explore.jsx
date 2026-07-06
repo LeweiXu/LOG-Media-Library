@@ -93,7 +93,8 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
                 limit: EXPLORE_FETCH_LIMIT,
               });
               entry = cacheEntryFromData(persisted, want, personalize);
-            } catch {
+            } catch (persistErr) {
+              console.warn('Failed to persist NovelUpdates extension Explore results', persistErr);
               entry = { ...entry, items, rerollFailed: false, rerollError: '' };
             }
           }

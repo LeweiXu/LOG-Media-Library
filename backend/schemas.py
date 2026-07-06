@@ -434,6 +434,16 @@ class ExploreItem(BaseModel):
     # mediums. Empty when no overlap. Used by the UI for the "matches: …" hint.
     matches:         list[str]       = []
 
+    @field_validator("year", "total", mode="before")
+    @classmethod
+    def empty_int_to_none(cls, v: Any) -> Any:
+        return None if v == "" else v
+
+    @field_validator("external_rating", mode="before")
+    @classmethod
+    def empty_float_to_none(cls, v: Any) -> Any:
+        return None if v == "" else v
+
 class AffinitySnapshot(BaseModel):
     """Compact summary of what the explore engine learned from the user."""
     sample_size:     int = 0          # number of rated entries used
