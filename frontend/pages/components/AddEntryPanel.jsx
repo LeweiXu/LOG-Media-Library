@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { searchMedia, fetchByUrl, checkDuplicates } from '../../api.jsx';
-import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, STATUSES, statusLabel, onCoverError, mediumIsVisible, visibleMediumSetFromPrefs } from '../../utils.jsx';
+import { searchMedia, fetchByUrl, checkDuplicates, findEntryByUrl } from '../../api.jsx';
+import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, statusLabel, onCoverError, mediumIsVisible, visibleMediumSetFromPrefs } from '../../utils.jsx';
 import { SEARCH_SOURCES, SOURCE_LABEL, resultToEntry, loadAvailableSources } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
-import CustomSelect from './CustomSelect.jsx';
 import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
 import { usePreferences } from '../../preferences.jsx';
 
@@ -33,12 +32,12 @@ export default function AddEntryPanel({
 
   // URL path
   const [previews, setPreviews] = useState(null);   // SearchResult[] | null
+  const [previewExisting, setPreviewExisting] = useState({});
   // Keyword path
   const [results,  setResults]  = useState(null);   // SearchResult[] | null
   const [inLibrary, setInLibrary] = useState([]);
   const [addedResults, setAddedResults] = useState({});
 
-  const [previewStatus, setPreviewStatus] = useState({});
   // Entry currently being added via the shared add form (manual tab).
   const [pendingAdd, setPendingAdd] = useState(null);
   const [nuSearching, setNuSearching] = useState(false);
@@ -59,6 +58,16 @@ export default function AddEntryPanel({
       );
       setInLibrary(check.exists);
     } catch (_) { /* non-critical */ }
+  }
+
+  async function runUrlExistingCheck(list) {
+    if (!list.length) { setPreviewExisting({}); return; }
+    const checks = await Promise.all(list.map(async item => {
+      const url = item.external_url || '';
+      if (!url) return [url, null];
+      return [url, await findEntryByUrl(url)];
+    }));
+    setPreviewExisting(Object.fromEntries(checks.filter(([url]) => url)));
   }
 
   const urlMode = isUrl(query);
@@ -89,7 +98,7 @@ export default function AddEntryPanel({
   }
 
   function resetResults() {
-    setPreviews(null); setResults(null); setInLibrary([]); setAddedResults({}); setPreviewStatus({}); setSearchErr('');
+    setPreviews(null); setPreviewExisting({}); setResults(null); setInLibrary([]); setAddedResults({}); setSearchErr('');
   }
 
   function clearSourcesAndSearch() {
@@ -114,7 +123,7 @@ export default function AddEntryPanel({
     const q = (rawQuery || '').trim();
     if (!q) return;
     onSearch?.(q);  // record the executed search in the URL
-    setSearching(true); setSearchErr(''); setPreviews(null); setResults(null); setInLibrary([]); setAddedResults({}); setPreviewStatus({});
+    setSearching(true); setSearchErr(''); setPreviews(null); setPreviewExisting({}); setResults(null); setInLibrary([]); setAddedResults({});
     try {
       if (isUrl(q)) {
         const src = inferSourceFromUrl(q);
@@ -128,7 +137,9 @@ export default function AddEntryPanel({
           setSearchErr("Couldn't read that page — it may be unavailable or its layout changed. Try a title search.");
           return;
         }
-        setPreviews(found.filter(item => !item.medium || visibleMediumSet.has(item.medium)));
+        const visibleFound = found.filter(item => !item.medium || visibleMediumSet.has(item.medium));
+        await runUrlExistingCheck(visibleFound);
+        setPreviews(visibleFound);
         return;
       }
       const sources = (selectedSources.size ? [...selectedSources] : availableList.map(s => s.value))
@@ -172,16 +183,20 @@ export default function AddEntryPanel({
   }, []);
 
   // Open the shared add form (manual tab) prefilled from a result/preview.
-  function openAdd(item, statusValue, resultIndex = null) {
+  function openAdd(item, statusValue, resultIndex = null, previewUrl = '') {
     const entry = resultToEntry(item);
     setPendingAdd({
       entry: statusValue ? { ...entry, status: statusValue } : entry,
       resultIndex,
+      previewUrl,
       status: statusValue || entry.status || 'planned',
     });
   }
 
   function handleCreated(created) {
+    if (pendingAdd?.previewUrl) {
+      setPreviewExisting(prev => ({ ...prev, [pendingAdd.previewUrl]: created || true }));
+    }
     if (pendingAdd?.resultIndex != null) {
       setAddedResults(prev => ({
         ...prev,
@@ -262,46 +277,44 @@ export default function AddEntryPanel({
         shownPreviews.length === 0
           ? <div className="state-block"><div className="state-detail">No preview matches the “{medium}” filter.</div></div>
           : <div className="add-preview-list">
-              {shownPreviews.map((item, idx) => (
-                <article key={`${item.source}:${item.external_id || item.title}:${idx}`} className="add-preview">
-                  <div className="add-preview-cover">
-                    {item.cover_url
-                      ? <img src={item.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />
-                      : <div className="explore-cover-empty">—</div>}
-                  </div>
-                  <div className="add-preview-body">
-                    <div className="add-preview-title-row">
-                      {item.external_url
-                        ? <a href={item.external_url} target="_blank" rel="noopener noreferrer" className="add-preview-title">{item.title}</a>
-                        : <span className="add-preview-title">{item.title}</span>}
-                      {item.source && <span className="add-preview-source">{SOURCE_LABEL[item.source] ?? item.source}</span>}
+              {shownPreviews.map((item, idx) => {
+                const existing = item.external_url ? previewExisting[item.external_url] : null;
+                return (
+                  <article key={`${item.source}:${item.external_id || item.title}:${idx}`} className={`add-preview${existing ? ' is-owned' : ''}`}>
+                    <div className="add-preview-cover">
+                      {item.cover_url
+                        ? <img src={item.cover_url} alt="" referrerPolicy="no-referrer" onError={onCoverError} />
+                        : <div className="explore-cover-empty">—</div>}
                     </div>
-                    <div className="add-preview-meta">
-                      {[item.medium, item.year, item.origin].filter(Boolean).join(' · ')}
-                      {item.external_rating != null && (
-                        <span className="explore-meta-rating"> · ★ {item.external_rating.toFixed(1)}</span>
-                      )}
+                    <div className="add-preview-body">
+                      <div className="add-preview-title-row">
+                        {item.external_url
+                          ? <a href={item.external_url} target="_blank" rel="noopener noreferrer" className="add-preview-title">{item.title}</a>
+                          : <span className="add-preview-title">{item.title}</span>}
+                        {item.source && <span className="add-preview-source">{SOURCE_LABEL[item.source] ?? item.source}</span>}
+                      </div>
+                      <div className="add-preview-meta">
+                        {[item.medium, item.year, item.origin].filter(Boolean).join(' · ')}
+                        {item.external_rating != null && (
+                          <span className="explore-meta-rating"> · ★ {item.external_rating.toFixed(1)}</span>
+                        )}
+                      </div>
+                      {item.genres && <div className="add-preview-genres">{item.genres}</div>}
+                      {item.description && <p className="add-preview-desc">{item.description}</p>}
+                      <div className="add-preview-actions">
+                        <button
+                          className="btn"
+                          type="button"
+                          disabled={!!existing}
+                          onClick={() => openAdd(item, 'current', null, item.external_url || '')}
+                        >
+                          {existing ? 'Already in Library' : 'Add to Library'}
+                        </button>
+                      </div>
                     </div>
-                    {item.genres && <div className="add-preview-genres">{item.genres}</div>}
-                    {item.description && <p className="add-preview-desc">{item.description}</p>}
-                    <div className="add-preview-actions">
-                      <CustomSelect
-                        value={previewStatus[idx] || 'current'}
-                        options={STATUSES.map(status => ({
-                          value: status,
-                          label: statusLabel(status),
-                        }))}
-                        onChange={value => setPreviewStatus(s => ({ ...s, [idx]: value }))}
-                        containerClassName="add-preview-status"
-                        ariaLabel={`Status for ${item.title}`}
-                      />
-                      <button className="btn" type="button" onClick={() => openAdd(item, previewStatus[idx] || 'current')}>
-                        Add to Library
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
       )}
 

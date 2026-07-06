@@ -93,7 +93,6 @@
 .add-source-select { margin-top: 10px; }
 .add-search-error { margin-top: 4px; }
 .text-red { color: var(--red); }
-.add-preview-status { width: 140px; }
 .add-extension-hint { margin-top: 10px; }
 .add-results-grid { margin-top: 12px; }
 .add-nu-searching {
@@ -183,11 +182,11 @@ a.add-preview-title:hover { color: var(--accent); }
   opacity: 0.82;
   margin: 4px 0 0;
   display: -webkit-box;
-  -webkit-line-clamp: 5;
+  -webkit-line-clamp: 8;
   -webkit-box-orient: vertical;
-  line-clamp: 5;
+  line-clamp: 8;
   overflow: hidden;
-  max-height: calc(12px * 1.45 * 5);
+  max-height: calc(12px * 1.45 * 8);
   overflow-wrap: anywhere;
   word-break: break-word;
   hyphens: auto;

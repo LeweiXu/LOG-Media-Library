@@ -70,18 +70,25 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
     // Cloudflare/WAF-blocked sources can come back empty server-side; if the
     // extension is present, fetch first-party and merge the results in. This is
     // the only place extension fallback runs — never on a plain page load.
-    if (extPresent && !data.reroll_failed) {
+    if (extPresent) {
       const recs = data.items || [];
       let extra = [];
       if (targetMedium === 'Book' && want.includes('goodreads')
-          && !recs.some(it => it.source === 'goodreads')) {
+          && !data.reroll_failed && !recs.some(it => it.source === 'goodreads')) {
         const genre = (data.affinity?.top_genres || [])[0] || '';
         extra = await extensionGoodreadsExplore(genre);
-      } else if (targetMedium === 'Web Novel' && want.includes('novelupdates')
-          && !recs.some(it => it.source === 'novelupdates')) {
-        extra = await extensionNuExplore();
+        if (extra.length) entry = { ...entry, items: mergeResults(entry.items, extra) };
+      } else if (targetMedium === 'Web Novel' && want.includes('novelupdates')) {
+        const nuMissing = !recs.some(it => it.source === 'novelupdates');
+        if (data.reroll_failed || nuMissing) {
+          extra = await extensionNuExplore();
+          if (extra.length) {
+            entry = data.reroll_failed
+              ? { ...entry, items: extra, rerollFailed: false, rerollError: '' }
+              : { ...entry, items: mergeResults(entry.items, extra) };
+          }
+        }
       }
-      if (extra.length) entry = { ...entry, items: mergeResults(entry.items, extra) };
     }
     exploreCache[targetMedium] = entry;
     delete exploreCache['']; // the aggregate "All" view is now stale
