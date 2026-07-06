@@ -235,9 +235,11 @@ async def fetch_imdb_detail(tt: str) -> Optional[SearchResult]:
 
 # ── Explore discovery (popularity-ranked, genre-biased) ───────────────────────
 
+_DISCOVER_PAGE_SIZE = 20
+
 _DISCOVER_QUERY = """
 query {{
-  advancedTitleSearch(first: 20, sort: {{ sortBy: POPULARITY, sortOrder: ASC }},
+  advancedTitleSearch(first: {first}{after}, sort: {{ sortBy: POPULARITY, sortOrder: ASC }},
     constraints: {{ titleTypeConstraint: {{ anyTitleTypeIds: ["{type_id}"] }}{genre} }}) {{
     edges {{ node {{ title {{
       id
@@ -248,6 +250,7 @@ query {{
       plot {{ plotText {{ plainText }} }}
       titleGenres {{ genres {{ genre {{ text }} }} }}
     }} }} }}
+    pageInfo {{ hasNextPage endCursor }}
   }}
 }}
 """
@@ -261,6 +264,45 @@ def _imdb_genre(top_genres: Optional[list[str]]) -> str:
     return ""
 
 
+async def _discover_imdb_page(type_id: str, genre: str, page: int) -> list[dict]:
+    """Return one popularity page from IMDb's Relay-style connection.
+
+    The Explore service asks providers for shuffled logical pages 1..10. IMDb
+    previously ignored that page and always returned the first 20 results, so
+    dedupe/owned filtering collapsed Film/TV recommendations to a tiny set.
+    """
+    target_page = max(1, min(int(page or 1), 10))
+    cursor: Optional[str] = None
+
+    for current_page in range(1, target_page + 1):
+        after = f", after: {json.dumps(cursor)}" if cursor else ""
+        query = _DISCOVER_QUERY.format(
+            first=_DISCOVER_PAGE_SIZE,
+            after=after,
+            type_id=type_id,
+            genre=genre,
+        )
+        data = await _post_graphql(query)
+        connection = (
+            (((data or {}).get("data") or {}).get("advancedTitleSearch") or {})
+            if data else {}
+        )
+        edges = connection.get("edges")
+        if not isinstance(edges, list):
+            return []
+        if current_page == target_page:
+            return edges
+
+        page_info = connection.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            return []
+        cursor = page_info.get("endCursor")
+        if not cursor:
+            return []
+
+    return []
+
+
 async def _discover_imdb(client, medium: str, top_genres=None, page: int = 1):
     from schemas import ExploreItem
 
@@ -268,11 +310,7 @@ async def _discover_imdb(client, medium: str, top_genres=None, page: int = 1):
     if not type_id:
         return []
 
-    query = _DISCOVER_QUERY.format(type_id=type_id, genre=_imdb_genre(top_genres))
-    data = await _post_graphql(query)
-    edges = ((((data or {}).get("data") or {}).get("advancedTitleSearch") or {}).get("edges")) if data else None
-    if not isinstance(edges, list):
-        return []
+    edges = await _discover_imdb_page(type_id, _imdb_genre(top_genres), page)
 
     out = []
     for edge in edges:
