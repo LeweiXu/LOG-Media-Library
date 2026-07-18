@@ -2,9 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getEntries, getEntryCounts, getCustomLists, getStats,
   updateEntry, createEntry, deleteEntry, batchUpdateEntries, batchDeleteEntries,
+  fetchCoverBundle,
 } from '../api.jsx';
 import { extractItems } from '../utils.jsx';
-import { entriesKey, countsKey, listsKey, statsKey } from './keys.js';
+import { entriesKey, countsKey, listsKey, statsKey, coverBundleKey } from './keys.js';
+
+const EMPTY_MAP = {};
 
 // Normalize /entries into the shape pages consume: { items, total, limit, offset }.
 export function fetchEntriesPayload(params) {
@@ -43,6 +46,39 @@ export function useCustomLists(options = {}) {
 
 export function useStats(options = {}) {
   return useQuery({ queryKey: statsKey(), queryFn: getStats, ...options });
+}
+
+// ── Cover bundles (all of a view's covers at one size, in one request) ────────
+
+function bundleQuery(size, urls) {
+  const unique = [...new Set(urls.filter(Boolean))];
+  return {
+    queryKey: coverBundleKey(size, unique),
+    queryFn: () => fetchCoverBundle(unique, size).then(r => r?.images || {}),
+    enabled: unique.length > 0,
+    // Covers are immutable per URL — keep them around and never auto-refetch.
+    staleTime: Infinity,
+    gcTime: 30 * 60_000,
+  };
+}
+
+/** Returns a `{ coverUrl: dataURI }` map for the given URLs at `size`. */
+export function useCoverBundle(urls, size) {
+  const query = useQuery(bundleQuery(size, urls));
+  return query.data || EMPTY_MAP;
+}
+
+export function prefetchCoverBundle(qc, urls, size) {
+  const q = bundleQuery(size, urls);
+  if (q.enabled) qc.prefetchQuery(q);
+}
+
+// Prefetch an entries page AND its covers, so a hover warms the rows and their
+// images together. fetchQuery resolves the page so we know which covers to bundle.
+export function prefetchEntriesWithCovers(qc, params, size = 'thumb') {
+  qc.fetchQuery({ queryKey: entriesKey(params), queryFn: () => fetchEntriesPayload(params) })
+    .then(data => prefetchCoverBundle(qc, (data?.items || []).map(e => e.cover_url), size))
+    .catch(() => {});
 }
 
 // ── Prefetch (hover preloading) ──────────────────────────────────────────────

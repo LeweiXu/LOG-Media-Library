@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getExplore, restoreExplore, writeExploreCache } from '../api.jsx';
-import { MEDIUMS, statusLabel, onCoverError, visibleMediumsFromPrefs } from '../utils.jsx';
+import { MEDIUMS, statusLabel, onCoverError, coverSrc, visibleMediumsFromPrefs } from '../utils.jsx';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCoverBundle, prefetchCoverBundle } from '../data/hooks.jsx';
 import { loadAvailableSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
@@ -115,6 +117,7 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
 }
 
 export default function Explore() {
+  const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [items,        setItems]        = useState([]);
   const [affinity,     setAffinity]     = useState(null);
@@ -260,9 +263,14 @@ export default function Explore() {
     if (m === medium || exploreCache[m] || rerollTasks[m]) return;
     const want = [...availableSet];
     getExplore({ medium: m, limit: EXPLORE_FETCH_LIMIT, sources: want })
-      .then(data => { if (!exploreCache[m]) exploreCache[m] = cacheEntryFromData(data, want, personalize); })
+      .then(data => {
+        if (!exploreCache[m]) exploreCache[m] = cacheEntryFromData(data, want, personalize);
+        // Warm this medium's card covers too, so hover preloads everything.
+        const covers = (data.items || []).slice(0, REC_PAGE_SIZE).map(it => it.cover_url).filter(Boolean);
+        prefetchCoverBundle(qc, covers, 'medium');
+      })
       .catch(() => {});
-  }, [medium, availableSet, personalize]);
+  }, [medium, availableSet, personalize, qc]);
 
   // Stable refs so the rejoin effect (run only on medium change/mount) can call
   // the latest fetch/apply without re-subscribing and double-joining.
@@ -387,6 +395,13 @@ export default function Explore() {
     () => visibleItems.slice((recPage - 1) * REC_PAGE_SIZE, recPage * REC_PAGE_SIZE),
     [visibleItems, recPage],
   );
+
+  // The 30 card covers, bundled into one medium-size request per page.
+  const coverUrls = useMemo(
+    () => pagedItems.map(({ item }) => item.cover_url).filter(Boolean),
+    [pagedItems],
+  );
+  const coverMap = useCoverBundle(coverUrls, 'medium');
 
   // What the main recommendation area should render.
   const showRerollSkeleton = !error && !loading && (thisMediumRerolling || (medium === '' && rerollAllBusy));
@@ -604,7 +619,7 @@ export default function Explore() {
                        onKeyDown={e => handleCardKeyDown(e, key, item, owned)}>
                 <div className="explore-cover">
                   {item.cover_url
-                    ? <img src={item.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />
+                    ? <img src={coverSrc(coverMap, item.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />
                     : <div className="explore-cover-empty">—</div>}
                 </div>
 

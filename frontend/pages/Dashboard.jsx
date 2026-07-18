@@ -1,8 +1,8 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRevalidateOnFocus } from '../hooks.jsx';
-import { useEntries, useStats, useEntryMutations, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry } from '../data/hooks.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverError, tableGapVars } from '../utils.jsx';
+import { useEntries, useStats, useEntryMutations, useCoverBundle, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry } from '../data/hooks.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverError, coverSrc, tableGapVars } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
@@ -144,6 +144,13 @@ export default function DashboardAlt({ onFilterChange }) {
       .sort((a, b) => new Date(b.time) - new Date(a.time))
       .slice(0, 8);
   }, [completedQuery.data, currentQuery.data, onHoldQuery.data, droppedQuery.data, plannedQuery.data]);
+
+  // All rendered table covers, bundled into one tiny-thumbnail request.
+  const coverUrls = useMemo(
+    () => [...current, ...planned, ...recent].map(e => e.cover_url).filter(Boolean),
+    [current, planned, recent],
+  );
+  const coverMap = useCoverBundle(coverUrls, 'thumb');
 
   const reload = useCallback(() => invalidateEntryData(qc), [qc]);
 
@@ -321,7 +328,7 @@ export default function DashboardAlt({ onFilterChange }) {
       <tr key={e.id} className="library-row-clickable" onClick={() => setDetailEntry(e)}>
         <td>
           <div className="cover-cell">
-            <CoverThumb url={e.cover_url} title={e.title} />
+            <CoverThumb url={coverSrc(coverMap, e.cover_url)} title={e.title} />
             <span className="media-name">{e.title}</span>
           </div>
         </td>

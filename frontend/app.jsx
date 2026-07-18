@@ -5,7 +5,7 @@ import AuthModal      from './pages/components/AuthModal.jsx';
 import { DEFAULT_UI, PreferencesProvider, usePreferences } from './preferences.jsx';
 import { BASE } from './api.jsx';
 import { queryClient } from './data/client.jsx';
-import { prefetchEntries, prefetchCounts, prefetchLists, prefetchStats } from './data/hooks.jsx';
+import { prefetchEntriesWithCovers, prefetchCounts, prefetchLists, prefetchStats } from './data/hooks.jsx';
 import { defaultLibraryParams } from './data/keys.js';
 
 // Each page is its own lazily-loaded chunk (this splits recharts out of the main
@@ -29,12 +29,12 @@ function prefetchRouteData(path, prefs) {
   switch (path) {
     case '/dashboard':
       prefetchStats(queryClient);
-      prefetchEntries(queryClient, { status: 'current',   limit: 20 });
-      prefetchEntries(queryClient, { status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' });
-      prefetchEntries(queryClient, { status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' });
+      prefetchEntriesWithCovers(queryClient, { status: 'current',   limit: 20 });
+      prefetchEntriesWithCovers(queryClient, { status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' });
+      prefetchEntriesWithCovers(queryClient, { status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' });
       break;
     case '/library':
-      prefetchEntries(queryClient, defaultLibraryParams(prefs));
+      prefetchEntriesWithCovers(queryClient, defaultLibraryParams(prefs));
       prefetchCounts(queryClient);
       prefetchLists(queryClient);
       break;

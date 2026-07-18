@@ -413,7 +413,8 @@ html.light .skeleton-pie::after {
   margin-bottom: 14px;
 }
 .entry-detail-cover {
-  max-height: 320px;
+  width: 200px;
+  height: 300px;
   border-radius: 4px;
   object-fit: cover;
 }

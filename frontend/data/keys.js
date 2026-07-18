@@ -8,6 +8,12 @@ export const countsKey  = () => ['entryCounts'];
 export const listsKey   = () => ['customLists'];
 export const statsKey   = () => ['stats'];
 
+// Keyed by the (sorted, de-duped) cover-URL set + size, NOT by entry params, so
+// the bundle stays cached across entry edits (covers are immutable per URL) and
+// isn't re-sent on every optimistic patch + invalidation.
+export const coverBundleKey = (size, urls) =>
+  ['coverBundle', size, [...new Set(urls)].sort()];
+
 // The exact params Library fetches on a fresh mount (no filters, page 1). Nav-hover
 // prefetch uses this so its key matches Library's first query and the click serves
 // a warm cache. Mirrors buildEntryParams() in Library.jsx for that case — keep the

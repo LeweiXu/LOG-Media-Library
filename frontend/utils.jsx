@@ -132,6 +132,28 @@ export function onCoverError(e) {
   // stage === 'placeholder': data URI can't fail; nothing more to do.
 }
 
+/** Resolve an <img> src for a table/card cover, preferring the cached bundle
+ *  data URI and falling back to the raw URL when that cover isn't cached yet. */
+export const coverSrc = (bundle, coverUrl) => (bundle && bundle[coverUrl]) || coverUrl || '';
+
+/**
+ * onError for the detail modal's cached full cover: if the fixed-size full cover
+ * isn't cached (404), fall back to the raw URL once, then the placeholder. The
+ * raw URL is read from the img's `data-cover-raw` attribute.
+ */
+export function onFullCoverError(e) {
+  const img = e.currentTarget;
+  const stage = img.dataset.coverStage;
+  const raw = img.dataset.coverRaw;
+  if (!stage && raw && img.src !== raw) {
+    img.dataset.coverStage = 'raw';
+    img.src = raw;
+    return;
+  }
+  img.dataset.coverStage = 'placeholder';
+  img.src = COVER_PLACEHOLDER;
+}
+
 export const logDotClass = (status) => ({
   current:   'log-dot blue',
   planned:   'log-dot purple',

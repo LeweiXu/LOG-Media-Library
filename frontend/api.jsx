@@ -330,6 +330,18 @@ export const fetchImdbDetail = (id) =>
  * Cloudflare-protected NovelUpdates covers that can't be fetched server-side).
  * Multipart, so it bypasses the JSON `req()` helper.
  */
+/** URL of one cached sized cover (thumb|medium|full), for direct <img src>. */
+export const coverImgUrl = (coverUrl, size = 'full') =>
+  coverUrl ? `${BASE}/covers/img?${new URLSearchParams({ url: coverUrl, size })}` : '';
+
+/**
+ * Fetch a bundle of cached covers at one size in a single request.
+ * Returns { images: { <cover_url>: "data:image/jpeg;base64,…" } } — uncached
+ * URLs are omitted (caller falls back to the raw URL for those).
+ */
+export const fetchCoverBundle = (urls, size) =>
+  req('/covers/bundle', { method: 'POST', body: JSON.stringify({ size, urls }) });
+
 export async function uploadCover(coverUrl, blob) {
   const body = new FormData();
   body.append('cover_url', coverUrl);

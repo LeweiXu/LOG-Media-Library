@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { statusLabel, fmtDate, progressPercent, progressLabel, MEDIUMS, STATUSES, ORIGINS, onCoverError, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
+import { statusLabel, fmtDate, progressPercent, progressLabel, MEDIUMS, STATUSES, ORIGINS, onCoverError, coverSrc, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import {
-  useEntries, useEntryCounts, useCustomLists, useEntryMutations,
-  invalidateEntryData, syncUpdatedEntry, syncDeletedEntry, prefetchEntries,
+  useEntries, useEntryCounts, useCustomLists, useEntryMutations, useCoverBundle,
+  invalidateEntryData, syncUpdatedEntry, syncDeletedEntry, prefetchEntriesWithCovers,
 } from '../data/hooks.jsx';
 import { entriesKey } from '../data/keys.js';
 import AddEntryModal from './components/AddEntryModal.jsx';
@@ -258,6 +258,10 @@ export default function Library({ initialFilters = {} }) {
   const loading = !settingsApplied || entriesQuery.isLoading;
   const error = entriesQuery.error?.message || '';
 
+  // Every row's cover, bundled into one tiny-thumbnail request per page.
+  const coverUrls = useMemo(() => entries.map(e => e.cover_url).filter(Boolean), [entries]);
+  const coverMap = useCoverBundle(coverUrls, 'thumb');
+
   const countsQuery = useEntryCounts();
   const counts = useMemo(() => buildCounts(countsQuery.data), [countsQuery.data]);
   const unlistedCount = countsQuery.data?.unlisted || 0;
@@ -272,9 +276,9 @@ export default function Library({ initialFilters = {} }) {
   // load, so paging and flipping the sort order feel instant.
   const prefetchNearbyPages = useCallback((params, totalForQuery) => {
     const nextOffset = (params.offset || 0) + (params.limit || DEFAULT_LIMIT);
-    if (nextOffset < totalForQuery) prefetchEntries(qc, { ...params, offset: nextOffset });
+    if (nextOffset < totalForQuery) prefetchEntriesWithCovers(qc, { ...params, offset: nextOffset });
     if ((params.offset || 0) === 0) {
-      prefetchEntries(qc, { ...params, order: params.order === 'asc' ? 'desc' : 'asc', offset: 0 });
+      prefetchEntriesWithCovers(qc, { ...params, order: params.order === 'asc' ? 'desc' : 'asc', offset: 0 });
     }
   }, [qc]);
   useEffect(() => {
@@ -292,7 +296,7 @@ export default function Library({ initialFilters = {} }) {
         else delete params[dim];
       }
     }
-    prefetchEntries(qc, params);
+    prefetchEntriesWithCovers(qc, params);
   }, [buildEntryParams, qc]);
 
   useEffect(() => {
@@ -884,7 +888,7 @@ export default function Library({ initialFilters = {} }) {
                     <td>
                       <div className="cover-cell">
                         <div className="cover-thumb">
-                          {entry.cover_url && <img src={entry.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />}
+                          {entry.cover_url && <img src={coverSrc(coverMap, entry.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />}
                         </div>
                         <span className="media-name">{entry.title}</span>
                       </div>
@@ -936,7 +940,7 @@ export default function Library({ initialFilters = {} }) {
                       <td>
                         <div className="cover-cell">
                           <div className="cover-thumb">
-                            {e.cover_url && <img src={e.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />}
+                            {e.cover_url && <img src={coverSrc(coverMap, e.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />}
                           </div>
                           <span className="media-name">{e.title}</span>
                         </div>
