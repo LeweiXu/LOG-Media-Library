@@ -21,9 +21,15 @@ Usage:
 
 import os
 import sys
+from pathlib import Path
 
-# Allow running from the backend/ directory.
-os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Put the backend root on the import path (and make it the cwd), whether the
+# backend lives in a `backend/` subdir (dev) or at the repo root (server) — same
+# pattern as scripts/init_db.py. Without this, `python scripts/cache_all_covers.py`
+# only sees scripts/ and can't import config/db/services.
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+os.chdir(ROOT)
 
 from sqlalchemy import select
 
