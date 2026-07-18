@@ -39,7 +39,7 @@ from services.backup_service import run_backup_for_user
 from services.email_service import SMTPNotConfigured
 from services.cover_cache_service import (
     CoverCacheError, MAX_SOURCE_BYTES, SIZES, cache_one_cover, cache_uncached_covers,
-    sized_cover_path, store_cover_bytes,
+    ensure_covers_cached, sized_cover_path, store_cover_bytes,
 )
 
 router = APIRouter()
@@ -118,6 +118,9 @@ async def bundle_cached_covers(
     if size not in SIZES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown cover size")
 
+    # Serve-only: we never fetch external images here. Covers are cached at ingest
+    # (entry add, extension upload, Explore reroll); uncached URLs are omitted and
+    # the client shows a placeholder.
     images: dict[str, str] = {}
     for url in dict.fromkeys(urls):  # dedupe, preserve order
         if not url:
@@ -569,6 +572,7 @@ def _explore_personalize(current_user: User) -> bool:
 
 @router.get("/explore", response_model=ExploreResponse)
 async def explore(
+    background: BackgroundTasks,
     medium:  str  = Query("", description="Medium filter; empty = aggregate 'All' view"),
     limit:   int  = Query(40, ge=1, le=200),
     seed:    int  = Query(0,  ge=0, description="Shuffle seed; only consulted on a reroll"),
@@ -582,21 +586,31 @@ async def explore(
 
     # Empty medium = the aggregate "All" view (read-only, never rerolls).
     if not medium:
-        return read_all(
+        result = read_all(
             db, username=current_user.username,
             sources=source_set, personalize=personalize, limit=limit,
         )
-    if medium not in ALL_MEDIUMS:
-        raise HTTPException(status_code=400, detail="Unknown medium")
-    if refresh:
-        return await reroll_medium(
-            db, username=current_user.username, medium=medium,
-            sources=source_set, personalize=personalize, limit=limit, seed=seed or None,
-        )
-    return read_medium(
-        db, username=current_user.username, medium=medium,
-        sources=source_set, personalize=personalize, limit=limit,
-    )
+    else:
+        if medium not in ALL_MEDIUMS:
+            raise HTTPException(status_code=400, detail="Unknown medium")
+        if refresh:
+            result = await reroll_medium(
+                db, username=current_user.username, medium=medium,
+                sources=source_set, personalize=personalize, limit=limit, seed=seed or None,
+            )
+        else:
+            result = read_medium(
+                db, username=current_user.username, medium=medium,
+                sources=source_set, personalize=personalize, limit=limit,
+            )
+
+    # Explore items aren't library entries, so this is where we first see their
+    # covers — cache the 3 sizes in the background so the serve path (bundle /img)
+    # can hand them out directly instead of the frontend hotlinking external URLs.
+    covers = [it.cover_url for it in (result.items or []) if getattr(it, "cover_url", None)]
+    if covers:
+        background.add_task(ensure_covers_cached, covers)
+    return result
 
 
 @router.post("/explore/restore", response_model=ExploreResponse)

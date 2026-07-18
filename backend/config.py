@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     COVER_THUMB_H: int = 80
     COVER_MEDIUM_W: int = 184
     COVER_MEDIUM_H: int = 264
-    COVER_FULL_W: int = 600
-    COVER_FULL_H: int = 900
+    COVER_FULL_W: int = 500
+    COVER_FULL_H: int = 750
 
     # Auth
     SECRET_KEY: str = "changeme-replace-with-a-strong-random-secret"

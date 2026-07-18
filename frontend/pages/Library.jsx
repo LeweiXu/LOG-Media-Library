@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { statusLabel, fmtDate, progressPercent, progressLabel, MEDIUMS, STATUSES, ORIGINS, onCoverError, coverSrc, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
+import { statusLabel, fmtDate, progressPercent, progressLabel, MEDIUMS, STATUSES, ORIGINS, onCoverErrorPlaceholder, coverSrc, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import {
   useEntries, useEntryCounts, useCustomLists, useEntryMutations, useCoverBundle,
@@ -890,7 +890,7 @@ export default function Library({ initialFilters = {} }) {
                     <td>
                       <div className="cover-cell">
                         <div className="cover-thumb">
-                          {entry.cover_url && <img src={coverSrc(coverMap, entry.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />}
+                          {entry.cover_url && <img src={coverSrc(coverMap, entry.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverErrorPlaceholder} />}
                         </div>
                         <span className="media-name">{entry.title}</span>
                       </div>
@@ -942,7 +942,7 @@ export default function Library({ initialFilters = {} }) {
                       <td>
                         <div className="cover-cell">
                           <div className="cover-thumb">
-                            {e.cover_url && <img src={coverSrc(coverMap, e.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />}
+                            {e.cover_url && <img src={coverSrc(coverMap, e.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverErrorPlaceholder} />}
                           </div>
                           <span className="media-name">{e.title}</span>
                         </div>

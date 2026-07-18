@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { deleteEntry, fetchByUrl, fetchChapterCount, fetchImdbDetail } from '../../api.jsx';
-import { statusLabel, fmtDate, progressLabel, onFullCoverError } from '../../utils.jsx';
+import { statusLabel, fmtDate, progressLabel, onCoverErrorPlaceholder } from '../../utils.jsx';
 import { coverImgUrl } from '../../api.jsx';
 import EntryFormModal from './EntryFormModal.jsx';
 import { entryToForm } from './EntryForm.jsx';
@@ -142,8 +142,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
               <img src={coverImgUrl(current.cover_url, 'full')} alt=""
                 referrerPolicy="no-referrer"
                 className="entry-detail-cover"
-                data-cover-raw={current.cover_url}
-                onError={onFullCoverError} />
+                onError={onCoverErrorPlaceholder} />
             </div>
           )}
 

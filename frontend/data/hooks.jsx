@@ -59,6 +59,17 @@ function bundleQuery(size, urls) {
     // Covers are immutable per URL — keep them around and never auto-refetch.
     staleTime: Infinity,
     gcTime: 30 * 60_000,
+    // Some covers may still be caching server-side (e.g. just-rerolled Explore
+    // recommendations, cached in the background). Poll a few times while the
+    // bundle is incomplete, then give up — anything still missing is uncached
+    // (Cloudflare/NU) and stays a placeholder until the extension uploads it.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      if (Object.keys(data).length >= unique.length) return false;
+      if (query.state.dataUpdateCount > 6) return false;
+      return 2500;
+    },
   };
 }
 

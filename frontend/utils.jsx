@@ -132,26 +132,16 @@ export function onCoverError(e) {
   // stage === 'placeholder': data URI can't fail; nothing more to do.
 }
 
-/** Resolve an <img> src for a table/card cover, preferring the cached bundle
- *  data URI and falling back to the raw URL when that cover isn't cached yet. */
-export const coverSrc = (bundle, coverUrl) => (bundle && bundle[coverUrl]) || coverUrl || '';
+/** Resolve an <img> src for a table/card cover: the cached bundle data URI, or
+ *  the placeholder. We never hotlink the external URL — covers are served only
+ *  from our cache (filled at ingest: entry add, extension upload, Explore reroll). */
+export const coverSrc = (bundle, coverUrl) => (bundle && bundle[coverUrl]) || COVER_PLACEHOLDER;
 
-/**
- * onError for the detail modal's cached full cover: if the fixed-size full cover
- * isn't cached (404), fall back to the raw URL once, then the placeholder. The
- * raw URL is read from the img's `data-cover-raw` attribute.
- */
-export function onFullCoverError(e) {
+/** onError for a cached-cover <img>: fall straight to the placeholder (used when
+ *  a cover isn't cached yet, e.g. a Cloudflare/NU cover awaiting the extension). */
+export function onCoverErrorPlaceholder(e) {
   const img = e.currentTarget;
-  const stage = img.dataset.coverStage;
-  const raw = img.dataset.coverRaw;
-  if (!stage && raw && img.src !== raw) {
-    img.dataset.coverStage = 'raw';
-    img.src = raw;
-    return;
-  }
-  img.dataset.coverStage = 'placeholder';
-  img.src = COVER_PLACEHOLDER;
+  if (img.src !== COVER_PLACEHOLDER) img.src = COVER_PLACEHOLDER;
 }
 
 export const logDotClass = (status) => ({

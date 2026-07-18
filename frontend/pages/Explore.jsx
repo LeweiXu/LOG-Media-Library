@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getExplore, restoreExplore, writeExploreCache } from '../api.jsx';
-import { MEDIUMS, statusLabel, onCoverError, coverSrc, visibleMediumsFromPrefs } from '../utils.jsx';
+import { MEDIUMS, statusLabel, onCoverErrorPlaceholder, coverSrc, visibleMediumsFromPrefs } from '../utils.jsx';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCoverBundle, prefetchCoverBundle } from '../data/hooks.jsx';
 import { loadAvailableSources } from './components/searchSources.js';
@@ -634,7 +634,7 @@ export default function Explore() {
                        onKeyDown={e => handleCardKeyDown(e, key, item, owned)}>
                 <div className="explore-cover">
                   {item.cover_url
-                    ? <img src={coverSrc(coverMap, item.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverError} />
+                    ? <img src={coverSrc(coverMap, item.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverErrorPlaceholder} />
                     : <div className="explore-cover-empty">—</div>}
                 </div>
 

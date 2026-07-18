@@ -184,6 +184,37 @@ def cache_one_cover(cover_url: str, force: bool = False) -> str:
     return "cached"
 
 
+# Cap how many covers one background ingest will fetch, so a single call can't
+# fan out into unbounded downloads.
+COVER_FETCH_CAP = 120
+_COVER_FETCH_CONCURRENCY = 8
+
+
+async def ensure_covers_cached(urls: list[str]) -> None:
+    """Best-effort background ingest: fetch + cache each URL's 3 sizes in parallel.
+
+    Used when the server first sees covers that aren't library entries — notably
+    Explore recommendations, cached when a reroll (or explore read) produces them,
+    so the serve path can hand them out directly. Failures are swallowed: a cover
+    we can't fetch (Cloudflare/NU) is just left uncached and shows a placeholder
+    until the extension uploads it first-party.
+    """
+    targets = [u for u in urls if u][:COVER_FETCH_CAP]
+    if not targets:
+        return
+    loop = asyncio.get_event_loop()
+    sem = asyncio.Semaphore(_COVER_FETCH_CONCURRENCY)
+
+    async def one(url: str) -> None:
+        async with sem:
+            try:
+                await loop.run_in_executor(None, cache_one_cover, url)
+            except CoverCacheError:
+                pass
+
+    await asyncio.gather(*(one(u) for u in targets))
+
+
 async def cache_uncached_covers(db: Session, username: str):
     """SSE generator: server-side cache every not-yet-cached cover for a user.
 

@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import { useEntries, useStats, useEntryMutations, useCoverBundle, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry } from '../data/hooks.jsx';
 import { prefetchFullCover } from '../api.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverError, coverSrc, tableGapVars } from '../utils.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverErrorPlaceholder, coverSrc, tableGapVars } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
@@ -84,7 +84,7 @@ function CoverThumb({ url, title }) {
         <img src={url} alt={title}
           loading="lazy"
           referrerPolicy="no-referrer"
-          onError={onCoverError} />
+          onError={onCoverErrorPlaceholder} />
       )}
     </div>
   );
