@@ -15,6 +15,7 @@ export default function ListChips({
   value = ALL_LISTS,
   unlistedCount = 0,
   onChange,
+  onHover,
   onNew,
   loading = false,
 }) {
@@ -23,6 +24,8 @@ export default function ListChips({
       key={key}
       type="button"
       className={`list-chip${active ? ' is-on' : ''}`}
+      onMouseEnter={() => onHover?.(key)}
+      onFocus={() => onHover?.(key)}
       onClick={() => onChange?.(key)}
       aria-pressed={active}
     >

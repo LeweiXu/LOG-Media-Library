@@ -301,7 +301,10 @@ export default function Library({ initialFilters = {} }) {
   }, [buildEntryParams, qc]);
 
   useEffect(() => {
-    if (mediumFilter && !visibleMediumSet.has(mediumFilter)) setMediumFilter('');
+    if (mediumFilter && !visibleMediumSet.has(mediumFilter)) {
+      setPage(1);
+      setMediumFilter('');
+    }
   }, [mediumFilter, visibleMediumSet]);
 
   // Entries/counts/lists/stats are all scoped server-side by the user's visible
@@ -323,6 +326,7 @@ export default function Library({ initialFilters = {} }) {
   useEffect(() => {
     if (loadingLists) return;
     if (listFilter && listFilter !== UNLISTED_LIST && !listNames.includes(listFilter)) {
+      setPage(1);
       setListFilter(ALL_LISTS);
     }
   }, [loadingLists, listNames, listFilter]);
@@ -346,6 +350,7 @@ export default function Library({ initialFilters = {} }) {
   useRevalidateOnFocus(() => { invalidateEntryData(qc); return true; });
 
   function handleSort(field) {
+    setPage(1);
     if (sort === field) setOrder(o => o === 'asc' ? 'desc' : 'asc');
     else { setSort(field); setOrder('desc'); }
   }
@@ -509,7 +514,14 @@ export default function Library({ initialFilters = {} }) {
     finally { setBulkBusy(false); }
   }
 
-  const clearFilters = () => { setSearch(''); setStatusFilter(''); setMediumFilter(''); setOriginFilter(''); };
+  const clearFilters = () => {
+    setPage(1);
+    setSearch('');
+    setDebouncedSearch('');
+    setStatusFilter('');
+    setMediumFilter('');
+    setOriginFilter('');
+  };
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;
   const totalPages   = Math.ceil(total / limit);
 
@@ -531,6 +543,25 @@ export default function Library({ initialFilters = {} }) {
     if (targetPage < 1) return;
     prefetchEntriesWithCovers(qc, buildEntryParams({ offset: (targetPage - 1) * limit }), 'thumb');
   }, [buildEntryParams, qc, limit]);
+
+  const prefetchPageSize = useCallback((nextLimit) => {
+    prefetchEntriesWithCovers(qc, buildEntryParams({ limit: Number(nextLimit), offset: 0 }), 'thumb');
+  }, [buildEntryParams, qc]);
+
+  const prefetchList = useCallback((nextList) => {
+    const params = buildEntryParams({ offset: 0 });
+    delete params.custom_list;
+    delete params.custom_list_empty;
+    if (nextList === UNLISTED_LIST) params.custom_list_empty = true;
+    else if (nextList) params.custom_list = nextList;
+    prefetchEntriesWithCovers(qc, params, 'thumb');
+  }, [buildEntryParams, qc]);
+
+  const prefetchClearedFilters = useCallback(() => {
+    const params = buildEntryParams({ offset: 0 });
+    for (const key of ['title', 'status', 'medium', 'origin']) delete params[key];
+    prefetchEntriesWithCovers(qc, params, 'thumb');
+  }, [buildEntryParams, qc]);
 
   const SortTh = ({ field, className, children }) => (
     <th className={`sortable${sort === field ? ' is-active' : ''}${className ? ' ' + className : ''}`}
@@ -753,7 +784,7 @@ export default function Library({ initialFilters = {} }) {
             <div key={v}
               className={`sidebar-item${statusFilter === v ? ' active' : ''}`}
               onMouseEnter={() => prefetchFilter({ status: v })}
-              onClick={() => setStatusFilter(v)}>
+              onClick={() => { setPage(1); setStatusFilter(v); }}>
               {l}
               {loading || loadingCounts
                 ? <SkeletonLine width={24} height={14} />
@@ -766,9 +797,9 @@ export default function Library({ initialFilters = {} }) {
 
         <div className="sidebar-section">
           <span className="sidebar-label">Medium</span>
-          <div className={`sidebar-item${mediumFilter === '' ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ medium: '' })} onClick={() => setMediumFilter('')}>All</div>
+          <div className={`sidebar-item${mediumFilter === '' ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ medium: '' })} onClick={() => { setPage(1); setMediumFilter(''); }}>All</div>
           {visibleMediums.map(m => (
-            <div key={m} className={`sidebar-item${mediumFilter === m ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ medium: m })} onClick={() => setMediumFilter(m)}>
+            <div key={m} className={`sidebar-item${mediumFilter === m ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ medium: m })} onClick={() => { setPage(1); setMediumFilter(m); }}>
               {m}
               {loading || loadingCounts
                 ? <SkeletonLine width={24} height={14} />
@@ -781,9 +812,9 @@ export default function Library({ initialFilters = {} }) {
 
         <div className="sidebar-section">
           <span className="sidebar-label">Origin</span>
-          <div className={`sidebar-item${originFilter === '' ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ origin: '' })} onClick={() => setOriginFilter('')}>All</div>
+          <div className={`sidebar-item${originFilter === '' ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ origin: '' })} onClick={() => { setPage(1); setOriginFilter(''); }}>All</div>
           {ORIGINS.map(o => (
-            <div key={o} className={`sidebar-item${originFilter === o ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ origin: o })} onClick={() => setOriginFilter(o)}>
+            <div key={o} className={`sidebar-item${originFilter === o ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ origin: o })} onClick={() => { setPage(1); setOriginFilter(o); }}>
               {o}
               {loading || loadingCounts
                 ? <SkeletonLine width={24} height={14} />
@@ -817,11 +848,11 @@ export default function Library({ initialFilters = {} }) {
 
         <div className="filter-bar">
           <input className="library-search-input" placeholder="Search titles…" value={search}
-            onChange={e => setSearch(e.target.value)} />
+            onChange={e => { setPage(1); setSearch(e.target.value); }} />
           <CustomSelect
             value={sort}
             options={SORT_FIELDS.map(field => ({ value: field.key, label: `Sort: ${field.label}` }))}
-            onChange={setSort}
+            onChange={value => { setPage(1); setSort(value); }}
             onOptionHover={(field) => prefetchSortOrder(field, order)}
             className="filter-select"
             containerClassName="library-manage-sort"
@@ -829,14 +860,15 @@ export default function Library({ initialFilters = {} }) {
           />
           <button className="icon-btn library-manage-order filter-bar-btn"
             onMouseEnter={() => prefetchSortOrder(sort, order === 'asc' ? 'desc' : 'asc')}
-            onClick={() => setOrder(o => o === 'asc' ? 'desc' : 'asc')}>
+            onClick={() => { setPage(1); setOrder(o => o === 'asc' ? 'desc' : 'asc'); }}>
             {order === 'asc' ? '↑ Asc' : '↓ Desc'}
           </button>
-          {hasFilters && <button className="icon-btn" onClick={clearFilters}>✕ Clear</button>}
+          {hasFilters && <button className="icon-btn" onMouseEnter={prefetchClearedFilters} onClick={clearFilters}>✕ Clear</button>}
           <CustomSelect
             value={limit}
             options={PAGE_SIZE_OPTIONS.map(size => ({ value: size, label: `${size} / page` }))}
-            onChange={value => setLimit(Number(value))}
+            onChange={value => { setPage(1); setLimit(Number(value)); }}
+            onOptionHover={prefetchPageSize}
             className="filter-select"
             containerClassName="filter-count-select"
             ariaLabel="Entries per page"
@@ -848,7 +880,8 @@ export default function Library({ initialFilters = {} }) {
           lists={lists}
           value={listFilter}
           unlistedCount={unlistedCount}
-          onChange={setListFilter}
+          onChange={value => { setPage(1); setListFilter(value); }}
+          onHover={prefetchList}
           onNew={() => openListsModal('add')}
           loading={loadingLists || loadingCounts}
         />

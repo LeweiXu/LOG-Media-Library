@@ -5,7 +5,7 @@ import AuthModal      from './pages/components/AuthModal.jsx';
 import { DEFAULT_UI, PreferencesProvider, usePreferences } from './preferences.jsx';
 import { BASE } from './api.jsx';
 import { queryClient } from './data/client.jsx';
-import { prefetchEntries, prefetchEntriesWithCovers, prefetchCounts, prefetchLists, prefetchStats } from './data/hooks.jsx';
+import { prefetchEntries, prefetchEntriesWithCovers, prefetchEntryGroupsWithCovers, prefetchCounts, prefetchLists, prefetchStats } from './data/hooks.jsx';
 import { defaultLibraryParams } from './data/keys.js';
 
 // Each page is its own lazily-loaded chunk (this splits recharts out of the main
@@ -29,9 +29,13 @@ function prefetchRouteData(path, prefs) {
   switch (path) {
     case '/dashboard':
       prefetchStats(queryClient);
-      prefetchEntriesWithCovers(queryClient, { status: 'current',   limit: 20 });
-      prefetchEntriesWithCovers(queryClient, { status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' });
-      prefetchEntriesWithCovers(queryClient, { status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' });
+      // Dashboard renders all three tables through one combined cover bundle.
+      // Preload that exact union, not three separately-keyed bundles.
+      prefetchEntryGroupsWithCovers(queryClient, [
+        { status: 'current',   limit: 20 },
+        { status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' },
+        { status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' },
+      ]);
       // on_hold + dropped feed only the activity log (no covers), but Dashboard's
       // loading flag waits on all six queries — prefetch them too or the page
       // still skeletons on click even though the tables were warmed.

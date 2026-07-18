@@ -96,21 +96,26 @@ app session (a second hover no-ops); library mutations invalidate the table quer
 so they re-preload after a change.
 
 - Nav links (`app.jsx` `prefetchRouteData`): Dashboard warms stats + all 6 status
-  buckets (must be all 6 - the page's loading flag waits on every query), Library
+  buckets (must be all 6 - the page's loading flag waits on every query) and
+  combines the 3 table result sets into the exact shared thumbnail bundle the
+  page mounts, Library
   warms the default query + counts + lists, Statistics warms stats, Explore calls
   `prefetchExploreHome` (exported from the lazy Explore chunk).
 - Library sidebar filters, all sort controls (column headers, the filter-bar sort
   dropdown via CustomSelect's new `onOptionHover`, the asc/desc toggle, the
-  right-sidebar sort list), and pagination buttons - each `onMouseEnter` prefetches
-  the entries + thumbs for the state it would produce.
+  right-sidebar sort list), list chips, page-size options, clear-filters, and
+  pagination buttons preload the entries + thumbs for the state they produce.
+  Filter and sort clicks reset the page in the same event so the query never
+  briefly requests the old page number with the new filter.
 - Dashboard sidebar filters prefetch the Library query (+ thumbs) that clicking
   navigates to.
 - Explore medium filters and pagination prefetch that view's medium covers.
 - Table rows prefetch the `full` cover on hover (`prefetchFullCover`), so the detail
   modal image is instant on click.
 
-The shared helpers are `prefetchEntriesWithCovers` (fetch a page + its covers) and
-`prefetchCoverBundle` (fetch a cover set once) in `data/hooks.jsx`.
+The shared helpers are `prefetchEntriesWithCovers` (fetch a page + its covers),
+`prefetchEntryGroupsWithCovers` (fetch several entry groups + their exact combined
+cover set), and `prefetchCoverBundle` (fetch a cover set once) in `data/hooks.jsx`.
 
 ## 5. There are 4 tables total
 

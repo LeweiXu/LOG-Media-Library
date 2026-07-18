@@ -85,14 +85,29 @@ export function useCoverBundle(urls, size) {
 // in when the view is actually shown — we don't re-hit the network on every hover.
 export function prefetchCoverBundle(qc, urls, size) {
   const q = bundleQuery(size, urls);
-  if (q.enabled) qc.prefetchQuery(q);
+  return q.enabled ? qc.prefetchQuery(q) : Promise.resolve();
 }
 
 // Prefetch an entries page AND its covers, so a hover warms the rows and their
 // images together. fetchQuery resolves the page so we know which covers to bundle.
 export function prefetchEntriesWithCovers(qc, params, size = 'thumb') {
-  qc.fetchQuery({ queryKey: entriesKey(params), queryFn: () => fetchEntriesPayload(params) })
+  return qc.fetchQuery({ queryKey: entriesKey(params), queryFn: () => fetchEntriesPayload(params) })
     .then(data => prefetchCoverBundle(qc, (data?.items || []).map(e => e.cover_url), size))
+    .catch(() => {});
+}
+
+// Some pages render several entry queries through one shared cover bundle. Warm
+// that exact combined URL set, since separate per-query bundles have different
+// React Query keys and cannot satisfy the mounted page's bundle request.
+export function prefetchEntryGroupsWithCovers(qc, paramGroups, size = 'thumb') {
+  return Promise.all(paramGroups.map(params =>
+    qc.fetchQuery({ queryKey: entriesKey(params), queryFn: () => fetchEntriesPayload(params) })
+  ))
+    .then(groups => prefetchCoverBundle(
+      qc,
+      groups.flatMap(data => (data?.items || []).map(e => e.cover_url)),
+      size,
+    ))
     .catch(() => {});
 }
 

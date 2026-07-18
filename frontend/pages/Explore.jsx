@@ -542,14 +542,14 @@ export default function Explore() {
           <span className="sidebar-label">Medium</span>
           <div className={'sidebar-item' + (medium === '' ? ' active' : '')}
             onMouseEnter={() => prefetchMedium('')}
-            onClick={() => setMedium('')}>
+            onClick={() => { setRecPage(1); setMedium(''); }}>
             <span>All</span>
           </div>
           {visibleMediums.map(m => (
             <div key={m}
               className={'sidebar-item' + (medium === m ? ' active' : '')}
               onMouseEnter={() => prefetchMedium(m)}
-              onClick={() => setMedium(m)}>
+              onClick={() => { setRecPage(1); setMedium(m); }}>
               <span>{m}</span>
             </div>
           ))}
