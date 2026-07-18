@@ -335,6 +335,17 @@ export const coverImgUrl = (coverUrl, size = 'full') =>
   coverUrl ? `${BASE}/covers/img?${new URLSearchParams({ url: coverUrl, size })}` : '';
 
 /**
+ * Warm the browser cache for a cover's full size, so the detail modal image is
+ * instant on click. It's a plain immutable GET, so the browser HTTP cache does
+ * the work — no React Query needed. Best-effort; a 404 (uncached) is harmless.
+ */
+export function prefetchFullCover(coverUrl) {
+  if (!coverUrl) return;
+  const img = new Image();
+  img.src = coverImgUrl(coverUrl, 'full');
+}
+
+/**
  * Fetch a bundle of cached covers at one size in a single request.
  * Returns { images: { <cover_url>: "data:image/jpeg;base64,…" } } — uncached
  * URLs are omitted (caller falls back to the raw URL for those).

@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { useQueryClient } from '@tanstack/react-query';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import { useEntries, useStats, useEntryMutations, useCoverBundle, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry } from '../data/hooks.jsx';
+import { prefetchFullCover } from '../api.jsx';
 import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverError, coverSrc, tableGapVars } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
@@ -325,7 +326,7 @@ export default function DashboardAlt({ onFilterChange }) {
 
   function renderRow(e, table, statusMode) {
     return (
-      <tr key={e.id} className="library-row-clickable" onClick={() => setDetailEntry(e)}>
+      <tr key={e.id} className="library-row-clickable" onMouseEnter={() => prefetchFullCover(e.cover_url)} onClick={() => setDetailEntry(e)}>
         <td>
           <div className="cover-cell">
             <CoverThumb url={coverSrc(coverMap, e.cover_url)} title={e.title} />

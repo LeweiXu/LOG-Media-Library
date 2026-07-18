@@ -25,6 +25,17 @@ const itemKey = (item) => `${(item.title || '').toLowerCase().trim()}|${item.med
 const EXPLORE_FETCH_LIMIT = 120;
 const REC_PAGE_SIZE = 30;
 
+// Cover URLs for a medium's first recommendation page — mirrors the page's
+// visibleItems filter + first-page slice, so a hover-prefetch bundles the exact
+// same cover set the page will request (matching React Query key).
+function firstPageCovers(items, availableSet, visibleMediumSet) {
+  return items
+    .filter(item => availableSet.has(item.source) && (!item.medium || visibleMediumSet.has(item.medium)))
+    .slice(0, REC_PAGE_SIZE)
+    .map(item => item.cover_url)
+    .filter(Boolean);
+}
+
 // Per-medium recommendation cache that survives navigation within the SPA
 // session (module scope, not component state). Keyed by the real medium ('' for
 // the aggregate "All" view). Reads serve this when present so switching the
@@ -260,17 +271,21 @@ export default function Explore() {
   // paints instantly. Writes straight into the same module cache fetchExplore
   // reads from; skips anything already cached or mid-reroll. Best-effort.
   const prefetchMedium = useCallback((m) => {
-    if (m === medium || exploreCache[m] || rerollTasks[m]) return;
+    if (m === medium || rerollTasks[m]) return;
+    // Warm the medium's first-page card covers (same set the page renders), even
+    // when the recommendation data itself is already cached.
+    const warmCovers = (entry) =>
+      prefetchCoverBundle(qc, firstPageCovers(entry.items || [], availableSet, visibleMediumSet), 'medium');
+    if (exploreCache[m]) { warmCovers(exploreCache[m]); return; }
     const want = [...availableSet];
     getExplore({ medium: m, limit: EXPLORE_FETCH_LIMIT, sources: want })
       .then(data => {
-        if (!exploreCache[m]) exploreCache[m] = cacheEntryFromData(data, want, personalize);
-        // Warm this medium's card covers too, so hover preloads everything.
-        const covers = (data.items || []).slice(0, REC_PAGE_SIZE).map(it => it.cover_url).filter(Boolean);
-        prefetchCoverBundle(qc, covers, 'medium');
+        const entry = exploreCache[m] || cacheEntryFromData(data, want, personalize);
+        if (!exploreCache[m]) exploreCache[m] = entry;
+        warmCovers(entry);
       })
       .catch(() => {});
-  }, [medium, availableSet, personalize, qc]);
+  }, [medium, availableSet, visibleMediumSet, personalize, qc]);
 
   // Stable refs so the rejoin effect (run only on medium change/mount) can call
   // the latest fetch/apply without re-subscribing and double-joining.

@@ -8,6 +8,7 @@ import {
   invalidateEntryData, syncUpdatedEntry, syncDeletedEntry, prefetchEntriesWithCovers,
 } from '../data/hooks.jsx';
 import { entriesKey } from '../data/keys.js';
+import { prefetchFullCover } from '../api.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ListsModal from './components/ListsModal.jsx';
@@ -875,6 +876,7 @@ export default function Library({ initialFilters = {} }) {
                 {entries.map(entry => (
                   <tr key={entry.id}
                     className={`${selectedIds.has(entry.id) ? 'row-selected ' : ''}library-row-clickable library-row-selectable`.trim()}
+                    onMouseEnter={() => prefetchFullCover(entry.cover_url)}
                     onMouseDown={ev => { if (ev.shiftKey) ev.preventDefault(); }}
                     onClick={ev => handleSelectClick(ev, entry.id)}>
                     <td className="col-select">
@@ -936,7 +938,7 @@ export default function Library({ initialFilters = {} }) {
                 {entries.map(e => {
                   const isConfirmDel = confirmDeleteId === e.id;
                   return (
-                    <tr key={e.id} className="library-row-clickable" onClick={() => { setDetailEntry(e); setStartEditing(false); }}>
+                    <tr key={e.id} className="library-row-clickable" onMouseEnter={() => prefetchFullCover(e.cover_url)} onClick={() => { setDetailEntry(e); setStartEditing(false); }}>
                       <td>
                         <div className="cover-cell">
                           <div className="cover-thumb">
