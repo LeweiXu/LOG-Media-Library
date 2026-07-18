@@ -4,6 +4,7 @@ import { getExplore, restoreExplore, writeExploreCache } from '../api.jsx';
 import { MEDIUMS, statusLabel, onCoverErrorPlaceholder, coverSrc, visibleMediumsFromPrefs } from '../utils.jsx';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCoverBundle, prefetchCoverBundle } from '../data/hooks.jsx';
+import { queryClient } from '../data/client.jsx';
 import { loadAvailableSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
@@ -65,6 +66,28 @@ function cacheEntryFromData(data, want, personalize) {
     sources:      want,
     personalize,
   };
+}
+
+// Warm the default Explore view (aggregate "All") + its card covers, so hovering
+// the Explore nav link makes the click paint instantly. Called from app.jsx's
+// route prefetch — it lives here (not app.jsx) so it stays in the lazy Explore
+// chunk, and it writes into the same module cache the page reads on mount.
+export function prefetchExploreHome(prefs) {
+  const medium = '';  // the default aggregate view (read-only, never rerolls)
+  const want = loadAvailableSources();
+  const personalize = (prefs?.explore || DEFAULT_UI.explore).personalize !== false;
+  const warmCovers = (items) => {
+    const visibleMediumSet = new Set(visibleMediumsFromPrefs(prefs));
+    prefetchCoverBundle(queryClient, firstPageCovers(items || [], new Set(want), visibleMediumSet), 'medium');
+  };
+  const cached = exploreCache[medium];
+  if (cached && cached.personalize === personalize) { warmCovers(cached.items); return; }
+  getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, sources: want })
+    .then(data => {
+      exploreCache[medium] = cacheEntryFromData(data, want, personalize);
+      warmCovers(exploreCache[medium].items);
+    })
+    .catch(() => {});
 }
 
 // Reroll one medium: fetch a fresh set, run the Goodreads/NovelUpdates extension

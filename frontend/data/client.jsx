@@ -5,10 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Treat data as fresh for 30s. Hover-prefetched pages then render straight
-      // from cache on click without kicking off an immediate refetch.
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
+      // Preload once per app session: a prefetched/loaded query is never refetched
+      // just because time passed — only when something invalidates it. Library
+      // mutations invalidate entries/counts/lists/stats (clearing the table
+      // preloads), and useRevalidateOnFocus invalidates on tab refocus. This is
+      // what makes "hover once, cached for the session" hold.
+      staleTime: Infinity,
+      gcTime: 30 * 60_000,
       // The app has its own focus handler (useRevalidateOnFocus) that also probes
       // the backend for offline recovery, so RQ's own focus refetch stays off to
       // avoid double-fetching.

@@ -79,21 +79,13 @@ export function useCoverBundle(urls, size) {
   return query.data || EMPTY_MAP;
 }
 
+// Warm a cover bundle once. staleTime is Infinity, so a second hover of the same
+// set no-ops (preload once). If some covers were still caching server-side when
+// this first ran, the mounted useCoverBundle's poll (refetchInterval) fills them
+// in when the view is actually shown — we don't re-hit the network on every hover.
 export function prefetchCoverBundle(qc, urls, size) {
-  const unique = [...new Set(urls.filter(Boolean))];
-  if (!unique.length) return;
-  const key = coverBundleKey(size, unique);
-  // Bundles are cached with staleTime:Infinity, so a plain prefetchQuery would
-  // no-op on a previously-fetched (possibly incomplete/empty) result and never
-  // pick up covers that have since been cached server-side. Only skip the fetch
-  // when the cached bundle is already complete; otherwise force a refetch.
-  const cached = qc.getQueryData(key);
-  if (cached && Object.keys(cached).length >= unique.length) return;
-  qc.fetchQuery({
-    queryKey: key,
-    queryFn: () => fetchCoverBundle(unique, size).then(r => r?.images || {}),
-    staleTime: 0,
-  }).catch(() => {});
+  const q = bundleQuery(size, urls);
+  if (q.enabled) qc.prefetchQuery(q);
 }
 
 // Prefetch an entries page AND its covers, so a hover warms the rows and their
