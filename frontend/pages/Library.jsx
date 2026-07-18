@@ -213,6 +213,13 @@ export default function Library({ initialFilters = {} }) {
   const [order,        setOrder]        = useState(() => searchParams.get('order') === 'asc' ? 'asc' : DEFAULT_ORDER);
   const [page,         setPage]         = useState(() => positiveIntParam(searchParams.get('page'), DEFAULT_PAGE));
   const [limit,        setLimit]        = useState(() => validParam(Number(searchParams.get('limit')), PAGE_SIZE_OPTIONS, DEFAULT_LIMIT));
+  // Debounce the search box so each keystroke isn't its own /entries query — the
+  // input stays controlled by `search`, but the query uses `debouncedSearch`.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(id);
+  }, [search]);
   const visibleMediumsKey = useMemo(() => visibleMediums.join('\u001f'), [visibleMediums]);
 
   const listParams = useCallback(() => (
@@ -225,7 +232,7 @@ export default function Library({ initialFilters = {} }) {
     const pageValue = overrides.page ?? page;
     const limitValue = overrides.limit ?? limit;
     return {
-      ...(search       && { title:  search }),
+      ...(debouncedSearch && { title:  debouncedSearch }),
       ...(statusFilter && { status: statusFilter }),
       ...(mediumFilter && { medium: mediumFilter }),
       ...(originFilter && { origin: originFilter }),
@@ -235,7 +242,7 @@ export default function Library({ initialFilters = {} }) {
       limit: limitValue,
       offset: overrides.offset ?? ((pageValue - 1) * limitValue),
     };
-  }, [search, statusFilter, mediumFilter, originFilter, listParams, sort, order, page, limit]);
+  }, [debouncedSearch, statusFilter, mediumFilter, originFilter, listParams, sort, order, page, limit]);
 
   // Data reads flow through the shared React Query layer. buildEntryParams is the
   // query key, so any filter/sort/page change swaps to a different cached query;
@@ -274,6 +281,20 @@ export default function Library({ initialFilters = {} }) {
     if (entriesQuery.data) prefetchNearbyPages(entryParams, entriesQuery.data.total);
   }, [entriesQuery.data, entryParams, prefetchNearbyPages]);
 
+  // Warm the query a sidebar filter click would produce, on hover, so the click
+  // paints from cache. Only the hovered dimension is swapped; other active filters
+  // carry over, matching what clicking the row actually does.
+  const prefetchFilter = useCallback((override = {}) => {
+    const params = buildEntryParams({ offset: 0 });
+    for (const dim of ['status', 'medium', 'origin']) {
+      if (dim in override) {
+        if (override[dim]) params[dim] = override[dim];
+        else delete params[dim];
+      }
+    }
+    prefetchEntries(qc, params);
+  }, [buildEntryParams, qc]);
+
   useEffect(() => {
     if (mediumFilter && !visibleMediumSet.has(mediumFilter)) setMediumFilter('');
   }, [mediumFilter, visibleMediumSet]);
@@ -291,7 +312,7 @@ export default function Library({ initialFilters = {} }) {
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return; }
     setPage(1);
-  }, [search, statusFilter, mediumFilter, originFilter, listFilter, sort, order, limit]);
+  }, [debouncedSearch, statusFilter, mediumFilter, originFilter, listFilter, sort, order, limit]);
 
   // If the active list no longer exists (deleted/emptied elsewhere), fall back to All.
   useEffect(() => {
@@ -706,6 +727,7 @@ export default function Library({ initialFilters = {} }) {
           ].map(([v, l]) => (
             <div key={v}
               className={`sidebar-item${statusFilter === v ? ' active' : ''}`}
+              onMouseEnter={() => prefetchFilter({ status: v })}
               onClick={() => setStatusFilter(v)}>
               {l}
               {loading || loadingCounts
@@ -719,9 +741,9 @@ export default function Library({ initialFilters = {} }) {
 
         <div className="sidebar-section">
           <span className="sidebar-label">Medium</span>
-          <div className={`sidebar-item${mediumFilter === '' ? ' active' : ''}`} onClick={() => setMediumFilter('')}>All</div>
+          <div className={`sidebar-item${mediumFilter === '' ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ medium: '' })} onClick={() => setMediumFilter('')}>All</div>
           {visibleMediums.map(m => (
-            <div key={m} className={`sidebar-item${mediumFilter === m ? ' active' : ''}`} onClick={() => setMediumFilter(m)}>
+            <div key={m} className={`sidebar-item${mediumFilter === m ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ medium: m })} onClick={() => setMediumFilter(m)}>
               {m}
               {loading || loadingCounts
                 ? <SkeletonLine width={24} height={14} />
@@ -734,9 +756,9 @@ export default function Library({ initialFilters = {} }) {
 
         <div className="sidebar-section">
           <span className="sidebar-label">Origin</span>
-          <div className={`sidebar-item${originFilter === '' ? ' active' : ''}`} onClick={() => setOriginFilter('')}>All</div>
+          <div className={`sidebar-item${originFilter === '' ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ origin: '' })} onClick={() => setOriginFilter('')}>All</div>
           {ORIGINS.map(o => (
-            <div key={o} className={`sidebar-item${originFilter === o ? ' active' : ''}`} onClick={() => setOriginFilter(o)}>
+            <div key={o} className={`sidebar-item${originFilter === o ? ' active' : ''}`} onMouseEnter={() => prefetchFilter({ origin: o })} onClick={() => setOriginFilter(o)}>
               {o}
               {loading || loadingCounts
                 ? <SkeletonLine width={24} height={14} />

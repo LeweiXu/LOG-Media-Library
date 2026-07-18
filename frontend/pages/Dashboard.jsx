@@ -81,6 +81,7 @@ function CoverThumb({ url, title }) {
     <div className="cover-thumb">
       {url && (
         <img src={url} alt={title}
+          loading="lazy"
           referrerPolicy="no-referrer"
           onError={onCoverError} />
       )}

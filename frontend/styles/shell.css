@@ -145,6 +145,13 @@
   flex-direction: column;
 }
 
+/* Brief placeholder while a route's JS chunk loads (usually already warm from
+   hover/idle preloading). Holds page height so the topbar doesn't jump. */
+.route-suspense {
+  flex: 1;
+  min-height: 60vh;
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .app-footer {
   border-top: 1px solid var(--border);

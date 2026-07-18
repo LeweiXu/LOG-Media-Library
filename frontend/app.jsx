@@ -1,15 +1,86 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
-import Dashboard   from './pages/Dashboard.jsx';
-import Library     from './pages/Library.jsx';
-import Statistics  from './pages/Statistics.jsx';
-import Explore     from './pages/Explore.jsx';
-import Console     from './pages/Console.jsx';
 import LandingPage from './pages/LandingPage.jsx';
 import AuthModal      from './pages/components/AuthModal.jsx';
 import { DEFAULT_UI, PreferencesProvider, usePreferences } from './preferences.jsx';
 import { BASE } from './api.jsx';
 import { queryClient } from './data/client.jsx';
+import { prefetchEntries, prefetchCounts, prefetchLists, prefetchStats } from './data/hooks.jsx';
+import { defaultLibraryParams } from './data/keys.js';
+
+// Each page is its own lazily-loaded chunk (this splits recharts out of the main
+// bundle, into Statistics'). The loader fns are reused for hover/idle preloading,
+// so a route's JS is usually already warm by the time the user clicks.
+const ROUTE_LOADERS = {
+  '/dashboard':  () => import('./pages/Dashboard.jsx'),
+  '/library':    () => import('./pages/Library.jsx'),
+  '/explore':    () => import('./pages/Explore.jsx'),
+  '/statistics': () => import('./pages/Statistics.jsx'),
+  '/console':    () => import('./pages/Console.jsx'),
+};
+const Dashboard  = lazy(ROUTE_LOADERS['/dashboard']);
+const Library    = lazy(ROUTE_LOADERS['/library']);
+const Explore    = lazy(ROUTE_LOADERS['/explore']);
+const Statistics = lazy(ROUTE_LOADERS['/statistics']);
+const Console    = lazy(ROUTE_LOADERS['/console']);
+
+// Warm a route's data queries on hover, so the page renders from cache on click.
+function prefetchRouteData(path, prefs) {
+  switch (path) {
+    case '/dashboard':
+      prefetchStats(queryClient);
+      prefetchEntries(queryClient, { status: 'current',   limit: 20 });
+      prefetchEntries(queryClient, { status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' });
+      prefetchEntries(queryClient, { status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' });
+      break;
+    case '/library':
+      prefetchEntries(queryClient, defaultLibraryParams(prefs));
+      prefetchCounts(queryClient);
+      prefetchLists(queryClient);
+      break;
+    case '/statistics':
+      prefetchStats(queryClient);
+      break;
+    default:
+      // Explore keeps its own module cache (migrated in a later phase); Console's
+      // heavy panels fetch lazily on expand, so neither prewarms data here.
+      break;
+  }
+}
+
+// The authenticated topbar nav. Split into its own component so it can read UI
+// prefs (for Library's default query key) and drive hover/idle preloading — App
+// itself sits above PreferencesProvider and can't use the hook.
+function TopNav({ onLibraryClick }) {
+  const { prefs } = usePreferences();
+
+  useEffect(() => {
+    // Warm every route chunk shortly after first paint, so even a click without a
+    // prior hover is instant. Idle so it never competes with the initial render.
+    const ric = window.requestIdleCallback || ((fn) => setTimeout(fn, 400));
+    const cancel = window.cancelIdleCallback || clearTimeout;
+    const id = ric(() => Object.values(ROUTE_LOADERS).forEach(fn => fn()));
+    return () => cancel(id);
+  }, []);
+
+  const warm = (path) => { ROUTE_LOADERS[path]?.(); prefetchRouteData(path, prefs); };
+  const link = (to, label, extra) => (
+    <NavLink to={to} className={({ isActive }) => isActive ? 'active' : undefined}
+      onMouseEnter={() => warm(to)} onFocus={() => warm(to)} {...extra}>
+      {label}
+    </NavLink>
+  );
+
+  return (
+    <nav className="topbar-nav">
+      {link('/dashboard', 'Dashboard')}
+      {link('/library', 'Library', { onClick: onLibraryClick })}
+      {link('/explore', 'Explore')}
+      {link('/statistics', 'Statistics')}
+      {link('/console', 'Console')}
+    </nav>
+  );
+}
 
 function DisplayPreferenceSync({ isAuthenticated, onThemeChange, onAccentChange }) {
   const { prefs, loaded, error } = usePreferences();
@@ -120,26 +191,7 @@ export default function App() {
         <span className="topbar-logo">LOG</span>
         {isAuthenticated && <span className="topbar-sep">|</span>}
 
-        {isAuthenticated && (
-          <nav className="topbar-nav">
-            <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'active' : undefined}>
-              Dashboard
-            </NavLink>
-            <NavLink to="/library" className={({ isActive }) => isActive ? 'active' : undefined}
-              onClick={() => setLibraryFilters({})}>
-              Library
-            </NavLink>
-            <NavLink to="/explore" className={({ isActive }) => isActive ? 'active' : undefined}>
-              Explore
-            </NavLink>
-            <NavLink to="/statistics" className={({ isActive }) => isActive ? 'active' : undefined}>
-              Statistics
-            </NavLink>
-            <NavLink to="/console" className={({ isActive }) => isActive ? 'active' : undefined}>
-              Console
-            </NavLink>
-          </nav>
-        )}
+        {isAuthenticated && <TopNav onLibraryClick={() => setLibraryFilters({})} />}
 
         <div className="topbar-right">
           {online === null && <span className="text-dim">connecting…</span>}
@@ -173,6 +225,7 @@ export default function App() {
       )}
 
       {/* ── Routes ── */}
+      <Suspense fallback={<div className="route-suspense" aria-hidden="true" />}>
       <Routes>
         <Route path="/"
           element={isAuthenticated
@@ -222,6 +275,7 @@ export default function App() {
         <Route path="/settings" element={<Navigate to="/console" replace />} />
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
       </Routes>
+      </Suspense>
 
       {showLogoutConfirm && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowLogoutConfirm(false); }}>
