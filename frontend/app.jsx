@@ -9,6 +9,7 @@ import LandingPage from './pages/LandingPage.jsx';
 import AuthModal      from './pages/components/AuthModal.jsx';
 import { DEFAULT_UI, PreferencesProvider, usePreferences } from './preferences.jsx';
 import { BASE } from './api.jsx';
+import { queryClient } from './data/client.jsx';
 
 function DisplayPreferenceSync({ isAuthenticated, onThemeChange, onAccentChange }) {
   const { prefs, loaded, error } = usePreferences();
@@ -56,6 +57,9 @@ export default function App() {
   }, [accent, isAuthenticated]);
 
   function handleAuth(newToken, newUsername) {
+    // The query cache is shared across the app and not keyed by user, so wipe it
+    // on any auth change to prevent one account seeing another's cached rows.
+    queryClient.clear();
     setToken(newToken);
     setUsername(newUsername);
     setShowAuthModal(false);
@@ -66,6 +70,7 @@ export default function App() {
     setShowLogoutConfirm(false);
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_username');
+    queryClient.clear();
     setToken('');
     setUsername('');
     navigate('/');

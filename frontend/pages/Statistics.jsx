@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getStats } from '../api.jsx';
+import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePreferences } from '../preferences.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
+import { useStats, invalidateEntryData } from '../data/hooks.jsx';
 import { SkeletonChartBox, SkeletonLine } from './components/Skeletons.jsx';
 import {
   Bar,
@@ -163,32 +164,19 @@ export default function Statistics() {
   const show = (key) => sec[key] !== false;   // default visible
   const consumedMonths = statPrefs.consumed_range || 12;
   const addedMonths = statPrefs.added_range || 5;
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const qc = useQueryClient();
   const [consumedRange, setConsumedRange] = useState(() => loadStoredRange(CONSUMED_RANGE_KEY));
   const [addedRange, setAddedRange] = useState(() => loadStoredRange(ADDED_RANGE_KEY));
   const [barsReady, setBarsReady] = useState(false);
   const [pieAnimId, setPieAnimId] = useState(0);
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) { setLoading(true); setError(''); }
-    try {
-      const data = await getStats();
-      setStats(data);
-      setError('');
-      return true;
-    } catch (err) {
-      if (!silent) setError(err.message);
-      return false;
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
+  const statsQuery = useStats();
+  const stats = statsQuery.data ?? null;
+  const loading = statsQuery.isLoading;
+  const error = statsQuery.error?.message || '';
 
-  useEffect(() => { load(); }, [load]);
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
-  useRevalidateOnFocus(() => load(true));
+  useRevalidateOnFocus(() => { invalidateEntryData(qc); return true; });
 
   useEffect(() => {
     if (loading) return;

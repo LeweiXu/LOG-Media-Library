@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import {
-  getEntries, updateEntry, deleteEntry,
-  getCustomLists, getEntryCounts, batchUpdateEntries, batchDeleteEntries,
-} from '../api.jsx';
-import { statusLabel, fmtDate, progressPercent, progressLabel, extractItems, MEDIUMS, STATUSES, ORIGINS, onCoverError, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
+import { useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { statusLabel, fmtDate, progressPercent, progressLabel, MEDIUMS, STATUSES, ORIGINS, onCoverError, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
+import {
+  useEntries, useEntryCounts, useCustomLists, useEntryMutations,
+  invalidateEntryData, syncUpdatedEntry, syncDeletedEntry, prefetchEntries,
+} from '../data/hooks.jsx';
+import { entriesKey } from '../data/keys.js';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ListsModal from './components/ListsModal.jsx';
@@ -57,6 +59,19 @@ const LIB_COLS = {
   custom_list: { label: 'Custom List', cls: 'col-custom-list' },
 };
 
+// Stable empty reference so derived memos (pageIds, listNames) don't churn while
+// a query is still loading and its data is undefined.
+const EMPTY_ARR = [];
+
+// Flatten the /entries/counts payload into the flat lookup the sidebar reads.
+function buildCounts(data) {
+  const next = { _total: data?.total || 0 };
+  Object.entries(data?.statuses || {}).forEach(([key, value]) => { next[key] = value; });
+  Object.entries(data?.mediums || {}).forEach(([key, value]) => { next[key] = value; });
+  Object.entries(data?.origins || {}).forEach(([key, value]) => { next[key] = value; });
+  return next;
+}
+
 function validParam(value, allowed, fallback = '') {
   return allowed.includes(value) ? value : fallback;
 }
@@ -100,18 +115,10 @@ export default function Library({ initialFilters = {} }) {
     if (next !== 'manage') clearSelection();
   }
 
-  const [entries,      setEntries]      = useState([]);
-  const [total,        setTotal]        = useState(0);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState('');
-  const [counts,       setCounts]       = useState({});
-  const [loadingCounts,setLoadingCounts]= useState(true);
+  const qc = useQueryClient();
+  const { update, remove, batchUpdate, batchDelete } = useEntryMutations();
 
   // ── Custom lists ──
-  const [lists,         setLists]         = useState([]);
-  const [unlistedCount, setUnlistedCount] = useState(0);
-  const [loadingLists,  setLoadingLists]  = useState(true);
-  const listNames = useMemo(() => lists.map(l => l.name), [lists]);
   const [listFilter, setListFilter] = useState(() =>
     searchParams.get('list') || (!hasUrlParams ? initialFilters.list : '') || ALL_LISTS);
 
@@ -206,10 +213,6 @@ export default function Library({ initialFilters = {} }) {
   const [order,        setOrder]        = useState(() => searchParams.get('order') === 'asc' ? 'asc' : DEFAULT_ORDER);
   const [page,         setPage]         = useState(() => positiveIntParam(searchParams.get('page'), DEFAULT_PAGE));
   const [limit,        setLimit]        = useState(() => validParam(Number(searchParams.get('limit')), PAGE_SIZE_OPTIONS, DEFAULT_LIMIT));
-  const pageCacheRef = useRef(new Map());
-  const pageInflightRef = useRef(new Map());
-  const cacheEpochRef = useRef(0);
-  const loadSeqRef = useRef(0);
   const visibleMediumsKey = useMemo(() => visibleMediums.join('\u001f'), [visibleMediums]);
 
   const listParams = useCallback(() => (
@@ -217,12 +220,6 @@ export default function Library({ initialFilters = {} }) {
       : listFilter ? { custom_list: listFilter }
       : {}
   ), [listFilter]);
-
-  const invalidateLibraryCache = useCallback(() => {
-    cacheEpochRef.current += 1;
-    pageCacheRef.current.clear();
-    pageInflightRef.current.clear();
-  }, []);
 
   const buildEntryParams = useCallback((overrides = {}) => {
     const pageValue = overrides.page ?? page;
@@ -240,147 +237,61 @@ export default function Library({ initialFilters = {} }) {
     };
   }, [search, statusFilter, mediumFilter, originFilter, listParams, sort, order, page, limit]);
 
-  const pageCacheKey = useCallback((params) => JSON.stringify([
-    visibleMediumsKey,
-    params.title || '',
-    params.status || '',
-    params.medium || '',
-    params.origin || '',
-    params.custom_list || '',
-    params.custom_list_empty ? 1 : 0,
-    params.sort || DEFAULT_SORT,
-    params.order || DEFAULT_ORDER,
-    params.limit || DEFAULT_LIMIT,
-    params.offset || 0,
-  ]), [visibleMediumsKey]);
+  // Data reads flow through the shared React Query layer. buildEntryParams is the
+  // query key, so any filter/sort/page change swaps to a different cached query;
+  // keepPreviousData shows the prior page while the new one loads (no skeleton
+  // flash), and a hover-prefetched page renders instantly from cache on click.
+  const entryParams = useMemo(() => buildEntryParams(), [buildEntryParams]);
+  const entriesQuery = useEntries(entryParams, {
+    enabled: settingsApplied,
+    placeholderData: keepPreviousData,
+  });
+  const entries = entriesQuery.data?.items ?? EMPTY_ARR;
+  const total = entriesQuery.data?.total ?? 0;
+  const loading = !settingsApplied || entriesQuery.isLoading;
+  const error = entriesQuery.error?.message || '';
 
-  const fetchEntryPage = useCallback((params) => {
-    const key = pageCacheKey(params);
-    const cached = pageCacheRef.current.get(key);
-    if (cached) return Promise.resolve(cached);
-    const inflight = pageInflightRef.current.get(key);
-    if (inflight) return inflight;
-    const epoch = cacheEpochRef.current;
+  const countsQuery = useEntryCounts();
+  const counts = useMemo(() => buildCounts(countsQuery.data), [countsQuery.data]);
+  const unlistedCount = countsQuery.data?.unlisted || 0;
+  const loadingCounts = countsQuery.isLoading;
 
-    const request = getEntries(params)
-      .then(data => {
-        const items = extractItems(data);
-        const payload = {
-          items,
-          total: data?.total ?? items.length,
-          limit: data?.limit ?? params.limit,
-          offset: data?.offset ?? params.offset,
-        };
-        if (epoch === cacheEpochRef.current) {
-          pageCacheRef.current.set(key, payload);
-        }
-        return payload;
-      })
-      .finally(() => {
-        if (pageInflightRef.current.get(key) === request) {
-          pageInflightRef.current.delete(key);
-        }
-      });
+  const listsQuery = useCustomLists();
+  const lists = listsQuery.data ?? EMPTY_ARR;
+  const loadingLists = listsQuery.isLoading;
+  const listNames = useMemo(() => lists.map(l => l.name), [lists]);
 
-    pageInflightRef.current.set(key, request);
-    return request;
-  }, [pageCacheKey]);
-
-  const prefetchEntryPage = useCallback((params) => {
-    fetchEntryPage(params).catch(() => {});
-  }, [fetchEntryPage]);
-
+  // Speculatively warm the next page + the reversed-order first page after each
+  // load, so paging and flipping the sort order feel instant.
   const prefetchNearbyPages = useCallback((params, totalForQuery) => {
     const nextOffset = (params.offset || 0) + (params.limit || DEFAULT_LIMIT);
-    if (nextOffset < totalForQuery) {
-      prefetchEntryPage({ ...params, offset: nextOffset });
-    }
+    if (nextOffset < totalForQuery) prefetchEntries(qc, { ...params, offset: nextOffset });
     if ((params.offset || 0) === 0) {
-      prefetchEntryPage({
-        ...params,
-        order: params.order === 'asc' ? 'desc' : 'asc',
-        offset: 0,
-      });
+      prefetchEntries(qc, { ...params, order: params.order === 'asc' ? 'desc' : 'asc', offset: 0 });
     }
-  }, [prefetchEntryPage]);
+  }, [qc]);
+  useEffect(() => {
+    if (entriesQuery.data) prefetchNearbyPages(entryParams, entriesQuery.data.total);
+  }, [entriesQuery.data, entryParams, prefetchNearbyPages]);
 
   useEffect(() => {
     if (mediumFilter && !visibleMediumSet.has(mediumFilter)) setMediumFilter('');
   }, [mediumFilter, visibleMediumSet]);
 
-  useEffect(() => { invalidateLibraryCache(); }, [visibleMediumsKey, invalidateLibraryCache]);
-
-  const applyCountPayload = useCallback((data) => {
-    const next = { _total: data?.total || 0 };
-    Object.entries(data?.statuses || {}).forEach(([key, value]) => { next[key] = value; });
-    Object.entries(data?.mediums || {}).forEach(([key, value]) => { next[key] = value; });
-    Object.entries(data?.origins || {}).forEach(([key, value]) => { next[key] = value; });
-    setCounts(next);
-    setUnlistedCount(data?.unlisted || 0);
-  }, []);
-
-  const loadCounts = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoadingCounts(true);
-    try {
-      applyCountPayload(await getEntryCounts());
-    } catch { /* counts are best-effort */ }
-    finally { if (!silent) setLoadingCounts(false); }
-  }, [applyCountPayload]);
-
-  const load = useCallback(async (silent = false, { useCache = true } = {}) => {
-    const requestId = ++loadSeqRef.current;
-    const params = buildEntryParams();
-    const cached = useCache ? pageCacheRef.current.get(pageCacheKey(params)) : null;
-    if (cached) {
-      setEntries(cached.items);
-      setTotal(cached.total);
-      setLoading(false);
-      setError('');
-      prefetchNearbyPages(params, cached.total);
-      return true;
-    }
-
-    if (!silent) { setLoading(true); setError(''); }
-    try {
-      const data = await fetchEntryPage(params);
-      if (requestId !== loadSeqRef.current) return;
-      setEntries(data.items);
-      setTotal(data.total);
-      setError('');
-      prefetchNearbyPages(params, data.total);
-      return true;
-    } catch (e) {
-      if (requestId !== loadSeqRef.current) return;
-      if (!silent) setError(e.message);
-      return false;
-    } finally {
-      if (requestId !== loadSeqRef.current) return;
-      if (!silent) setLoading(false);
-    }
-  }, [buildEntryParams, fetchEntryPage, pageCacheKey, prefetchNearbyPages]);
-
-  const loadLists = useCallback(async ({ silent = false } = {}) => {
-    // `silent` skips the loading flag so a background refresh (e.g. on tab
-    // refocus) updates the list chips in place without flashing the counts.
-    if (!silent) setLoadingLists(true);
-    let nextLists = [];
-    try {
-      const listData = await getCustomLists();
-      nextLists = Array.isArray(listData) ? listData : [];
-      setLists(nextLists);
-    } catch { /* lists are best-effort */ }
-    finally { if (!silent) setLoadingLists(false); }
-    return nextLists;
-  }, []);
+  // Entries/counts/lists/stats are all scoped server-side by the user's visible
+  // mediums, so a change there must refetch them (skip the initial mount — the
+  // queries fetch fresh on their own).
+  const visMountRef = useRef(false);
+  useEffect(() => {
+    if (!visMountRef.current) { visMountRef.current = true; return; }
+    invalidateEntryData(qc);
+  }, [visibleMediumsKey, qc]);
 
   // reset to page 1 when filters/sort/limit/list change
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return; }
     setPage(1);
   }, [search, statusFilter, mediumFilter, originFilter, listFilter, sort, order, limit]);
-
-  useEffect(() => { loadLists(); loadCounts(); }, [loadLists, loadCounts, visibleMediumsKey]);
-  useEffect(() => { if (settingsApplied) load(); }, [load, settingsApplied]);
 
   // If the active list no longer exists (deleted/emptied elsewhere), fall back to All.
   useEffect(() => {
@@ -404,92 +315,51 @@ export default function Library({ initialFilters = {} }) {
     setSearchParams(params, { replace: true });
   }, [search, statusFilter, mediumFilter, originFilter, listFilter, sort, order, page, limit, setSearchParams]);
 
-  function refreshView() {
-    invalidateLibraryCache();
-    loadLists();
-    loadCounts();
-    load(true, { useCache: false });
-  }
-
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
-  // Fully silent — updates entries and list counts in place without flashing.
-  useRevalidateOnFocus(async () => {
-    invalidateLibraryCache();
-    const [ok] = await Promise.all([
-      load(true, { useCache: false }),
-      loadLists({ silent: true }),
-      loadCounts({ silent: true }),
-    ]);
-    return ok;
-  });
+  // Invalidation refetches entries + counts + lists in place without flashing.
+  useRevalidateOnFocus(() => { invalidateEntryData(qc); return true; });
 
   function handleSort(field) {
     if (sort === field) setOrder(o => o === 'asc' ? 'desc' : 'asc');
     else { setSort(field); setOrder('desc'); }
   }
 
+  // All inline edits go through the shared mutation contract: an optimistic patch
+  // shows the change instantly, then invalidation refetches the current view so
+  // the row re-sorts / drops out of an active filter on its own.
   async function handleStatusChange(id, newStatus) {
-    try {
-      const updated = await updateEntry(id, { status: newStatus });
-      invalidateLibraryCache();
-      loadCounts({ silent: true });
-      setEntries(prev => {
-        const mapped = prev.map(e => e.id === id ? { ...e, ...updated } : e);
-        return (statusFilter && newStatus !== statusFilter)
-          ? mapped.filter(e => e.id !== id)
-          : mapped;
-      });
-      if (statusFilter && newStatus !== statusFilter) setTotal(t => t - 1);
-    } catch (e) {
-      alert('Update failed: ' + e.message);
-    }
+    try { await update.mutateAsync({ id, patch: { status: newStatus } }); }
+    catch (e) { alert('Update failed: ' + e.message); }
   }
 
   async function handleProgressSave(id, value) {
     setEditingProgress(null);
     const num = parseInt(value, 10);
-    if (!isNaN(num)) {
-      try {
-        const updated = await updateEntry(id, { progress: num });
-        invalidateLibraryCache();
-        setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
-      } catch (e) { alert('Update failed: ' + e.message); }
-    }
+    if (isNaN(num)) return;
+    try { await update.mutateAsync({ id, patch: { progress: num } }); }
+    catch (e) { alert('Update failed: ' + e.message); }
   }
 
   async function handleRatingSave(id, value) {
     setEditingRating(null);
     const num = value !== '' ? parseFloat(value) : null;
     if (num !== null && (isNaN(num) || num < 0 || num > 10)) return;
-    try {
-      const updated = await updateEntry(id, { rating: num ?? undefined });
-      invalidateLibraryCache();
-      setEntries(prev => prev.map(e => e.id === id ? { ...e, ...updated } : e));
-    } catch (e) { alert('Update failed: ' + e.message); }
+    try { await update.mutateAsync({ id, patch: { rating: num ?? undefined } }); }
+    catch (e) { alert('Update failed: ' + e.message); }
   }
 
   async function handleDeleteEntry(id) {
     try {
-      await deleteEntry(id);
       setConfirmDeleteId(null);
-      setEntries(prev => prev.filter(e => e.id !== id));
-      setTotal(t => t - 1);
-      refreshView();
+      await remove.mutateAsync(id);
     } catch (e) { alert('Delete failed: ' + e.message); }
   }
 
-  const handleUpdated = (updated) => {
-    invalidateLibraryCache();
-    loadLists({ silent: true });
-    loadCounts({ silent: true });
-    setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
-  };
+  const handleUpdated = (updated) => { syncUpdatedEntry(qc, updated); };
   const handleDeleted = (id) => {
     setConfirmDeleteId(null);
     setDetailEntry(null);
-    setEntries(prev => prev.filter(e => e.id !== id));
-    setTotal(t => t - 1);
-    refreshView();
+    syncDeletedEntry(qc, id);
   };
 
   // ── Custom-list assignment (manage-mode per-row column) ──
@@ -508,19 +378,7 @@ export default function Library({ initialFilters = {} }) {
     setSaving(`entry:${entry.id}`);
     setLastEntryWarning(null);
     try {
-      const updated = await updateEntry(entry.id, { custom_list: nextValue || null });
-      invalidateLibraryCache();
-      await loadLists();
-      loadCounts({ silent: true });
-      const movedAway =
-        listFilter === UNLISTED_LIST ? (nextValue || '') !== ''
-          : listFilter ? nextValue !== listFilter
-          : false;
-      setEntries(prev => {
-        const mapped = prev.map(e => e.id === entry.id ? { ...e, ...updated } : e);
-        return movedAway ? mapped.filter(e => e.id !== entry.id) : mapped;
-      });
-      if (movedAway) setTotal(t => Math.max(0, t - 1));
+      await update.mutateAsync({ id: entry.id, patch: { custom_list: nextValue || null } });
     } catch (err) {
       alert('Update failed: ' + err.message);
     } finally {
@@ -587,9 +445,8 @@ export default function Library({ initialFilters = {} }) {
     if (ids.length === 0) return;
     setBulkBusy(true); setBulkError('');
     try {
-      await batchUpdateEntries(ids, patch);
+      await batchUpdate.mutateAsync({ ids, patch });
       clearSelection();
-      refreshView();
     } catch (err) { setBulkError(err.message); }
     finally { setBulkBusy(false); }
   }
@@ -620,9 +477,8 @@ export default function Library({ initialFilters = {} }) {
     if (ids.length === 0) return;
     setBulkBusy(true); setBulkError('');
     try {
-      await batchDeleteEntries(ids);
+      await batchDelete.mutateAsync(ids);
       clearSelection();
-      refreshView();
     } catch (err) { setBulkError(err.message); }
     finally { setBulkBusy(false); }
   }
@@ -936,7 +792,7 @@ export default function Library({ initialFilters = {} }) {
             containerClassName="filter-count-select"
             ariaLabel="Entries per page"
           />
-          <button className="icon-btn filter-bar-btn" onClick={() => refreshView()} title="Refresh">Refresh</button>
+          <button className="icon-btn filter-bar-btn" onClick={() => invalidateEntryData(qc)} title="Refresh">Refresh</button>
         </div>
 
         <ListChips
@@ -955,7 +811,7 @@ export default function Library({ initialFilters = {} }) {
           <div className="state-block">
             <div className="state-title">Error</div>
             <div className="state-detail">{error}</div>
-            <button className="btn btn-outline state-retry-btn" onClick={() => load()}>Retry</button>
+            <button className="btn btn-outline state-retry-btn" onClick={() => entriesQuery.refetch()}>Retry</button>
           </div>
         )}
 
@@ -1207,7 +1063,7 @@ export default function Library({ initialFilters = {} }) {
       </div>
 
       {showAdd && (
-        <AddEntryModal onClose={() => setShowAdd(false)} onCreated={() => { refreshView(); setShowAdd(false); }} />
+        <AddEntryModal onClose={() => setShowAdd(false)} onCreated={() => { invalidateEntryData(qc); setShowAdd(false); }} />
       )}
 
       {detailEntry && (
@@ -1225,9 +1081,9 @@ export default function Library({ initialFilters = {} }) {
           initialTab={listModalTab}
           onClose={() => setShowLists(false)}
           existingLists={lists}
-          onCreated={(name) => { invalidateLibraryCache(); setShowLists(false); setListFilter(name); setPage(1); loadLists(); loadCounts({ silent: true }); }}
-          onRenamed={(oldName, newName) => { invalidateLibraryCache(); if (listFilter === oldName) { setListFilter(newName); setPage(1); } loadLists(); loadCounts({ silent: true }); }}
-          onDeleted={(name) => { invalidateLibraryCache(); if (listFilter === name) { setListFilter(ALL_LISTS); setPage(1); } loadLists(); loadCounts({ silent: true }); }}
+          onCreated={(name) => { setShowLists(false); setListFilter(name); setPage(1); invalidateEntryData(qc); }}
+          onRenamed={(oldName, newName) => { if (listFilter === oldName) { setListFilter(newName); setPage(1); } invalidateEntryData(qc); }}
+          onDeleted={(name) => { if (listFilter === name) { setListFilter(ALL_LISTS); setPage(1); } invalidateEntryData(qc); }}
         />
       )}
 

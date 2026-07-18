@@ -1,7 +1,8 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
-import { getEntries, getStats, updateEntry } from '../api.jsx';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRevalidateOnFocus } from '../hooks.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, extractItems, STATUSES, ORIGINS, logDotClass, onCoverError, tableGapVars } from '../utils.jsx';
+import { useEntries, useStats, useEntryMutations, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry } from '../data/hooks.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverError, tableGapVars } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
@@ -91,13 +92,8 @@ export default function DashboardAlt({ onFilterChange }) {
   const { prefs } = usePreferences();
   const dash = prefs.dashboard || DEFAULT_UI.dashboard;
   const sidebarClass = `${dash.sidebars?.left ? ' always-show-left' : ''}${dash.sidebars?.right ? ' always-show-right' : ''}`;
-  const [stats,           setStats]           = useState(null);
-  const [current,         setCurrent]         = useState([]);
-  const [planned,         setPlanned]         = useState([]);
-  const [recent,          setRecent]          = useState([]);
-  const [activity,        setActivity]        = useState([]);
-  const [loading,         setLoading]         = useState(true);
-  const [error,           setError]           = useState('');
+  const qc = useQueryClient();
+  const { update } = useEntryMutations();
   const [showAdd,         setShowAdd]         = useState(false);
   const [detailEntry,     setDetailEntry]     = useState(null);
   const [editingProgress, setEditingProgress] = useState(null); // { id, value }
@@ -111,53 +107,47 @@ export default function DashboardAlt({ onFilterChange }) {
   const [adaptiveSplit,   setAdaptiveSplit]   = useState(null);
   const pairRef = useRef(null);
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) { setLoading(true); setError(''); }
-    try {
-      const [statsData, currentData, completedData, onHoldData, droppedData, plannedData] = await Promise.all([
-        getStats().catch(() => null),
-        getEntries({ status: 'current',   limit: 20 }),
-        getEntries({ status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' }),
-        getEntries({ status: 'on_hold',   limit: 6,  sort: 'updated_at', order: 'desc' }),
-        getEntries({ status: 'dropped',   limit: 6,  sort: 'updated_at', order: 'desc' }),
-        getEntries({ status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' }),
-      ]);
+  // Dashboard is a fan-out of status-bucketed entry queries + the stats summary.
+  // Each is its own cache entry, so a mutation's invalidation refetches exactly
+  // the buckets that changed and rows move between Current / Planned / Completed.
+  const statsQuery     = useStats();
+  const currentQuery   = useEntries({ status: 'current',   limit: 20 });
+  const completedQuery = useEntries({ status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' });
+  const onHoldQuery    = useEntries({ status: 'on_hold',   limit: 6,  sort: 'updated_at', order: 'desc' });
+  const droppedQuery   = useEntries({ status: 'dropped',   limit: 6,  sort: 'updated_at', order: 'desc' });
+  const plannedQuery   = useEntries({ status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' });
 
-      const currentItems   = extractItems(currentData);
-      const completedItems = extractItems(completedData);
-      const onHoldItems    = extractItems(onHoldData);
-      const droppedItems   = extractItems(droppedData);
-      const plannedItems   = extractItems(plannedData);
+  const stats   = statsQuery.data ?? null;
+  const current = currentQuery.data?.items ?? [];
+  const planned = plannedQuery.data?.items ?? [];
+  const recent  = completedQuery.data?.items ?? [];
+  const loading = [statsQuery, currentQuery, completedQuery, onHoldQuery, droppedQuery, plannedQuery]
+    .some(q => q.isLoading);
+  const error = (currentQuery.error || completedQuery.error || onHoldQuery.error
+    || droppedQuery.error || plannedQuery.error)?.message || '';
 
-      setStats(statsData);
-      setCurrent(currentItems);
-      setPlanned(plannedItems);
-      setRecent(completedItems);
-      setError('');
+  const activity = useMemo(() => {
+    const completedItems = completedQuery.data?.items ?? [];
+    const currentItems   = currentQuery.data?.items ?? [];
+    const onHoldItems    = onHoldQuery.data?.items ?? [];
+    const droppedItems   = droppedQuery.data?.items ?? [];
+    const plannedItems   = plannedQuery.data?.items ?? [];
+    return [
+      ...completedItems.slice(0, 6).map(e => ({ type: 'completed', entry: e, time: e.updated_at || e.completed_at })),
+      ...currentItems.slice(0, 4).map(e  => ({ type: 'current',   entry: e, time: e.created_at })),
+      ...onHoldItems.map(e               => ({ type: 'on_hold',   entry: e, time: e.updated_at })),
+      ...droppedItems.map(e              => ({ type: 'dropped',   entry: e, time: e.updated_at })),
+      ...plannedItems.map(e              => ({ type: 'planned',   entry: e, time: e.updated_at })),
+    ]
+      .filter(a => a.time)
+      .sort((a, b) => new Date(b.time) - new Date(a.time))
+      .slice(0, 8);
+  }, [completedQuery.data, currentQuery.data, onHoldQuery.data, droppedQuery.data, plannedQuery.data]);
 
-      const acts = [
-        ...completedItems.slice(0, 6).map(e => ({ type: 'completed', entry: e, time: e.updated_at || e.completed_at })),
-        ...currentItems.slice(0, 4).map(e  => ({ type: 'current',   entry: e, time: e.created_at })),
-        ...onHoldItems.map(e               => ({ type: 'on_hold',   entry: e, time: e.updated_at })),
-        ...droppedItems.map(e              => ({ type: 'dropped',   entry: e, time: e.updated_at })),
-        ...plannedItems.map(e              => ({ type: 'planned',   entry: e, time: e.updated_at })),
-      ]
-        .filter(a => a.time)
-        .sort((a, b) => new Date(b.time) - new Date(a.time))
-        .slice(0, 8);
-      setActivity(acts);
-      return true;
-    } catch (e) {
-      if (!silent) setError(e.message);
-      return false;
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
+  const reload = useCallback(() => invalidateEntryData(qc), [qc]);
 
-  useEffect(() => { load(); }, [load]);
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
-  useRevalidateOnFocus(() => load(true));
+  useRevalidateOnFocus(() => { reload(); return true; });
 
   const monthBarsData = stats?.entries_per_month ?? [];
   useEffect(() => {
@@ -169,69 +159,29 @@ export default function DashboardAlt({ onFilterChange }) {
   }, [monthBarsData.length]);
 
   async function handleStatusChange(id, newStatus) {
-    try {
-      const updated = await updateEntry(id, { status: newStatus });
-      if (newStatus === 'current') {
-        setCurrent(c => c.map(e => e.id === id ? { ...e, ...updated } : e));
-        setPlanned(p => p.filter(e => e.id !== id));
-      } else if (newStatus === 'planned') {
-        setPlanned(p => p.map(e => e.id === id ? { ...e, ...updated } : e));
-        setCurrent(c => c.filter(e => e.id !== id));
-      } else {
-        setCurrent(c => c.filter(e => e.id !== id));
-        setPlanned(p => p.filter(e => e.id !== id));
-      }
-      load(true);
-    } catch (e) {
-      alert('Failed to update: ' + e.message);
-    }
-  }
-
-  function refreshEntry(updated) {
-    setCurrent(c => c.map(e => e.id === updated.id ? { ...e, ...updated } : e));
-    setPlanned(p => p.map(e => e.id === updated.id ? { ...e, ...updated } : e));
-    setRecent(r  => r.map(e => e.id === updated.id ? { ...e, ...updated } : e));
+    try { await update.mutateAsync({ id, patch: { status: newStatus } }); }
+    catch (e) { alert('Failed to update: ' + e.message); }
   }
 
   async function handleProgressSave(id, value) {
     setEditingProgress(null);
     const num = parseInt(value, 10);
-    if (!isNaN(num)) {
-      try {
-        const updated = await updateEntry(id, { progress: num });
-        refreshEntry(updated);
-        load(true);
-      } catch (e) {
-        alert('Update failed: ' + e.message);
-      }
-    }
+    if (isNaN(num)) return;
+    try { await update.mutateAsync({ id, patch: { progress: num } }); }
+    catch (e) { alert('Update failed: ' + e.message); }
   }
 
   async function handleRatingSave(id, value) {
     setEditingRating(null);
     const num = value !== '' ? parseFloat(value) : null;
     if (num !== null && (isNaN(num) || num < 0 || num > 10)) return;
-    try {
-      const updated = await updateEntry(id, { rating: num ?? undefined });
-      refreshEntry(updated);
-      load(true);
-    } catch (e) {
-      alert('Update failed: ' + e.message);
-    }
+    try { await update.mutateAsync({ id, patch: { rating: num ?? undefined } }); }
+    catch (e) { alert('Update failed: ' + e.message); }
   }
 
-  const handleUpdated = (updated) => {
-    setCurrent(c => c.map(e => e.id === updated.id ? updated : e));
-    setPlanned(p => p.map(e => e.id === updated.id ? updated : e));
-    load(true);
-  };
+  const handleUpdated = (updated) => { syncUpdatedEntry(qc, updated); };
 
-  const handleDeleted = (id) => {
-    setCurrent(c => c.filter(e => e.id !== id));
-    setPlanned(p => p.filter(e => e.id !== id));
-    setDetailEntry(null);
-    load(true);
-  };
+  const handleDeleted = (id) => { setDetailEntry(null); syncDeletedEntry(qc, id); };
 
   const s       = stats || {};
   const maxBar  = monthBarsData.length ? Math.max(...monthBarsData.map(m => m.count), 1) : 1;
@@ -470,7 +420,7 @@ export default function DashboardAlt({ onFilterChange }) {
           <div className="state-block">
             <div className="state-title">Connection Error</div>
             <div className="state-detail">{error}</div>
-            <button className="btn btn-outline state-retry-btn" onClick={() => load()}>Retry</button>
+            <button className="btn btn-outline state-retry-btn" onClick={() => reload()}>Retry</button>
           </div>
         )}
 
@@ -661,7 +611,7 @@ export default function DashboardAlt({ onFilterChange }) {
       {showAdd && (
         <AddEntryModal
           onClose={() => setShowAdd(false)}
-          onCreated={() => { load(); setShowAdd(false); }}
+          onCreated={() => { reload(); setShowAdd(false); }}
         />
       )}
 
