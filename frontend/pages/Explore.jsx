@@ -253,6 +253,17 @@ export default function Explore() {
 
   useEffect(() => { fetchExplore(); }, [fetchExplore]);
 
+  // Warm a medium's recommendation set on hover, so switching the sidebar filter
+  // paints instantly. Writes straight into the same module cache fetchExplore
+  // reads from; skips anything already cached or mid-reroll. Best-effort.
+  const prefetchMedium = useCallback((m) => {
+    if (m === medium || exploreCache[m] || rerollTasks[m]) return;
+    const want = [...availableSet];
+    getExplore({ medium: m, limit: EXPLORE_FETCH_LIMIT, sources: want })
+      .then(data => { if (!exploreCache[m]) exploreCache[m] = cacheEntryFromData(data, want, personalize); })
+      .catch(() => {});
+  }, [medium, availableSet, personalize]);
+
   // Stable refs so the rejoin effect (run only on medium change/mount) can call
   // the latest fetch/apply without re-subscribing and double-joining.
   const fetchExploreRef = useRef(fetchExplore);
@@ -469,12 +480,14 @@ export default function Explore() {
         <div className="sidebar-section">
           <span className="sidebar-label">Medium</span>
           <div className={'sidebar-item' + (medium === '' ? ' active' : '')}
+            onMouseEnter={() => prefetchMedium('')}
             onClick={() => setMedium('')}>
             <span>All</span>
           </div>
           {visibleMediums.map(m => (
             <div key={m}
               className={'sidebar-item' + (medium === m ? ' active' : '')}
+              onMouseEnter={() => prefetchMedium(m)}
               onClick={() => setMedium(m)}>
               <span>{m}</span>
             </div>
