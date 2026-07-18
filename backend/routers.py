@@ -1,6 +1,7 @@
+import base64
 import io
 import json
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -37,8 +38,8 @@ from services.explore_service import (
 from services.backup_service import run_backup_for_user
 from services.email_service import SMTPNotConfigured
 from services.cover_cache_service import (
-    CoverCacheError, MAX_SOURCE_BYTES, cache_uncached_covers,
-    full_cover_cache_path, store_cover_bytes,
+    CoverCacheError, MAX_SOURCE_BYTES, SIZES, cache_one_cover, cache_uncached_covers,
+    sized_cover_path, store_cover_bytes,
 )
 
 router = APIRouter()
@@ -69,16 +70,10 @@ async def upload_cover(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.get("/covers/full")
-async def get_cached_cover(url: str = Query(..., min_length=1, max_length=2000)):
-    """Serve a previously-cached cover, or 404 if we don't have it.
-
-    Used as a frontend fallback when the original cover URL fails to load
-    (e.g. Cloudflare-gated NovelUpdates covers). We never fetch server-side —
-    covers only get here via the extension's /covers/upload. Public (no auth):
-    covers aren't sensitive and <img> tags can't send an Authorization header.
-    """
-    path = full_cover_cache_path(url)
+def _serve_sized_cover(url: str, size: str) -> FileResponse:
+    if size not in SIZES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown cover size")
+    path = sized_cover_path(url, size)
     if not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover not cached")
     return FileResponse(
@@ -86,6 +81,54 @@ async def get_cached_cover(url: str = Query(..., min_length=1, max_length=2000))
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
+
+
+@router.get("/covers/img")
+async def get_cached_cover(
+    url: str = Query(..., min_length=1, max_length=2000),
+    size: str = Query("full"),
+):
+    """Serve one cached sized cover, or 404 if we don't have it.
+
+    Used directly as an <img src> by the detail modal (size=full). Public (no
+    auth): covers aren't sensitive and <img> tags can't send an Authorization
+    header. We never fetch server-side here — the cache is filled by the extension
+    upload, the cache-all sweep, or the on-create background task.
+    """
+    return _serve_sized_cover(url, size)
+
+
+# Back-compat alias: the old fallback endpoint served the (native) full cover.
+@router.get("/covers/full")
+async def get_cached_cover_full(url: str = Query(..., min_length=1, max_length=2000)):
+    return _serve_sized_cover(url, "full")
+
+
+@router.post("/covers/bundle")
+async def bundle_cached_covers(
+    size: str = Body(..., embed=True),
+    urls: list[str] = Body(..., embed=True),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Return every requested cover, at one size, as base64 data URIs in a single
+    response — so a whole table / Explore page loads its covers in one request
+    instead of dozens. Uncached URLs are simply omitted; the client falls back to
+    the raw URL for those.
+    """
+    if size not in SIZES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown cover size")
+
+    images: dict[str, str] = {}
+    for url in dict.fromkeys(urls):  # dedupe, preserve order
+        if not url:
+            continue
+        path = sized_cover_path(url, size)
+        if not path.exists():
+            continue
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        images[url] = f"data:image/jpeg;base64,{encoded}"
+
+    return {"images": images}
 
 
 @router.post("/covers/cache-all")
@@ -341,25 +384,45 @@ def get_entry(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
     return entry
 
+def _cache_cover_background(cover_url: str | None) -> None:
+    """Best-effort: warm the 3-size cache for a cover after an entry is saved.
+
+    Swallows errors — Cloudflare/NU covers can't be fetched server-side and arrive
+    via the extension upload instead.
+    """
+    if not cover_url:
+        return
+    try:
+        cache_one_cover(cover_url)
+    except CoverCacheError:
+        pass
+
+
 @router.post("/entries", response_model=EntryRead, status_code=status.HTTP_201_CREATED)
 def create_entry(
     payload: EntryCreate,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
-    return entry_service.create_entry(db, payload, username=current_user.username)
+    entry = entry_service.create_entry(db, payload, username=current_user.username)
+    background.add_task(_cache_cover_background, entry.cover_url)
+    return entry
 
 @router.put("/entries/{entry_id}", response_model=EntryRead)
 def update_entry(
     entry_id: int,
     payload: EntryUpdate,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(auth_service.get_current_user),
 ):
     entry = entry_service.get_entry_by_id(db, entry_id)
     if not entry or entry.username != current_user.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
-    return entry_service.update_entry(db, entry, payload)
+    updated = entry_service.update_entry(db, entry, payload)
+    background.add_task(_cache_cover_background, updated.cover_url)
+    return updated
 
 @router.post("/entries/check-duplicates", response_model=DuplicateCheckResponse)
 def check_duplicates(

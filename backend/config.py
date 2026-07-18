@@ -15,11 +15,16 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 6443
 
-    # Cover image cache (filesystem). Covers are uploaded by the browser
-    # extension and stored hashed by source URL; see cover_cache_service.py.
+    # Cover image cache (filesystem). Each source cover is cached at 3 fixed
+    # sizes tuned to our display boxes (thumb=tables, medium=Explore cards,
+    # full=detail modal), hashed by source URL; see cover_cache_service.py.
     COVER_CACHE_DIR: str = "~/LOG_cache"
-    COVER_THUMBNAIL_WIDTH: int = 96
-    COVER_THUMBNAIL_HEIGHT: int = 144
+    COVER_THUMB_W: int = 56
+    COVER_THUMB_H: int = 80
+    COVER_MEDIUM_W: int = 184
+    COVER_MEDIUM_H: int = 264
+    COVER_FULL_W: int = 400
+    COVER_FULL_H: int = 600
 
     # Auth
     SECRET_KEY: str = "changeme-replace-with-a-strong-random-secret"

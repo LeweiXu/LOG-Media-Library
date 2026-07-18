@@ -1,7 +1,16 @@
 """Filesystem cover cache.
 
-Covers are stored keyed by a hash of the original cover URL, so any later
-request for that URL resolves to the same file. Bytes reach the cache two ways:
+Every source cover is cached at 3 fixed sizes, each tuned to a display box and
+center-cropped (`ImageOps.fit`, upscaling smaller sources) so it fills the box
+with no extra pixels:
+
+  * **thumb**  (56x80)   — every table row (`.cover-thumb`)
+  * **medium** (184x264) — Explore cards (`.explore-cover`)
+  * **full**   (400x600) — entry detail modal, uniform for every cover
+
+We keep only these 3, never the original. Files are keyed by a hash of the source
+URL, so any later request resolves to the same files. Bytes reach the cache two
+ways:
 
   * **Server-side fetch** (`fetch_and_store_cover`) — the backend downloads the
     image itself via curl_cffi. Works for ordinary CDNs; Cloudflare-gated hosts
@@ -10,7 +19,8 @@ request for that URL resolves to the same file. Bytes reach the cache two ways:
     the image first-party (where the user's `cf_clearance` is valid) and uploads
     the raw bytes, covering the Cloudflare case the server can't reach.
 
-Cached files are served back only as an `onError` fallback (see `/covers/full`).
+The sized files are served proactively: tables/Explore via a bundled base64
+response (`POST /covers/bundle`), the modal via `GET /covers/img`.
 """
 from __future__ import annotations
 
@@ -37,6 +47,14 @@ settings = get_settings()
 # Refuse uploads larger than this — covers are small; anything bigger is abuse.
 MAX_SOURCE_BYTES = 12 * 1024 * 1024
 
+# The 3 cached tiers: name -> (width, height, jpeg quality). Dimensions come from
+# config so they can be tuned without touching code.
+SIZES: dict[str, tuple[int, int, int]] = {
+    "thumb":  (settings.COVER_THUMB_W,  settings.COVER_THUMB_H,  70),
+    "medium": (settings.COVER_MEDIUM_W, settings.COVER_MEDIUM_H, 80),
+    "full":   (settings.COVER_FULL_W,   settings.COVER_FULL_H,   85),
+}
+
 
 class CoverCacheError(Exception):
     """Raised when an uploaded payload can't be processed into a cached cover."""
@@ -50,44 +68,36 @@ def _cover_cache_dir(kind: str) -> Path:
     return Path(settings.COVER_CACHE_DIR).expanduser() / kind
 
 
-def thumbnail_cache_path(cover_url: str) -> Path:
-    return _cover_cache_dir("thumbnails") / f"{cover_cache_key(cover_url)}.jpg"
-
-
-def full_cover_cache_path(cover_url: str) -> Path:
-    return _cover_cache_dir("full") / f"{cover_cache_key(cover_url)}.jpg"
+def sized_cover_path(cover_url: str, size: str) -> Path:
+    if size not in SIZES:
+        raise CoverCacheError(f"Unknown cover size: {size}")
+    return _cover_cache_dir(size) / f"{cover_cache_key(cover_url)}.jpg"
 
 
 def store_cover_bytes(cover_url: str, raw: bytes) -> None:
-    """Decode `raw` as an image and write the full cover + thumbnail to cache.
+    """Decode `raw` as an image and write all 3 sized covers to cache.
 
-    Raises CoverCacheError if the payload isn't a decodable image. Writes are
-    atomic (temp file + replace) so a cached path is never half-written.
+    Each tier is fit-cropped to its exact box (upscaling smaller sources) so it
+    fills the display with no wasted pixels. Raises CoverCacheError if the payload
+    isn't a decodable image. Writes are atomic so a cached path is never half-written.
     """
     if not raw:
         raise CoverCacheError("Empty cover upload")
     if len(raw) > MAX_SOURCE_BYTES:
         raise CoverCacheError("Cover image is too large")
 
-    full_path = full_cover_cache_path(cover_url)
-    thumbnail_path = thumbnail_cache_path(cover_url)
-
     try:
         image = _load_cover_image(raw)
-        _write_jpeg(image, full_path, quality=82)
-
-        thumbnail = image.copy()
-        thumbnail.thumbnail(
-            (settings.COVER_THUMBNAIL_WIDTH, settings.COVER_THUMBNAIL_HEIGHT),
-            Image.Resampling.LANCZOS,
-        )
-        _write_jpeg(thumbnail, thumbnail_path, quality=72)
+        for size, (width, height, quality) in SIZES.items():
+            fitted = ImageOps.fit(image, (width, height), Image.Resampling.LANCZOS)
+            _write_jpeg(fitted, sized_cover_path(cover_url, size), quality=quality)
     except (OSError, UnidentifiedImageError) as exc:
         raise CoverCacheError("Failed to process cover image") from exc
 
 
 def is_cover_cached(cover_url: str) -> bool:
-    return full_cover_cache_path(cover_url).exists()
+    """Cached only when all 3 sizes are present."""
+    return all(sized_cover_path(cover_url, size).exists() for size in SIZES)
 
 
 def _is_safe_cover_url(url: str) -> bool:
@@ -140,13 +150,34 @@ def fetch_and_store_cover(cover_url: str) -> None:
     store_cover_bytes(cover_url, fetch_cover_bytes(cover_url))
 
 
+def cache_one_cover(cover_url: str) -> str:
+    """Ensure all 3 sizes exist for `cover_url`. Blocking; raises CoverCacheError.
+
+    Returns 'skip' (already cached), 'reused' (rebuilt the 3 sizes from an
+    already-downloaded full/ file — no network, covers Cloudflare/NU which we
+    can't refetch), or 'cached' (downloaded server-side).
+    """
+    if is_cover_cached(cover_url):
+        return "skip"
+    # An existing full/ file (legacy native, or a partial cache) is a usable
+    # source: read its bytes, then rebuild all 3 sizes with no network.
+    source = sized_cover_path(cover_url, "full")
+    if source.exists():
+        store_cover_bytes(cover_url, source.read_bytes())
+        return "reused"
+    fetch_and_store_cover(cover_url)
+    return "cached"
+
+
 async def cache_uncached_covers(db: Session, username: str):
     """SSE generator: server-side cache every not-yet-cached cover for a user.
 
-    Yields {"type": "start"/"progress"/"done", …} dicts. Covers already on disk
-    are skipped; the blocking fetch runs in a thread so the event loop stays
-    responsive. Cloudflare-gated covers (NovelUpdates) fail here and are counted
-    as `failed` — those need the browser extension's first-party caching.
+    Yields {"type": "start"/"progress"/"done", …} dicts. Covers already fully
+    cached are skipped; a cover with an existing full/ file is rebuilt into the 3
+    sizes with no network (reused); anything else is fetched server-side. The
+    blocking work runs in a thread so the event loop stays responsive.
+    Cloudflare-gated covers (NovelUpdates) with no cached bytes fail here and are
+    counted as `failed` — those need the browser extension's first-party caching.
     """
     rows = db.execute(
         select(Entry.cover_url).where(
@@ -166,18 +197,16 @@ async def cache_uncached_covers(db: Session, username: str):
 
     for url in urls:
         processed += 1
-        if is_cover_cached(url):
-            skipped += 1
-            status = "skip"
-        else:
-            try:
-                await loop.run_in_executor(None, fetch_and_store_cover, url)
+        try:
+            status = await loop.run_in_executor(None, cache_one_cover, url)
+            if status == "skip":
+                skipped += 1
+            else:  # 'cached' or 'reused' — both mean it's now on disk
                 cached += 1
-                status = "cached"
-            except CoverCacheError as exc:
-                failed += 1
-                status = "failed"
-                logger.info("cover cache miss for %s: %s", url, exc)
+        except CoverCacheError as exc:
+            failed += 1
+            status = "failed"
+            logger.info("cover cache miss for %s: %s", url, exc)
 
         yield {
             "type": "progress", "processed": processed, "total": total,
