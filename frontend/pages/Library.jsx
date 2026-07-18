@@ -520,6 +520,12 @@ export default function Library({ initialFilters = {} }) {
     prefetchEntriesWithCovers(qc, buildEntryParams({ sort: field, order: nextOrder, offset: 0 }), 'thumb');
   }, [sort, order, buildEntryParams, qc]);
 
+  // The filter-bar dropdown sets sort but keeps the current order; the asc/desc
+  // toggle flips order for the current sort. Explicit next-state prefetch for both.
+  const prefetchSortOrder = useCallback((nextSort, nextOrder) => {
+    prefetchEntriesWithCovers(qc, buildEntryParams({ sort: nextSort, order: nextOrder, offset: 0 }), 'thumb');
+  }, [buildEntryParams, qc]);
+
   // Hovering a pagination control warms that page's entries + covers.
   const prefetchPage = useCallback((targetPage) => {
     if (targetPage < 1) return;
@@ -816,11 +822,13 @@ export default function Library({ initialFilters = {} }) {
             value={sort}
             options={SORT_FIELDS.map(field => ({ value: field.key, label: `Sort: ${field.label}` }))}
             onChange={setSort}
+            onOptionHover={(field) => prefetchSortOrder(field, order)}
             className="filter-select"
             containerClassName="library-manage-sort"
             ariaLabel="Sort library"
           />
           <button className="icon-btn library-manage-order filter-bar-btn"
+            onMouseEnter={() => prefetchSortOrder(sort, order === 'asc' ? 'desc' : 'asc')}
             onClick={() => setOrder(o => o === 'asc' ? 'desc' : 'asc')}>
             {order === 'asc' ? '↑ Asc' : '↓ Desc'}
           </button>
@@ -1017,6 +1025,7 @@ export default function Library({ initialFilters = {} }) {
             <div className="lib-sort-list">
               {SORT_FIELDS.map(f => (
                 <div key={f.key} className="sidebar-item lib-sort-item"
+                  onMouseEnter={() => prefetchSort(f.key)}
                   onClick={() => handleSort(f.key)}>
                   {f.label}
                   {sort === f.key && <span className="text-accent">{order === 'asc' ? ' ↑' : ' ↓'}</span>}

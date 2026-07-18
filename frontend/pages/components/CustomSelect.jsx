@@ -19,6 +19,7 @@ export default function CustomSelect({
   maxVisible = 10,
   ariaLabel,
   fitToOptions = false,
+  onOptionHover,
 }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -183,7 +184,7 @@ export default function CustomSelect({
                 sameValue(option.value, value) ? 'is-selected' : '',
                 index === activeIndex ? 'is-active' : '',
               ].filter(Boolean).join(' ')}
-              onMouseEnter={() => !option.disabled && setActiveIndex(index)}
+              onMouseEnter={() => { if (!option.disabled) { setActiveIndex(index); onOptionHover?.(option.value); } }}
               onClick={() => choose(option)}
             >
               {option.label}
