@@ -418,6 +418,14 @@ export default function Explore() {
   );
   const coverMap = useCoverBundle(coverUrls, 'medium');
 
+  // Hovering a pagination control warms that page's card covers, so paging repaints
+  // with images already in place (the items themselves are already client-side).
+  const prefetchExplorePage = useCallback((targetPage) => {
+    if (targetPage < 1) return;
+    const items = visibleItems.slice((targetPage - 1) * REC_PAGE_SIZE, targetPage * REC_PAGE_SIZE);
+    prefetchCoverBundle(qc, items.map(({ item }) => item.cover_url), 'medium');
+  }, [visibleItems, qc]);
+
   // What the main recommendation area should render.
   const showRerollSkeleton = !error && !loading && (thisMediumRerolling || (medium === '' && rerollAllBusy));
   // Failed-reroll UI only ever appears for a specific failed medium, never "All".
@@ -683,11 +691,11 @@ export default function Explore() {
 
         {!error && !loading && !showRerollSkeleton && !showFailed && recTotalPages > 1 && (
           <div className="explore-pagination">
-            {recPage > 1 && <button className="icon-btn" onClick={() => setRecPage(1)}>« First</button>}
-            <button className="icon-btn" disabled={recPage === 1} onClick={() => setRecPage(p => p - 1)}>← Prev</button>
+            {recPage > 1 && <button className="icon-btn" onMouseEnter={() => prefetchExplorePage(1)} onClick={() => setRecPage(1)}>« First</button>}
+            <button className="icon-btn" disabled={recPage === 1} onMouseEnter={() => prefetchExplorePage(recPage - 1)} onClick={() => setRecPage(p => p - 1)}>← Prev</button>
             <span className="pagination-text">Page {recPage} of {recTotalPages}</span>
-            <button className="icon-btn" disabled={recPage === recTotalPages} onClick={() => setRecPage(p => p + 1)}>Next →</button>
-            {recPage < recTotalPages && <button className="icon-btn" onClick={() => setRecPage(recTotalPages)}>Last »</button>}
+            <button className="icon-btn" disabled={recPage === recTotalPages} onMouseEnter={() => prefetchExplorePage(recPage + 1)} onClick={() => setRecPage(p => p + 1)}>Next →</button>
+            {recPage < recTotalPages && <button className="icon-btn" onMouseEnter={() => prefetchExplorePage(recTotalPages)} onClick={() => setRecPage(recTotalPages)}>Last »</button>}
           </div>
         )}
         </div>

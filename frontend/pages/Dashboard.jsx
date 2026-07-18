@@ -1,7 +1,8 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRevalidateOnFocus } from '../hooks.jsx';
-import { useEntries, useStats, useEntryMutations, useCoverBundle, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry } from '../data/hooks.jsx';
+import { useEntries, useStats, useEntryMutations, useCoverBundle, prefetchEntriesWithCovers, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry } from '../data/hooks.jsx';
+import { defaultLibraryParams } from '../data/keys.js';
 import { prefetchFullCover } from '../api.jsx';
 import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverErrorPlaceholder, coverSrc, tableGapVars } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
@@ -154,6 +155,14 @@ export default function DashboardAlt({ onFilterChange }) {
   const coverMap = useCoverBundle(coverUrls, 'thumb');
 
   const reload = useCallback(() => invalidateEntryData(qc), [qc]);
+
+  // Hovering a sidebar filter warms the Library query (+ its covers) that clicking
+  // it will land on, so the jump to Library with the filter applied is instant.
+  const prefetchLibraryFilter = useCallback((filter) => {
+    const params = { ...defaultLibraryParams(prefs) };
+    for (const [k, v] of Object.entries(filter)) if (v) params[k] = v;
+    prefetchEntriesWithCovers(qc, params, 'thumb');
+  }, [qc, prefs]);
 
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
   useRevalidateOnFocus(() => { reload(); return true; });
@@ -359,6 +368,7 @@ export default function DashboardAlt({ onFilterChange }) {
             ['dropped',   'Dropped',     s.dropped],
           ].map(([key, label, count]) => (
             <div key={key} className="sidebar-item"
+              onMouseEnter={() => prefetchLibraryFilter({ status: key })}
               onClick={() => onFilterChange({ status: key })}>
               {label}
               {loading
@@ -376,6 +386,7 @@ export default function DashboardAlt({ onFilterChange }) {
             ? <SkeletonSidebarRows rows={6} />
             : (s.by_medium ?? []).map(({ medium, count }) => (
                 <div key={medium} className="sidebar-item"
+                  onMouseEnter={() => prefetchLibraryFilter({ medium })}
                   onClick={() => onFilterChange({ medium })}>
                   {medium} <span className="sidebar-count">{count}</span>
                 </div>
@@ -392,6 +403,7 @@ export default function DashboardAlt({ onFilterChange }) {
                 .filter(({ origin }) => ORIGINS.includes(origin))
                 .map(({ origin, count }) => (
                   <div key={origin} className="sidebar-item"
+                    onMouseEnter={() => prefetchLibraryFilter({ origin })}
                     onClick={() => onFilterChange({ origin })}>
                     {origin} <span className="sidebar-count">{count}</span>
                   </div>

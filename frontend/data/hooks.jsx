@@ -80,8 +80,20 @@ export function useCoverBundle(urls, size) {
 }
 
 export function prefetchCoverBundle(qc, urls, size) {
-  const q = bundleQuery(size, urls);
-  if (q.enabled) qc.prefetchQuery(q);
+  const unique = [...new Set(urls.filter(Boolean))];
+  if (!unique.length) return;
+  const key = coverBundleKey(size, unique);
+  // Bundles are cached with staleTime:Infinity, so a plain prefetchQuery would
+  // no-op on a previously-fetched (possibly incomplete/empty) result and never
+  // pick up covers that have since been cached server-side. Only skip the fetch
+  // when the cached bundle is already complete; otherwise force a refetch.
+  const cached = qc.getQueryData(key);
+  if (cached && Object.keys(cached).length >= unique.length) return;
+  qc.fetchQuery({
+    queryKey: key,
+    queryFn: () => fetchCoverBundle(unique, size).then(r => r?.images || {}),
+    staleTime: 0,
+  }).catch(() => {});
 }
 
 // Prefetch an entries page AND its covers, so a hover warms the rows and their

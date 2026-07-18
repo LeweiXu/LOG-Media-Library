@@ -513,8 +513,22 @@ export default function Library({ initialFilters = {} }) {
   const hasFilters   = search || statusFilter || mediumFilter || originFilter;
   const totalPages   = Math.ceil(total / limit);
 
+  // Hovering a sortable header warms the entries + covers for the sort it would
+  // apply, so switching sort repaints instantly (rows AND thumbnails).
+  const prefetchSort = useCallback((field) => {
+    const nextOrder = sort === field ? (order === 'asc' ? 'desc' : 'asc') : DEFAULT_ORDER;
+    prefetchEntriesWithCovers(qc, buildEntryParams({ sort: field, order: nextOrder, offset: 0 }), 'thumb');
+  }, [sort, order, buildEntryParams, qc]);
+
+  // Hovering a pagination control warms that page's entries + covers.
+  const prefetchPage = useCallback((targetPage) => {
+    if (targetPage < 1) return;
+    prefetchEntriesWithCovers(qc, buildEntryParams({ offset: (targetPage - 1) * limit }), 'thumb');
+  }, [buildEntryParams, qc, limit]);
+
   const SortTh = ({ field, className, children }) => (
     <th className={`sortable${sort === field ? ' is-active' : ''}${className ? ' ' + className : ''}`}
+      onMouseEnter={() => prefetchSort(field)}
       onClick={() => handleSort(field)}>
       {children}
       {sort === field && <span className="sort-indicator">{order === 'asc' ? '↑' : '↓'}</span>}
@@ -913,11 +927,11 @@ export default function Library({ initialFilters = {} }) {
 
             {totalPages > 1 && (
               <div className="pagination">
-                {page > 1 && <button className="icon-btn" onClick={() => setPage(1)}>« First</button>}
-                <button className="icon-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                {page > 1 && <button className="icon-btn" onMouseEnter={() => prefetchPage(1)} onClick={() => setPage(1)}>« First</button>}
+                <button className="icon-btn" disabled={page === 1} onMouseEnter={() => prefetchPage(page - 1)} onClick={() => setPage(p => p - 1)}>← Prev</button>
                 <span className="pagination-text">Page {page} of {totalPages}</span>
-                <button className="icon-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-                {page < totalPages && <button className="icon-btn" onClick={() => setPage(totalPages)}>Last »</button>}
+                <button className="icon-btn" disabled={page === totalPages} onMouseEnter={() => prefetchPage(page + 1)} onClick={() => setPage(p => p + 1)}>Next →</button>
+                {page < totalPages && <button className="icon-btn" onMouseEnter={() => prefetchPage(totalPages)} onClick={() => setPage(totalPages)}>Last »</button>}
               </div>
             )}
           </div>
@@ -978,11 +992,11 @@ export default function Library({ initialFilters = {} }) {
 
             {totalPages > 1 && (
               <div className="pagination">
-                {page > 1 && <button className="icon-btn" onClick={() => setPage(1)}>« First</button>}
-                <button className="icon-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                {page > 1 && <button className="icon-btn" onMouseEnter={() => prefetchPage(1)} onClick={() => setPage(1)}>« First</button>}
+                <button className="icon-btn" disabled={page === 1} onMouseEnter={() => prefetchPage(page - 1)} onClick={() => setPage(p => p - 1)}>← Prev</button>
                 <span className="pagination-text">Page {page} of {totalPages}</span>
-                <button className="icon-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-                {page < totalPages && <button className="icon-btn" onClick={() => setPage(totalPages)}>Last »</button>}
+                <button className="icon-btn" disabled={page === totalPages} onMouseEnter={() => prefetchPage(page + 1)} onClick={() => setPage(p => p + 1)}>Next →</button>
+                {page < totalPages && <button className="icon-btn" onMouseEnter={() => prefetchPage(totalPages)} onClick={() => setPage(totalPages)}>Last »</button>}
               </div>
             )}
           </div>
