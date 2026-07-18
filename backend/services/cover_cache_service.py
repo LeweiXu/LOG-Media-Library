@@ -160,17 +160,22 @@ def fetch_and_store_cover(cover_url: str) -> None:
     store_cover_bytes(cover_url, fetch_cover_bytes(cover_url))
 
 
-def cache_one_cover(cover_url: str) -> str:
+def cache_one_cover(cover_url: str, force: bool = False) -> str:
     """Ensure all 3 sizes exist for `cover_url`. Blocking; raises CoverCacheError.
 
     Returns 'skip' (already cached), 'reused' (rebuilt the sizes from bytes we
     already have — no network, covers Cloudflare/NU which we can't refetch), or
     'cached' (downloaded server-side).
+
+    `force` rebuilds the sizes even when already cached — use it after changing a
+    tier's dimensions so existing caches are regenerated (from the kept original,
+    so it stays offline).
     """
-    if is_cover_cached(cover_url):
+    if not force and is_cover_cached(cover_url):
         return "skip"
-    # Any bytes we already have are a usable source, newest scheme first: the kept
-    # original, then a legacy native full/ file from before the 3-size change.
+    # Any bytes we already have are a usable source, best quality first: the kept
+    # native original, then a legacy full/ file (native pre-migration, else the
+    # current display full).
     for source in (original_cover_path(cover_url), sized_cover_path(cover_url, "full")):
         if source.exists():
             store_cover_bytes(cover_url, source.read_bytes())

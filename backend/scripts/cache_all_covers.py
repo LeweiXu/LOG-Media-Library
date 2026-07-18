@@ -14,8 +14,11 @@ For each distinct cover_url (across all users):
 Run once after deploying the 3-size cover change.
 
 Usage:
-    python scripts/cache_all_covers.py [--clean-legacy-thumbnails]
+    python scripts/cache_all_covers.py [--force] [--clean-legacy-thumbnails]
 
+    --force                    rebuild sizes even when already cached — use after
+                               changing a tier's dimensions (regenerates from the
+                               kept original, so it stays offline)
     --clean-legacy-thumbnails  remove the orphaned pre-migration thumbnails/ dir
 """
 
@@ -39,7 +42,7 @@ from models import Entry
 from services.cover_cache_service import CoverCacheError, _cover_cache_dir, cache_one_cover
 
 
-def main(clean_legacy: bool = False) -> None:
+def main(clean_legacy: bool = False, force: bool = False) -> None:
     db = SessionLocal()
     try:
         rows = db.execute(
@@ -53,12 +56,12 @@ def main(clean_legacy: bool = False) -> None:
 
     urls = list(dict.fromkeys(u for u in rows if u))
     total = len(urls)
-    print(f"{total} distinct cover URLs to process.\n")
+    print(f"{total} distinct cover URLs to process{' (force rebuild)' if force else ''}.\n")
 
     tally = {"skip": 0, "reused": 0, "cached": 0, "failed": 0}
     for i, url in enumerate(urls, 1):
         try:
-            status = cache_one_cover(url)
+            status = cache_one_cover(url, force=force)
         except CoverCacheError as exc:
             status = "failed"
             print(f"  [{i}/{total}] FAILED  {url}\n            {exc}")
@@ -97,4 +100,7 @@ def _clean_legacy_thumbnails() -> None:
 
 if __name__ == "__main__":
     get_settings()  # validate config early
-    main(clean_legacy="--clean-legacy-thumbnails" in sys.argv)
+    main(
+        clean_legacy="--clean-legacy-thumbnails" in sys.argv,
+        force="--force" in sys.argv,
+    )
