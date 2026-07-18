@@ -3,10 +3,10 @@
 Warm the 3-size cover cache for every cover URL in the Entry table.
 
 For each distinct cover_url (across all users):
-  * skip   — all 3 sizes already cached
-  * reused — an existing full/ file (legacy native cover, incl. Cloudflare/NU
-             covers uploaded by the extension) is rebuilt into the 3 sizes with
-             no network
+  * skip   — all 3 display sizes already cached
+  * reused — bytes we already have (the kept original, or a legacy native full/
+             file incl. Cloudflare/NU covers uploaded by the extension) are
+             rebuilt into the sizes with no network
   * cached — downloaded server-side via curl_cffi
   * failed — no cached bytes and the fetch failed (e.g. Cloudflare-gated with
              nothing in the cache yet — needs the extension's Resync Covers)

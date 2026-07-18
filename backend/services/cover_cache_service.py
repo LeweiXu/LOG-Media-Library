@@ -74,12 +74,21 @@ def sized_cover_path(cover_url: str, size: str) -> Path:
     return _cover_cache_dir(size) / f"{cover_cache_key(cover_url)}.jpg"
 
 
-def store_cover_bytes(cover_url: str, raw: bytes) -> None:
-    """Decode `raw` as an image and write all 3 sized covers to cache.
+# The native-resolution original, kept alongside the 3 display sizes. It's never
+# served — it exists only so we can regenerate the display sizes later (e.g. if
+# their dimensions change) without re-downloading, which matters for Cloudflare/NU
+# covers the server can't refetch. Cheap to keep; space is inconsequential.
+def original_cover_path(cover_url: str) -> Path:
+    return _cover_cache_dir("original") / f"{cover_cache_key(cover_url)}.jpg"
 
-    Each tier is fit-cropped to its exact box (upscaling smaller sources) so it
-    fills the display with no wasted pixels. Raises CoverCacheError if the payload
-    isn't a decodable image. Writes are atomic so a cached path is never half-written.
+
+def store_cover_bytes(cover_url: str, raw: bytes) -> None:
+    """Decode `raw` and write the native original + all 3 sized covers to cache.
+
+    Each display tier is fit-cropped to its exact box (upscaling smaller sources)
+    so it fills the display with no wasted pixels; the original is kept at native
+    resolution for later regeneration. Raises CoverCacheError if the payload isn't
+    a decodable image. Writes are atomic so a cached path is never half-written.
     """
     if not raw:
         raise CoverCacheError("Empty cover upload")
@@ -88,6 +97,7 @@ def store_cover_bytes(cover_url: str, raw: bytes) -> None:
 
     try:
         image = _load_cover_image(raw)
+        _write_jpeg(image, original_cover_path(cover_url), quality=90)
         for size, (width, height, quality) in SIZES.items():
             fitted = ImageOps.fit(image, (width, height), Image.Resampling.LANCZOS)
             _write_jpeg(fitted, sized_cover_path(cover_url, size), quality=quality)
@@ -96,7 +106,7 @@ def store_cover_bytes(cover_url: str, raw: bytes) -> None:
 
 
 def is_cover_cached(cover_url: str) -> bool:
-    """Cached only when all 3 sizes are present."""
+    """Cached only when all 3 display sizes are present (the original is a bonus)."""
     return all(sized_cover_path(cover_url, size).exists() for size in SIZES)
 
 
@@ -153,18 +163,18 @@ def fetch_and_store_cover(cover_url: str) -> None:
 def cache_one_cover(cover_url: str) -> str:
     """Ensure all 3 sizes exist for `cover_url`. Blocking; raises CoverCacheError.
 
-    Returns 'skip' (already cached), 'reused' (rebuilt the 3 sizes from an
-    already-downloaded full/ file — no network, covers Cloudflare/NU which we
-    can't refetch), or 'cached' (downloaded server-side).
+    Returns 'skip' (already cached), 'reused' (rebuilt the sizes from bytes we
+    already have — no network, covers Cloudflare/NU which we can't refetch), or
+    'cached' (downloaded server-side).
     """
     if is_cover_cached(cover_url):
         return "skip"
-    # An existing full/ file (legacy native, or a partial cache) is a usable
-    # source: read its bytes, then rebuild all 3 sizes with no network.
-    source = sized_cover_path(cover_url, "full")
-    if source.exists():
-        store_cover_bytes(cover_url, source.read_bytes())
-        return "reused"
+    # Any bytes we already have are a usable source, newest scheme first: the kept
+    # original, then a legacy native full/ file from before the 3-size change.
+    for source in (original_cover_path(cover_url), sized_cover_path(cover_url, "full")):
+        if source.exists():
+            store_cover_bytes(cover_url, source.read_bytes())
+            return "reused"
     fetch_and_store_cover(cover_url)
     return "cached"
 
