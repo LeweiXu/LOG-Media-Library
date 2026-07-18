@@ -92,10 +92,13 @@ export default function Library({ initialFilters = {} }) {
   const urlHadModeRef  = useRef(
     searchParams.has('mode') || (!hasUrlParams && (initialFilters.mode === 'view' || initialFilters.mode === 'manage')),
   );
-  const [settingsApplied, setSettingsApplied] = useState(false);
 
   const { prefs, loaded: prefsLoaded, updateUi } = usePreferences();
   const libPrefs = prefs.library || DEFAULT_UI.library;
+  // When navigation happens after preferences have loaded, use them during the
+  // first render. Waiting for an effect here forced a one-frame skeleton even
+  // though the matching entries query had already been prefetched.
+  const [settingsApplied, setSettingsApplied] = useState(() => prefsLoaded);
   const sidebarClass = `${libPrefs.sidebars?.left ? ' always-show-left' : ''}${libPrefs.sidebars?.right ? ' always-show-right' : ''}`;
   const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
   const visibleMediumSet = useMemo(() => new Set(visibleMediums), [visibleMediums]);
@@ -105,6 +108,7 @@ export default function Library({ initialFilters = {} }) {
     const fromUrl = searchParams.get('mode');
     if (fromUrl === 'view' || fromUrl === 'manage') return fromUrl;
     if (!hasUrlParams && (initialFilters.mode === 'view' || initialFilters.mode === 'manage')) return initialFilters.mode;
+    if (prefsLoaded && (libPrefs.default_mode === 'view' || libPrefs.default_mode === 'manage')) return libPrefs.default_mode;
     return 'view';
   })();
   const [mode, setMode] = useState(initialMode);
@@ -149,8 +153,8 @@ export default function Library({ initialFilters = {} }) {
   const [drawer, setDrawer] = useState('');
   // View toggles + column selection are seeded from saved prefs, then mirrored
   // locally so sidebar toggles feel instant (the save is fired in the background).
-  const [showActions, setShowActions] = useState(false);
-  const [fixTitle, setFixTitle] = useState(true);
+  const [showActions, setShowActions] = useState(() => !!(libPrefs.quick_actions ?? DEFAULT_UI.library.quick_actions));
+  const [fixTitle, setFixTitle] = useState(() => !!(libPrefs.fix_title ?? DEFAULT_UI.library.fix_title));
   // Which columns are currently shown. Mirrored locally so the sidebar's extra-
   // column toggles feel instant; the save is fired in the background.
   const [shownCols, setShownCols] = useState(() =>
@@ -177,7 +181,7 @@ export default function Library({ initialFilters = {} }) {
     });
   }
   // Apply saved preferences once they load (first time only); URL params win.
-  const prefsSyncedRef = useRef(false);
+  const prefsSyncedRef = useRef(prefsLoaded);
   useEffect(() => {
     if (!prefsLoaded || prefsSyncedRef.current) return;
     prefsSyncedRef.current = true;
@@ -210,10 +214,18 @@ export default function Library({ initialFilters = {} }) {
   const [statusFilter, setStatusFilter] = useState(() => validParam(searchParams.get('status'), STATUSES, !hasUrlParams ? initialFilters.status || '' : ''));
   const [mediumFilter, setMediumFilter] = useState(() => validParam(searchParams.get('medium'), MEDIUMS, !hasUrlParams ? initialFilters.medium || '' : ''));
   const [originFilter, setOriginFilter] = useState(() => validParam(searchParams.get('origin'), ORIGINS, !hasUrlParams ? initialFilters.origin || '' : ''));
-  const [sort,         setSort]         = useState(() => validParam(searchParams.get('sort'), sortKeys, DEFAULT_SORT));
+  const [sort,         setSort]         = useState(() => validParam(
+    searchParams.get('sort'),
+    sortKeys,
+    prefsLoaded && sortKeys.includes(libPrefs.default_sort) ? libPrefs.default_sort : DEFAULT_SORT,
+  ));
   const [order,        setOrder]        = useState(() => searchParams.get('order') === 'asc' ? 'asc' : DEFAULT_ORDER);
   const [page,         setPage]         = useState(() => positiveIntParam(searchParams.get('page'), DEFAULT_PAGE));
-  const [limit,        setLimit]        = useState(() => validParam(Number(searchParams.get('limit')), PAGE_SIZE_OPTIONS, DEFAULT_LIMIT));
+  const [limit,        setLimit]        = useState(() => validParam(
+    Number(searchParams.get('limit')),
+    PAGE_SIZE_OPTIONS,
+    prefsLoaded && PAGE_SIZE_OPTIONS.includes(libPrefs.entries_per_page) ? libPrefs.entries_per_page : DEFAULT_LIMIT,
+  ));
   // Debounce the search box so each keystroke isn't its own /entries query — the
   // input stays controlled by `search`, but the query uses `debouncedSearch`.
   const [debouncedSearch, setDebouncedSearch] = useState(search);

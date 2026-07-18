@@ -153,23 +153,33 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
 export default function Explore() {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [items,        setItems]        = useState([]);
-  const [affinity,     setAffinity]     = useState(null);
-  const [personalised, setPersonalised] = useState(false);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState('');
-  // Failed-reroll state for the *currently selected* medium (persisted in the DB
-  // and mirrored in the per-medium cache, so it survives filter switches/reloads).
-  const [rerollFailed, setRerollFailed] = useState(false);
-  const [rerollError,  setRerollError]  = useState('');
-  const exploreRequestSeq = useRef(0);
 
-  // Medium filter — restored from the URL (?medium=) on load and kept in sync
-  // there so a reload (or shared link) lands on the same filtered view.
+  // Medium filter, restored from the URL on load. Resolve it before seeding the
+  // recommendation state so a hover-prefetched cache entry can render on the
+  // first frame instead of passing through the skeleton once.
   const initialUrlMedium = useRef(searchParams.get('medium') || '');
   const [medium, setMedium] = useState(
     () => (MEDIUMS.includes(initialUrlMedium.current) ? initialUrlMedium.current : ''),
   );
+  const { prefs } = usePreferences();
+  const expPrefs = prefs.explore || DEFAULT_UI.explore;
+  const personalize = expPrefs.personalize !== false;
+  const initialEntryRef = useRef(
+    exploreCache[medium]?.personalize === personalize ? exploreCache[medium] : null,
+  );
+  const initialEntry = initialEntryRef.current;
+
+  const [items,        setItems]        = useState(() => initialEntry?.items || []);
+  const [affinity,     setAffinity]     = useState(() => initialEntry?.affinity || null);
+  const [personalised, setPersonalised] = useState(() => !!initialEntry?.personalised);
+  const [loading,      setLoading]      = useState(() => !initialEntry);
+  const [error,        setError]        = useState('');
+  // Failed-reroll state for the *currently selected* medium (persisted in the DB
+  // and mirrored in the per-medium cache, so it survives filter switches/reloads).
+  const [rerollFailed, setRerollFailed] = useState(() => !!initialEntry?.rerollFailed);
+  const [rerollError,  setRerollError]  = useState(() => initialEntry?.rerollError || '');
+  const exploreRequestSeq = useRef(0);
+
   // Latest selected medium, readable inside async callbacks without going stale.
   const mediumRef = useRef(medium);
   useEffect(() => { mediumRef.current = medium; }, [medium]);
@@ -206,12 +216,9 @@ export default function Explore() {
   const availableSet = useMemo(() => loadAvailableSources(), []);
   const extPresent = useExtensionPresent();
 
-  const { prefs } = usePreferences();
-  const expPrefs = prefs.explore || DEFAULT_UI.explore;
   const sidebarClass = `${expPrefs.sidebars?.left ? ' always-show-left' : ''}${expPrefs.sidebars?.right ? ' always-show-right' : ''}`;
   const visibleMediums = useMemo(() => visibleMediumsFromPrefs(prefs), [prefs]);
   const visibleMediumSet = useMemo(() => new Set(visibleMediums), [visibleMediums]);
-  const personalize = expPrefs.personalize !== false;
 
   const thisMediumRerolling = !!medium && rerollingMediums.has(medium);
 
@@ -266,15 +273,18 @@ export default function Explore() {
     // below shows the skeleton and applies the result when it lands.
     if (medium && rerollTasks[medium]) { setLoading(false); return; }
     if (!medium && rerollAllState.promise) { setLoading(false); return; }
+    const cached = exploreCache[medium];
+    if (!force && cached && cached.personalize === personalize) {
+      setError('');
+      setCardState({});
+      applyEntry(cached);
+      setLoading(false);
+      return;
+    }
     const seq = ++exploreRequestSeq.current;
     setLoading(true); setError(''); setCardState({});
     try {
       const want = [...availableSet];
-      const cached = exploreCache[medium];
-      if (!force && cached && cached.personalize === personalize) {
-        applyEntry(cached);
-        return;
-      }
       const data = await getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, sources: want });
       if (seq !== exploreRequestSeq.current) return;
       const entry = cacheEntryFromData(data, want, personalize);
