@@ -68,12 +68,35 @@ function TopNav({ onLibraryClick }) {
   const { prefs } = usePreferences();
 
   useEffect(() => {
-    // Warm every route chunk shortly after first paint, so even a click without a
-    // prior hover is instant. Idle so it never competes with the initial render.
-    const ric = window.requestIdleCallback || ((fn) => setTimeout(fn, 400));
-    const cancel = window.cancelIdleCallback || clearTimeout;
-    const id = ric(() => Object.values(ROUTE_LOADERS).forEach(fn => fn()));
-    return () => cancel(id);
+    // An idle main thread does not mean the initial network work is done. Wait
+    // until well after `load` before warming routes, and leave the large
+    // Statistics and Console chunks until later. Hover/focus warming stays
+    // immediate regardless of this schedule.
+    const connection = navigator.connection;
+    if (connection?.saveData || ['slow-2g', '2g'].includes(connection?.effectiveType)) {
+      return undefined;
+    }
+
+    const timers = [];
+    const schedule = () => {
+      timers.push(setTimeout(() => {
+        ROUTE_LOADERS['/dashboard']();
+        ROUTE_LOADERS['/library']();
+        ROUTE_LOADERS['/explore']();
+      }, 2500));
+      timers.push(setTimeout(() => {
+        ROUTE_LOADERS['/statistics']();
+        ROUTE_LOADERS['/console']();
+      }, 6500));
+    };
+
+    if (document.readyState === 'complete') schedule();
+    else window.addEventListener('load', schedule, { once: true });
+
+    return () => {
+      window.removeEventListener('load', schedule);
+      timers.forEach(clearTimeout);
+    };
   }, []);
 
   const warm = (path) => { ROUTE_LOADERS[path]?.(); prefetchRouteData(path, prefs); };
@@ -175,9 +198,23 @@ export default function App() {
         }
       }
     }
-    check();
-    const id = setInterval(check, 30_000);
-    return () => clearInterval(id);
+    // Normal page data is more useful than the status badge during a cold load.
+    // Give those requests the connection first, then start the periodic probe.
+    let startTimer;
+    let intervalId;
+    const start = () => {
+      startTimer = setTimeout(() => {
+        check();
+        intervalId = setInterval(check, 30_000);
+      }, 3000);
+    };
+    if (document.readyState === 'complete') start();
+    else window.addEventListener('load', start, { once: true });
+    return () => {
+      window.removeEventListener('load', start);
+      clearTimeout(startTimer);
+      clearInterval(intervalId);
+    };
   }, []);
 
   /* Navigate to Library with pre-applied filters (called from Dashboard sidebar) */
