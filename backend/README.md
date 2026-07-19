@@ -57,6 +57,15 @@ alembic downgrade -1
 
 ## Production
 
+The repository root contains `logarium-api.service` and `deploy.sh` for the
+home-server deployment. Run the deploy script from the repository root. It
+syncs this directory, applies migrations, restarts the service, and checks the
+local health endpoint.
+
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 6443 --workers 4
+./deploy.sh
 ```
+
+The service uses one uvicorn worker because the periodic backup scheduler runs
+inside the API process. Move that scheduler into its own service or add a
+single-leader lock before increasing the worker count.

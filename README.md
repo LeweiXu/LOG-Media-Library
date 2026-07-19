@@ -463,11 +463,17 @@ Verify at [http://localhost:6443/docs](http://localhost:6443/docs).
 python scripts/init_db.py --seed
 ```
 
-*(Production)* run under uvicorn with workers, behind nginx:
+For this deployment, sync the backend, apply migrations, restart the user
+service, and check API health with:
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 6443 --workers 4
+./deploy.sh
+ssh lingwei@192.168.20.9 'systemctl --user status logarium-api'
 ```
+
+The checked-in `logarium-api.service` runs one uvicorn worker without reload
+mode. Keep it at one worker while the periodic backup scheduler lives inside
+the FastAPI process. Multiple workers would start multiple schedulers.
 
 ### 3. Frontend (React + Vite)
 

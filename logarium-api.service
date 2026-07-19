@@ -1,0 +1,14 @@
+[Unit]
+Description=Logarium API (FastAPI, port 8001)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/LOG_Project
+ExecStart=%h/venv-LOG/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8001
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

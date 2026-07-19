@@ -144,6 +144,26 @@ they're keyed by the cover-URL set (a changed/added cover = a new key).
 
 ## 6. Deploy steps
 
+The backend is managed by the enabled `logarium-api.service` user unit on the
+home server. It runs one uvicorn worker on port 8001 without reload mode. User
+lingering is enabled, so the service starts at boot without an interactive
+login.
+
+Deploy backend changes from the repository root:
+
+```bash
+./deploy.sh
+```
+
+The script syncs `backend/` to `~/LOG_Project/` without touching the server's
+`.env`, installs the checked-in unit, compiles Python files, runs Alembic,
+restarts the service, and checks `http://127.0.0.1:8001/`. Useful controls are:
+
+```bash
+ssh lingwei@192.168.20.9 'systemctl --user status logarium-api'
+ssh lingwei@192.168.20.9 'journalctl --user -u logarium-api -f'
+```
+
 After deploying frontend + syncing backend + restarting the API, run the cover
 script once on the server (backend lives at the repo root there, so run it as a
 module or by path):

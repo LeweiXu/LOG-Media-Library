@@ -1,0 +1,10 @@
+# Files that belong to the server or local development environment.
+.env
+**/__pycache__/
+*.pyc
+*.pyo
+*.log
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
