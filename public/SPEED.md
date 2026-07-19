@@ -30,18 +30,18 @@ and library size can change the order of the middle items.
 
 ## Expected user-visible ranking
 
-| Rank | Improvement | Where it is noticed | Expected impact | Change size |
-|---:|---|---|---|---|
-| 1 | Persist selected query data across hard reloads | Reloading Dashboard, Library, Statistics, or Explore | Very high | L |
-| 2 | Add route bootstrap endpoints | Cold login, uncached Dashboard and Library visits | Very high | L |
-| 3 | Remove cold-load frontend competition | First application load | High | S |
-| 4 | Serve covers as individually cached image resources | Dashboard, Library, Explore, detail modal | High | L, with an S-sized first phase |
-| 5 | Return entry summaries and preload full details on row hover | Library pages, pagination, Dashboard preload | Medium to high | L |
-| 6 | Stream search results and reuse outbound connections | Add Entry, add by title, auto-import enrichment | High within search workflows | L |
-| 7 | Reduce statistics, counts, and Dashboard database work | Cold Dashboard, Statistics, large libraries | Medium | M |
-| 8 | Replace broad focus and mutation refetches with revision checks | Returning to the tab, inline edits, extension use | Medium, mostly background smoothness | M |
-| 9 | Remove cross-origin API preflights with a same-origin route | Every uncached authenticated interaction | Potentially high, infrastructure dependent | XL |
-| 10 | Tighten the production process and response transport | All backend calls | Low to medium unless production is misconfigured | S to M |
+| Rank | Improvement | Where it is noticed | Expected impact | Change size | Status |
+|---:|---|---|---|---|---|
+| 1 | Persist selected query data across hard reloads | Reloading Dashboard, Library, Statistics, or Explore | Very high | L | Implemented, revision check still pending |
+| 2 | Add route bootstrap endpoints | Cold login, uncached Dashboard and Library visits | Very high | L | Dashboard implemented, Library pending |
+| 3 | Remove cold-load frontend competition | First application load | High | S | Implemented |
+| 4 | Serve covers as individually cached image resources | Dashboard, Library, Explore, detail modal | High | L, with an S-sized first phase | Partly implemented |
+| 5 | Return entry summaries and preload full details on row hover | Library pages, pagination, Dashboard preload | Medium to high | L | Not started |
+| 6 | Stream search results and reuse outbound connections | Add Entry, add by title, auto-import enrichment | High within search workflows | L | Not started |
+| 7 | Reduce statistics, counts, and Dashboard database work | Cold Dashboard, Statistics, large libraries | Medium | M | Dashboard portion implemented |
+| 8 | Replace broad focus and mutation refetches with revision checks | Returning to the tab, inline edits, extension use | Medium, mostly background smoothness | M | Not started |
+| 9 | Remove cross-origin API preflights with a same-origin route | Every uncached authenticated interaction | Potentially high, infrastructure dependent | XL | Not started |
+| 10 | Tighten the production process and response transport | All backend calls | Low to medium unless production is misconfigured | S to M | Process cleanup implemented, transport pending |
 
 ## Measurement prerequisite
 
@@ -49,6 +49,10 @@ This does not make the application faster by itself, but it should be completed
 before the larger changes so improvements can be compared rather than guessed.
 
 **Change size:** S
+
+**Status:** Not started. The manual Chrome DevTools workflow in `HANDOFF.md` is
+useful for spot checks, but there is no repeatable frontend recorder or backend
+timing header yet.
 
 ### Frontend measurements
 
@@ -108,6 +112,12 @@ page immediately, then verify it in the background.
 one-second hard reload.
 
 **Change size:** L
+
+**Status:** Implemented for the selected data. TanStack Query data, settings,
+and Explore pages are stored in username-scoped, versioned `sessionStorage`
+documents with a 12-hour cap. They hydrate before route rendering, revalidate
+in the background, and are cleared on auth changes. The `library_revision`
+follow-up from improvement 8 is still pending.
 
 ### Data to persist
 
@@ -172,6 +182,12 @@ request repeats CORS, JWT decoding, user lookup, routing, and response overhead.
 **Expected impact:** Very high on login and any route not already hydrated.
 
 **Change size:** L
+
+**Status:** Partly implemented. `/bootstrap/dashboard` now returns the five
+Dashboard entry groups and a reduced Dashboard statistics payload in one
+authenticated request. It also skips pagination count queries and seeds the
+existing entry query keys. The Library bootstrap and optional settings payload
+are still pending.
 
 ### Dashboard bootstrap
 
@@ -254,6 +270,11 @@ connections.
 
 **Change size:** S
 
+**Status:** Implemented. Route chunks still warm on hover and focus, automatic
+warming waits until after `load`, large chunks wait longer, and automatic work
+is skipped for data saver and slow connections. IBM Plex Mono is served locally
+with only the weights and styles used by the app.
+
 ### Implementation steps
 
 1. Keep route chunk warming on nav hover and keyboard focus.
@@ -294,6 +315,13 @@ bundle key, and repeats Python work on every bundle request.
 path.
 
 **Change size:** L overall. The first cleanup phase is S.
+
+**Status:** Partly implemented. Bundle reads are synchronous, polling asks only
+for missing covers, and prefetched images are decoded before navigation. Stable
+immutable `/covers/img` resources are used by Explore cached covers and the
+detail modal. Dashboard and Library still use base64 bundles, and there is no
+Cloudflare cover cache rule or final bundle removal yet. Explore metadata is
+server-paginated and its recommendation pages and covers are warmed together.
 
 ### Phase A: clean up the current bundle path
 
@@ -361,6 +389,9 @@ other modal-only data for every row.
 especially when notes or URLs are long.
 
 **Change size:** L
+
+**Status:** Not started. Rows still carry full `EntryRead` objects and the modal
+still opens from row data.
 
 ### Summary schema
 
@@ -435,6 +466,9 @@ ordinary browsing.
 
 **Change size:** L
 
+**Status:** Not started. Provider calls still create request-scoped HTTP clients
+and search waits for the combined response.
+
 ### Shared outbound client
 
 1. Create one lifespan-managed `httpx.AsyncClient` with connection limits and
@@ -494,6 +528,11 @@ does not display.
 
 **Change size:** M
 
+**Status:** Partly implemented. The Dashboard bootstrap uses a smaller
+Dashboard-only statistics response and its status lists skip total-count
+queries. Full Statistics still loads complete entry models and sidebar counts
+still use separate queries.
+
 ### Implementation steps
 
 1. Add `load_only` or explicit column selection to `stats_service.get_stats`.
@@ -544,6 +583,9 @@ entry views regardless of which field changed.
 smoother tab switching rather than a faster first visit.
 
 **Change size:** M
+
+**Status:** Not started. Focus revalidation and broad mutation invalidation are
+still the cache-consistency fallback.
 
 ### Library revision
 
@@ -610,6 +652,9 @@ server.
 
 **Change size:** XL
 
+**Status:** Not started. The Vercel frontend and Cloudflare API remain on
+different origins.
+
 ### Options to evaluate
 
 1. Put the application on a custom domain controlled by Cloudflare.
@@ -658,6 +703,12 @@ multiple production workers, while `CLOUDFLARE.md` says the backend runs with
 mode or serving uncompressed JSON.
 
 **Change size:** S for process cleanup, M if the scheduler is separated.
+
+**Status:** Process cleanup implemented on 2026-07-19. Production now runs as
+the enabled `logarium-api.service` user unit with one uvicorn worker, no source
+watcher, restart-on-failure, and one backup scheduler. `deploy.sh` syncs backend
+code, applies migrations, restarts the unit, and checks local API health.
+Compression and connection-pool measurement are still pending.
 
 ### Process steps
 
