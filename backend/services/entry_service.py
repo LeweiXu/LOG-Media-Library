@@ -82,6 +82,7 @@ def get_entries(
     limit:  int = 40,
     offset: int = 0,
     visible_mediums: set[str] | None = None,
+    include_total: bool = True,
 ) -> EntryListResponse:
     sort_col = SORTABLE_COLUMNS.get(sort, Entry.updated_at)
     direction = asc if order == "asc" else desc
@@ -99,9 +100,12 @@ def get_entries(
         external_url=external_url,
     )
 
-    # Total count (before pagination)
-    count_q = select(func.count()).select_from(base_q.subquery())
-    total = db.execute(count_q).scalar_one()
+    # Dashboard buckets do not display pagination totals, so their bootstrap can
+    # skip the extra count query and use the returned row count instead.
+    total = None
+    if include_total:
+        count_q = select(func.count()).select_from(base_q.subquery())
+        total = db.execute(count_q).scalar_one()
 
     # Paginated results — always put NULLs last so unrated/undated entries
     # don't float to the top when sorting descending.
@@ -115,7 +119,7 @@ def get_entries(
 
     return EntryListResponse(
         items=[EntryRead.model_validate(r) for r in rows],
-        total=total,
+        total=total if total is not None else len(rows),
         limit=limit,
         offset=offset,
     )

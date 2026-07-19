@@ -6,7 +6,9 @@ import { DEFAULT_UI, PreferencesProvider, usePreferences } from './preferences.j
 import { BASE } from './api.jsx';
 import { queryClient } from './data/client.jsx';
 import { clearUserSessionData } from './data/sessionCache.js';
-import { prefetchEntries, prefetchEntriesWithCovers, prefetchEntryGroupsWithCovers, prefetchCounts, prefetchLists, prefetchStats } from './data/hooks.jsx';
+import {
+  prefetchCounts, prefetchDashboard, prefetchEntriesWithCovers, prefetchLists, prefetchStats,
+} from './data/hooks.jsx';
 import { defaultLibraryParams } from './data/keys.js';
 
 // Each page is its own lazily-loaded chunk (this splits recharts out of the main
@@ -29,19 +31,7 @@ const Console    = lazy(ROUTE_LOADERS['/console']);
 function prefetchRouteData(path, prefs) {
   switch (path) {
     case '/dashboard':
-      prefetchStats(queryClient);
-      // Dashboard renders all three tables through one combined cover bundle.
-      // Preload that exact union, not three separately-keyed bundles.
-      prefetchEntryGroupsWithCovers(queryClient, [
-        { status: 'current',   limit: 20 },
-        { status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' },
-        { status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' },
-      ]);
-      // on_hold + dropped feed only the activity log (no covers), but Dashboard's
-      // loading flag waits on all six queries — prefetch them too or the page
-      // still skeletons on click even though the tables were warmed.
-      prefetchEntries(queryClient, { status: 'on_hold', limit: 6, sort: 'updated_at', order: 'desc' });
-      prefetchEntries(queryClient, { status: 'dropped', limit: 6, sort: 'updated_at', order: 'desc' });
+      prefetchDashboard(queryClient);
       break;
     case '/library':
       prefetchEntriesWithCovers(queryClient, defaultLibraryParams(prefs));

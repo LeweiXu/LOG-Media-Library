@@ -1,11 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  getEntries, getEntryCounts, getCustomLists, getStats,
+  getEntries, getEntryCounts, getCustomLists, getStats, getDashboardBootstrap,
   updateEntry, createEntry, deleteEntry, batchUpdateEntries, batchDeleteEntries,
   fetchCoverBundle,
 } from '../api.jsx';
 import { extractItems } from '../utils.jsx';
-import { entriesKey, countsKey, listsKey, statsKey, coverBundleKey } from './keys.js';
+import {
+  entriesKey, countsKey, listsKey, statsKey, dashboardBootstrapKey, coverBundleKey,
+} from './keys.js';
 
 const EMPTY_MAP = {};
 
@@ -46,6 +48,58 @@ export function useCustomLists(options = {}) {
 
 export function useStats(options = {}) {
   return useQuery({ queryKey: statsKey(), queryFn: getStats, ...options });
+}
+
+const DASHBOARD_GROUPS = [
+  ['current',   { status: 'current',   limit: 20 }],
+  ['completed', { status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' }],
+  ['on_hold',   { status: 'on_hold',   limit: 6,  sort: 'updated_at', order: 'desc' }],
+  ['dropped',   { status: 'dropped',   limit: 6,  sort: 'updated_at', order: 'desc' }],
+  ['planned',   { status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' }],
+];
+
+function seedDashboardEntryQueries(qc, data) {
+  DASHBOARD_GROUPS.forEach(([name, params]) => {
+    if (data?.[name]) qc.setQueryData(entriesKey(params), data[name]);
+  });
+  return data;
+}
+
+async function fetchDashboardPayload(qc) {
+  try {
+    return seedDashboardEntryQueries(qc, await getDashboardBootstrap());
+  } catch (error) {
+    if (!String(error?.message || '').startsWith('404 ')) throw error;
+    // The frontend can be deployed before the home-server API. Use the old
+    // fan-out until that server has pulled and restarted with the bootstrap.
+    const [stats, ...groups] = await Promise.all([
+      getStats(),
+      ...DASHBOARD_GROUPS.map(([, params]) => fetchEntriesPayload(params)),
+    ]);
+    const fallback = { stats };
+    DASHBOARD_GROUPS.forEach(([name], index) => { fallback[name] = groups[index]; });
+    return seedDashboardEntryQueries(qc, fallback);
+  }
+}
+
+export function useDashboardBootstrap(options = {}) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: dashboardBootstrapKey(),
+    queryFn: () => fetchDashboardPayload(qc),
+    ...options,
+  });
+}
+
+export function prefetchDashboard(qc) {
+  return qc.fetchQuery({
+    queryKey: dashboardBootstrapKey(),
+    queryFn: () => fetchDashboardPayload(qc),
+  }).then(data => prefetchCoverBundle(qc, [
+    ...(data.current?.items || []),
+    ...(data.planned?.items || []),
+    ...(data.completed?.items || []),
+  ].map(entry => entry.cover_url), 'thumb'));
 }
 
 // ── Cover bundles (all of a view's covers at one size, in one request) ────────
@@ -172,6 +226,7 @@ export function invalidateEntryData(qc) {
   qc.invalidateQueries({ queryKey: ['entryCounts'] });
   qc.invalidateQueries({ queryKey: ['customLists'] });
   qc.invalidateQueries({ queryKey: ['stats'] });
+  qc.invalidateQueries({ queryKey: ['dashboardBootstrap'] });
 }
 
 // For the modal edit/delete path: EntryFormModal still writes through the API

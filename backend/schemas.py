@@ -550,3 +550,25 @@ class StatsResponse(BaseModel):
     backlog_age: list[BacklogBucket]
     rating_comparison_by_medium: list[MediumRatingComparison]
     release_years: list[ReleaseYearStat]
+
+
+class DashboardStatsResponse(BaseModel):
+    total:     int
+    current:   int
+    planned:   int
+    completed: int
+    on_hold:   int
+    dropped:   int
+    avg_rating: Optional[float] = None
+    by_medium: list[MediumCount]
+    by_origin: list[OriginCount]
+    entries_per_month: list[MonthCount]
+
+
+class DashboardBootstrapResponse(BaseModel):
+    stats: DashboardStatsResponse
+    current: EntryListResponse
+    completed: EntryListResponse
+    on_hold: EntryListResponse
+    dropped: EntryListResponse
+    planned: EntryListResponse

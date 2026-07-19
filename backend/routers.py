@@ -18,10 +18,11 @@ from schemas import (
     UserCreate, UserRead, Token, ChangePassword,
     UserSettings, UserSettingsUpdate,
     DuplicateCheckRequest, DuplicateCheckResponse,
-    ExploreCacheWriteRequest, ExploreResponse,
+    DashboardBootstrapResponse, ExploreCacheWriteRequest, ExploreResponse,
     deep_merge, deep_merge_ui,
 )
 from services import entry_service
+from services.bootstrap_service import get_dashboard_bootstrap
 from services.entry_service import delete_all_entries
 from services import auth_service
 from services.search_service import search_media, lookup_chapter_count
@@ -211,6 +212,18 @@ def _visible_mediums(user: User) -> set[str] | None:
     ui = deep_merge_ui(user.ui_preferences)
     visible = ui.get("mediums", {}).get("visible")
     return set(visible) if isinstance(visible, list) else None
+
+
+@router.get("/bootstrap/dashboard", response_model=DashboardBootstrapResponse)
+def dashboard_bootstrap(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return get_dashboard_bootstrap(
+        db,
+        current_user.username,
+        _visible_mediums(current_user),
+    )
 
 @router.get("/auth/me/settings", response_model=UserSettings)
 def get_settings(

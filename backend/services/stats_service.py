@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from models import Entry
@@ -18,6 +18,7 @@ from schemas import (
     RatingBucket,
     ReleaseYearStat,
     StatsResponse,
+    DashboardStatsResponse,
 )
 
 
@@ -272,4 +273,61 @@ def get_stats(db: Session, username: str, visible_mediums: set[str] | None = Non
         backlog_age=backlog_age,
         rating_comparison_by_medium=rating_comparison_by_medium,
         release_years=release_years,
+    )
+
+
+def get_dashboard_stats(
+    db: Session,
+    username: str,
+    visible_mediums: set[str] | None = None,
+) -> DashboardStatsResponse:
+    """Return only the counts and recent activity used by Dashboard."""
+    query = select(
+        Entry.status,
+        Entry.medium,
+        Entry.origin,
+        Entry.rating,
+        Entry.completed_at,
+    ).where(Entry.username == username)
+    if visible_mediums is not None:
+        query = query.where(or_(Entry.medium.is_(None), Entry.medium.in_(visible_mediums)))
+    rows = db.execute(query).all()
+
+    status_counts = Counter(row.status for row in rows)
+    medium_counts = Counter(row.medium for row in rows if row.medium)
+    origin_counts = Counter(row.origin for row in rows if row.origin)
+    completed_ratings = [
+        float(row.rating)
+        for row in rows
+        if row.status == "completed" and row.rating is not None
+    ]
+    monthly_completed: Counter[str] = Counter()
+    for row in rows:
+        completed_at = _aware(row.completed_at)
+        if completed_at:
+            monthly_completed[_month_key(completed_at)] += 1
+
+    entries_per_month = [
+        MonthCount(key=key, label=_month_label(key), count=count)
+        for key, count in sorted(monthly_completed.items())
+        if count
+    ][-12:]
+
+    return DashboardStatsResponse(
+        total=len(rows),
+        current=status_counts["current"],
+        planned=status_counts["planned"],
+        completed=status_counts["completed"],
+        on_hold=status_counts["on_hold"],
+        dropped=status_counts["dropped"],
+        avg_rating=_average(completed_ratings, 2),
+        by_medium=[
+            MediumCount(medium=medium, count=count)
+            for medium, count in medium_counts.most_common()
+        ],
+        by_origin=[
+            OriginCount(origin=origin, count=count)
+            for origin, count in origin_counts.most_common()
+        ],
+        entries_per_month=entries_per_month,
     )

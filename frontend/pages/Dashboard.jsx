@@ -1,7 +1,10 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRevalidateOnFocus } from '../hooks.jsx';
-import { useEntries, useStats, useEntryMutations, useCoverBundle, prefetchEntriesWithCovers, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry } from '../data/hooks.jsx';
+import {
+  useDashboardBootstrap, useEntryMutations, useCoverBundle,
+  prefetchEntriesWithCovers, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry,
+} from '../data/hooks.jsx';
 import { defaultLibraryParams } from '../data/keys.js';
 import { prefetchFullCover } from '../api.jsx';
 import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverErrorPlaceholder, coverSrc, tableGapVars } from '../utils.jsx';
@@ -110,31 +113,21 @@ export default function DashboardAlt({ onFilterChange }) {
   const [adaptiveSplit,   setAdaptiveSplit]   = useState(null);
   const pairRef = useRef(null);
 
-  // Dashboard is a fan-out of status-bucketed entry queries + the stats summary.
-  // Each is its own cache entry, so a mutation's invalidation refetches exactly
-  // the buckets that changed and rows move between Current / Planned / Completed.
-  const statsQuery     = useStats();
-  const currentQuery   = useEntries({ status: 'current',   limit: 20 });
-  const completedQuery = useEntries({ status: 'completed', limit: 20, sort: 'completed_at', order: 'desc' });
-  const onHoldQuery    = useEntries({ status: 'on_hold',   limit: 6,  sort: 'updated_at', order: 'desc' });
-  const droppedQuery   = useEntries({ status: 'dropped',   limit: 6,  sort: 'updated_at', order: 'desc' });
-  const plannedQuery   = useEntries({ status: 'planned',   limit: 20, sort: 'updated_at', order: 'desc' });
-
-  const stats   = statsQuery.data ?? null;
-  const current = currentQuery.data?.items ?? [];
-  const planned = plannedQuery.data?.items ?? [];
-  const recent  = completedQuery.data?.items ?? [];
-  const loading = [statsQuery, currentQuery, completedQuery, onHoldQuery, droppedQuery, plannedQuery]
-    .some(q => q.isLoading);
-  const error = (currentQuery.error || completedQuery.error || onHoldQuery.error
-    || droppedQuery.error || plannedQuery.error)?.message || '';
+  const bootstrapQuery = useDashboardBootstrap();
+  const dashboardData = bootstrapQuery.data;
+  const stats   = dashboardData?.stats ?? null;
+  const current = dashboardData?.current?.items ?? [];
+  const planned = dashboardData?.planned?.items ?? [];
+  const recent  = dashboardData?.completed?.items ?? [];
+  const loading = bootstrapQuery.isLoading;
+  const error = bootstrapQuery.error?.message || '';
 
   const activity = useMemo(() => {
-    const completedItems = completedQuery.data?.items ?? [];
-    const currentItems   = currentQuery.data?.items ?? [];
-    const onHoldItems    = onHoldQuery.data?.items ?? [];
-    const droppedItems   = droppedQuery.data?.items ?? [];
-    const plannedItems   = plannedQuery.data?.items ?? [];
+    const completedItems = dashboardData?.completed?.items ?? [];
+    const currentItems   = dashboardData?.current?.items ?? [];
+    const onHoldItems    = dashboardData?.on_hold?.items ?? [];
+    const droppedItems   = dashboardData?.dropped?.items ?? [];
+    const plannedItems   = dashboardData?.planned?.items ?? [];
     return [
       ...completedItems.slice(0, 6).map(e => ({ type: 'completed', entry: e, time: e.updated_at || e.completed_at })),
       ...currentItems.slice(0, 4).map(e  => ({ type: 'current',   entry: e, time: e.created_at })),
@@ -145,7 +138,7 @@ export default function DashboardAlt({ onFilterChange }) {
       .filter(a => a.time)
       .sort((a, b) => new Date(b.time) - new Date(a.time))
       .slice(0, 8);
-  }, [completedQuery.data, currentQuery.data, onHoldQuery.data, droppedQuery.data, plannedQuery.data]);
+  }, [dashboardData]);
 
   // All rendered table covers, bundled into one tiny-thumbnail request.
   const coverUrls = useMemo(

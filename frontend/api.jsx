@@ -435,6 +435,7 @@ export async function startCoverCache(onEvent) {
 }
 
 export const getStats = () => req('/stats');
+export const getDashboardBootstrap = () => req('/bootstrap/dashboard');
 
 export const deleteAllEntries = () => req('/entries', { method: 'DELETE' });
 

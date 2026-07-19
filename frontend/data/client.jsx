@@ -5,7 +5,9 @@ import {
 import { readSessionCache, writeSessionCache } from './sessionCache.js';
 
 const QUERY_CACHE_AREA = 'queries';
-const PERSISTED_QUERY_TYPES = new Set(['entries', 'entryCounts', 'customLists', 'stats']);
+const PERSISTED_QUERY_TYPES = new Set([
+  'entries', 'entryCounts', 'customLists', 'stats', 'dashboardBootstrap',
+]);
 const MAX_PERSISTED_ENTRY_QUERIES = 12;
 
 function currentUsername() {

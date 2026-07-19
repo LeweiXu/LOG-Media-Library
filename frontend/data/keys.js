@@ -7,6 +7,7 @@ export const entriesKey = (params = {}) => ['entries', params];
 export const countsKey  = () => ['entryCounts'];
 export const listsKey   = () => ['customLists'];
 export const statsKey   = () => ['stats'];
+export const dashboardBootstrapKey = () => ['dashboardBootstrap'];
 
 // Keyed by the (sorted, de-duped) cover-URL set + size, NOT by entry params, so
 // the bundle stays cached across entry edits (covers are immutable per URL) and
