@@ -6,7 +6,7 @@ server-side cover cache, Dashboard bootstrap data, and hover-preloading across
 the app. It's meant to get the next person oriented without re-reading every
 commit.
 
-Relevant commits (newest first): `5255dc2`, `afc3249`, `2234cde`, `e8ca30e`,
+Relevant commits (newest first): `e5df5b8`, `89f70be`, `5255dc2`, `afc3249`, `2234cde`, `e8ca30e`,
 `c079d8b`, `a07cb46`, `c01684e`, `f73e009`, `2b84ebf`,
 `d7ad7aa`, `5da4a63`, `6c64913`, `d611066`, `b29019d`, `0542bfe`, and the earlier
 React-Query commits (`5ce63a7`, `334c07b`, `ab951d7`).
@@ -17,11 +17,11 @@ Lives in `frontend/data/`:
 - `client.jsx` - the singleton `queryClient` + `DataProvider` (wraps the app in
   `index.jsx`). Defaults: `staleTime: Infinity`, `gcTime: 30m`,
   `refetchOnWindowFocus: false`, `retry: 1`.
-- `keys.js` - query-key factories: `entriesKey`, `countsKey`, `listsKey`,
-  `statsKey`, `coverBundleKey`, plus `defaultLibraryParams(prefs)` (mirrors what
+- `keys.js` - query-key factories for entries, counts, lists, statistics,
+  bootstraps, and library revision, plus `defaultLibraryParams(prefs)` (mirrors what
   Library queries on a fresh mount, so nav-hover prefetch keys match).
-- `hooks.jsx` - read hooks (`useEntries`, `useEntryCounts`, `useCustomLists`,
-  `useStats`, `useCoverBundle`), prefetch helpers, and `useEntryMutations`.
+- `hooks.jsx` - read hooks, bootstrap seeders, revision checks, direct-cover
+  prefetch helpers, and `useEntryMutations`.
 
 **Standardized silent updates.** Every entry mutation goes through one contract in
 `useEntryMutations`: optimistic `setQueryData` patch -> rollback on error ->
@@ -32,18 +32,17 @@ Modal edits use `syncUpdatedEntry` / `syncDeletedEntry` (same effect for the
 edit-modal path, which still writes through the API itself).
 
 `invalidateEntryData(qc)` invalidates `entries` + `entryCounts` + `customLists` +
-`stats` + `dashboardBootstrap`. That's the "clear the table preloads when the
+`stats` + both bootstrap queries. That's the "clear the table preloads when the
 library changes" mechanism.
-Cover bundles are NOT invalidated there on purpose (see 3).
 
 Per-user isolation: `queryClient.clear()` runs on login/logout in `app.jsx`.
 
 Selected successful queries are also saved to user-scoped `sessionStorage` by
-`data/client.jsx`. This includes entries, counts, lists, statistics, and the
-Dashboard bootstrap, but never base64 cover bundles. A hard reload paints the
-stored data first and revalidates it in the background. Saved settings use the
-same pattern in `preferences.jsx`. Login, logout, account switches, and data
-wipe clear the matching user's stored data.
+`data/client.jsx`. This includes entries, counts, lists, statistics, both
+bootstraps, and the library revision. A hard reload paints the stored data first
+and checks the small revision endpoint before deciding whether larger payloads
+need revalidation. Saved settings use the same pattern in `preferences.jsx`.
+Login, logout, account switches, and data wipe clear the matching user's data.
 
 **Explore is deliberately NOT on React Query** for its recommendation data. It
 keeps its reroll-survival logic and a user-scoped page cache in
@@ -90,20 +89,18 @@ pre-3-size `full/` file) before ever hitting the network - that's how NU covers
 that were cached under the old scheme get converted with no re-download.
 
 **Serving is cache-only:**
-- `GET /covers/img?url=&size=` - one sized file (used by the detail modal), 404 if
-  uncached.
-- `POST /covers/bundle {size, urls}` - requested covers at one size as base64
-  data URIs. Serve-only; uncached URLs are omitted. Polling requests only the
-  still-missing URLs and merges them into the existing map.
+- `/covers/{size}/{sha256}.jpg` is the normal browsing path. Entry and Explore
+  responses include the hash, and Starlette serves the cache directories as
+  static files with one-year immutable caching.
+- `GET /covers/img?url=&size=` remains as a compatibility fallback for search
+  and add surfaces that only have the original URL.
+- The old base64 `/covers/bundle` route has been removed.
 
-**Frontend never hotlinks external covers** on the browsing surfaces. Tables use
-`useCoverBundle(urls, 'thumb')` and the detail modal uses
-`coverImgUrl(url, 'full')`. Explore uses `coverImgUrl(url, 'medium')` for covers
-the server says are ready. These are normal immutable image requests, so the
-browser can reuse each file across pages and hard reloads. Covers still being
-generated keep the bounded bundle polling fallback. Search/add/import preview
-surfaces still use external URLs because those items are not in the library
-cache yet.
+**Frontend never hotlinks external covers** on the browsing surfaces. Dashboard,
+Library, Explore, and the detail modal all use hashed immutable resources. The
+browser reuses each file across pages and hard reloads, and Cloudflare caches the
+same URL at the edge. Search/add/import preview surfaces still use external URLs
+because those items are not in the library cache yet.
 
 ## 4. Preloading
 
@@ -112,11 +109,11 @@ app session (a second hover no-ops); library mutations invalidate the table quer
 so they re-preload after a change.
 
 - Nav links (`app.jsx` `prefetchRouteData`): Dashboard warms one
-  `/bootstrap/dashboard` response and the exact shared thumbnail bundle the page
+  `/bootstrap/dashboard` response and decodes the exact thumbnails the page
   mounts. The bootstrap contains the five status buckets plus only the summary
   fields Dashboard uses. It skips the five list count queries and does not run
-  the full Statistics calculation. Library
-  warms the default query + counts + lists, Statistics warms stats, Explore calls
+  the full Statistics calculation. Library warms one `/bootstrap/library`
+  response with the first page, counts, and lists. Statistics warms stats, Explore calls
   `prefetchExploreHome` (exported from the lazy Explore chunk).
 - Library sidebar filters, all sort controls (column headers, the filter-bar sort
   dropdown via CustomSelect's new `onOptionHover`, the asc/desc toggle, the
@@ -132,15 +129,14 @@ so they re-preload after a change.
 - Table rows prefetch the `full` cover on hover (`prefetchFullCover`), so the detail
   modal image is instant on click.
 
-The main shared helpers are `prefetchDashboard`, `prefetchEntriesWithCovers`,
-and `prefetchCoverBundle` in `data/hooks.jsx`.
+The main shared helpers are `prefetchDashboard`, `prefetchLibraryBootstrap`,
+`prefetchEntriesWithCovers`, and `prefetchCoverImages`.
 
 ## 5. There are 4 tables total
 
 Dashboard has 3 (Current / Planned / Recently Completed), Library has 1. Their
-entries queries + cover bundles are what a library change needs to refresh, and
-`invalidateEntryData` handles the entries side; cover bundles self-manage because
-they're keyed by the cover-URL set (a changed/added cover = a new key).
+entry queries are refreshed by `invalidateEntryData`. Covers use immutable hash
+URLs, so a changed source URL naturally produces a different browser cache key.
 
 ## 6. Deploy steps
 
@@ -189,9 +185,10 @@ There's no test runner. Backend was checked with direct PIL/service calls; the
 frontend was driven in real headless Chrome over the DevTools Protocol (Node has a
 global `WebSocket`, so a small CDP client sets the auth token in localStorage,
 navigates, dispatches real hover/click events, and reads `performance.getEntriesByType('resource')`
-to confirm which requests fire). That's how the silent-update reorder, the
-one-request cover bundle, session hydration, Dashboard bootstrap, cached Explore
-pagination, and each preload were confirmed.
+to confirm which requests fire). The production check covered Library bootstrap,
+revision-only focus checks, hashed cover requests, decoded image state, and a
+Dashboard hover followed by a click. The click made no Dashboard data or cover
+requests after the hover work finished.
 
 ## 8. Known gaps / not verified live
 
@@ -200,5 +197,6 @@ pagination, and each preload were confirmed.
   pages, pagination hover, no click refetch, direct cached images, and immediate
   session hydration. The production API still needs to be checked after its
   backend restart.
-- Library pagination preload wasn't driven live (needs >40 seeded entries) but uses
-  the same verified `prefetchEntriesWithCovers` path as the sort/filter preloads.
+- Production Library pagination has enough data to exercise nearby-page warming.
+  That warming now waits until the visible page's thumbnails decode, then waits
+  another second before starting off-screen requests.

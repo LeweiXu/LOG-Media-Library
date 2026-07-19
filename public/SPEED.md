@@ -32,14 +32,14 @@ and library size can change the order of the middle items.
 
 | Rank | Improvement | Where it is noticed | Expected impact | Change size | Status |
 |---:|---|---|---|---|---|
-| 1 | Persist selected query data across hard reloads | Reloading Dashboard, Library, Statistics, or Explore | Very high | L | Implemented, revision check still pending |
-| 2 | Add route bootstrap endpoints | Cold login, uncached Dashboard and Library visits | Very high | L | Dashboard implemented, Library pending |
+| 1 | Persist selected query data across hard reloads | Reloading Dashboard, Library, Statistics, or Explore | Very high | L | Implemented |
+| 2 | Add route bootstrap endpoints | Cold login, uncached Dashboard and Library visits | Very high | L | Implemented |
 | 3 | Remove cold-load frontend competition | First application load | High | S | Implemented |
-| 4 | Serve covers as individually cached image resources | Dashboard, Library, Explore, detail modal | High | L, with an S-sized first phase | Partly implemented |
+| 4 | Serve covers as individually cached image resources | Dashboard, Library, Explore, detail modal | High | L, with an S-sized first phase | Implemented |
 | 5 | Return entry summaries and preload full details on row hover | Library pages, pagination, Dashboard preload | Medium to high | L | Not started |
 | 6 | Stream search results and reuse outbound connections | Add Entry, add by title, auto-import enrichment | High within search workflows | L | Not started |
 | 7 | Reduce statistics, counts, and Dashboard database work | Cold Dashboard, Statistics, large libraries | Medium | M | Dashboard portion implemented |
-| 8 | Replace broad focus and mutation refetches with revision checks | Returning to the tab, inline edits, extension use | Medium, mostly background smoothness | M | Not started |
+| 8 | Replace broad focus and mutation refetches with revision checks | Returning to the tab, inline edits, extension use | Medium, mostly background smoothness | M | Revision and focus checks implemented, mutation precision pending |
 | 9 | Remove cross-origin API preflights with a same-origin route | Every uncached authenticated interaction | Potentially high, infrastructure dependent | XL | Not started |
 | 10 | Tighten the production process and response transport | All backend calls | Low to medium unless production is misconfigured | S to M | Process cleanup implemented, transport pending |
 
@@ -113,11 +113,12 @@ one-second hard reload.
 
 **Change size:** L
 
-**Status:** Implemented for the selected data. TanStack Query data, settings,
-and Explore pages are stored in username-scoped, versioned `sessionStorage`
-documents with a 12-hour cap. They hydrate before route rendering, revalidate
-in the background, and are cleared on auth changes. The `library_revision`
-follow-up from improvement 8 is still pending.
+**Status:** Implemented. TanStack Query data, settings, and Explore pages are
+stored in username-scoped, versioned `sessionStorage` documents with a 12-hour
+cap. They hydrate before route rendering and are cleared on auth changes. A
+database-backed `library_revision` increments once per entry transaction. Hard
+reloads and tab focus now compare that small value before invalidating larger
+entry, count, list, statistics, and bootstrap payloads.
 
 ### Data to persist
 
@@ -183,11 +184,13 @@ request repeats CORS, JWT decoding, user lookup, routing, and response overhead.
 
 **Change size:** L
 
-**Status:** Partly implemented. `/bootstrap/dashboard` now returns the five
-Dashboard entry groups and a reduced Dashboard statistics payload in one
-authenticated request. It also skips pagination count queries and seeds the
-existing entry query keys. The Library bootstrap and optional settings payload
-are still pending.
+**Status:** Implemented. `/bootstrap/dashboard` returns the five Dashboard entry
+groups, a reduced statistics payload, and the library revision. It skips list
+pagination counts and seeds the existing entry query keys. `/bootstrap/library`
+returns the requested first page, sidebar counts, custom lists, and revision,
+then seeds the same query keys used by later filters and pages. Settings keep
+their independent session-hydrated cache because Library parameters depend on
+them before the bootstrap request is built.
 
 ### Dashboard bootstrap
 
@@ -307,23 +310,27 @@ Acceptance criteria:
 
 ## 4. Serve covers as individually cached image resources
 
-The current bundle route reads JPEG files, base64-encodes them, and returns them
-inside JSON. This increases memory use, makes cover reuse depend on the exact
-bundle key, and repeats Python work on every bundle request.
+The old bundle route read JPEG files, base64-encoded them, and returned them
+inside JSON. That made cover reuse depend on the exact bundle key and repeated
+Python work on every request.
 
 **Expected impact:** High on image-heavy pages and on the home server's upload
 path.
 
 **Change size:** L overall. The first cleanup phase is S.
 
-**Status:** Partly implemented. Bundle reads are synchronous, polling asks only
-for missing covers, and prefetched images are decoded before navigation. Stable
-immutable `/covers/img` resources are used by Explore cached covers and the
-detail modal. Dashboard and Library still use base64 bundles, and there is no
-Cloudflare cover cache rule or final bundle removal yet. Explore metadata is
-server-paginated and its recommendation pages and covers are warmed together.
+**Status:** Implemented. Entry and Explore responses include the SHA-256 cover
+key. Dashboard, Library, Explore, and the detail modal use stable
+`/covers/{size}/{key}.jpg` URLs. Starlette mounts the three cache directories as
+static files with one-year immutable caching, and the base64 bundle route has
+been removed. Cloudflare's normal JPEG caching was verified with a production
+MISS followed by a HIT. Hover preloading waits for image decode. Library waits
+for the visible page's thumbnails to decode before warming off-screen pages.
 
-### Phase A: clean up the current bundle path
+### Phase A: clean up the old bundle path
+
+This transitional phase was implemented first, then retired when Phase B went
+live. There is no bundle polling or base64 cover response in the current code.
 
 1. Change `/covers/bundle` to a synchronous FastAPI handler, or explicitly run
    file reads and base64 work in a thread. It currently performs blocking disk
@@ -342,7 +349,8 @@ server-paginated and its recommendation pages and covers are warmed together.
 3. Serve the files through nginx, Starlette static files, or an internal redirect
    instead of reading them in Python.
 4. Keep `Cache-Control: public, max-age=31536000, immutable`.
-5. Add a Cloudflare cache rule for the hashed cover path and verify cache hits.
+5. Use Cloudflare's default JPEG caching for the hashed cover path and verify
+   cache hits.
 6. On hover, create image objects for the destination covers and wait for decode.
 7. Remove the JSON bundle endpoint after the browser extension and deployed
    frontend no longer depend on it.
@@ -744,18 +752,20 @@ Acceptance criteria:
 Impact ranking and implementation order are not identical. This order captures
 quick wins first and creates the primitives needed by later phases:
 
-1. Add baseline timing and size measurements.
-2. Self-host the font and delay automatic route chunk warming.
-3. Make cover bundle work non-blocking and poll only missing covers.
-4. Reduce Statistics columns and let Dashboard lists skip counts.
-5. Add `library_revision` and smarter focus checks.
-6. Persist selected query data using the revision.
-7. Add Dashboard and Library bootstrap endpoints.
-8. Introduce `EntrySummary` and hover-prefetched detail queries.
-9. Move to direct hashed cover resources and Cloudflare caching.
-10. Add a shared outbound HTTP client and progressive search.
-11. Benchmark a same-origin API route before changing production DNS.
-12. Finish production worker, scheduler, pool, and compression tuning.
+1. Pending: add baseline timing and size measurements.
+2. Done: self-host the font and delay automatic route chunk warming.
+3. Done, then retired: make the old cover bundle non-blocking and poll only
+   missing covers.
+4. Partly done: reduce Statistics columns and let Dashboard lists skip counts.
+5. Done: add `library_revision` and smarter focus checks.
+6. Done: persist selected query data using the revision.
+7. Done: add Dashboard and Library bootstrap endpoints.
+8. Pending: introduce `EntrySummary` and hover-prefetched detail queries.
+9. Done: move to direct hashed cover resources and Cloudflare caching.
+10. Pending: add a shared outbound HTTP client and progressive search.
+11. Pending: benchmark a same-origin API route before changing production DNS.
+12. Partly done: finish production worker, scheduler, pool, and compression
+    tuning.
 
 Each numbered feature should be its own commit or short series of commits. Keep
 the existing endpoints available until the replacement path is deployed and
