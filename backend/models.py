@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
-from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, JSON, func, ForeignKey, UniqueConstraint, Index
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean, JSON, func, ForeignKey, UniqueConstraint, Index, event, update
+from sqlalchemy.orm import Mapped, Session, mapped_column
 from db import Base
 
 def _utcnow() -> datetime:
@@ -27,6 +27,7 @@ class User(Base):
     # personalize/hide-in-library). NULL is treated as "{}"; the app deep-merges
     # it over DEFAULT_UI. See schemas.DEFAULT_UI for the canonical shape.
     ui_preferences:           Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    library_revision:         Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     def __repr__(self) -> str:
         return f"<User username={self.username!r} email={self.email!r}>"
 
@@ -101,3 +102,58 @@ class ExploreCache(Base):
     __table_args__ = (
         UniqueConstraint("username", "medium", name="uq_explore_cache_user_medium"),
     )
+
+
+_REVISION_USERS = "library_revision_users"
+_REVISION_BUMPED = "library_revision_bumped"
+
+
+@event.listens_for(Session, "before_flush")
+def _collect_library_revision_users(session: Session, _flush_context, _instances) -> None:
+    """Track users whose entries changed in this transaction."""
+    usernames = session.info.setdefault(_REVISION_USERS, set())
+    for entry in session.new:
+        if isinstance(entry, Entry) and entry.username:
+            usernames.add(entry.username)
+    for entry in session.deleted:
+        if isinstance(entry, Entry) and entry.username:
+            usernames.add(entry.username)
+    for entry in session.dirty:
+        if (
+            isinstance(entry, Entry)
+            and entry.username
+            and session.is_modified(entry, include_collections=False)
+        ):
+            usernames.add(entry.username)
+
+
+@event.listens_for(Session, "after_flush_postexec")
+def _bump_library_revisions(session: Session, _flush_context) -> None:
+    """Increment each changed library once before its transaction commits."""
+    if session.info.get(_REVISION_BUMPED):
+        return
+    usernames = session.info.get(_REVISION_USERS) or set()
+    if not usernames:
+        return
+    session.execute(
+        update(User)
+        .where(User.username.in_(usernames))
+        .values(library_revision=User.library_revision + 1),
+        execution_options={"synchronize_session": "fetch"},
+    )
+    session.info[_REVISION_BUMPED] = True
+
+
+def _clear_revision_tracking(session: Session) -> None:
+    session.info.pop(_REVISION_USERS, None)
+    session.info.pop(_REVISION_BUMPED, None)
+
+
+@event.listens_for(Session, "after_commit")
+def _clear_revision_after_commit(session: Session) -> None:
+    _clear_revision_tracking(session)
+
+
+@event.listens_for(Session, "after_rollback")
+def _clear_revision_after_rollback(session: Session) -> None:
+    _clear_revision_tracking(session)

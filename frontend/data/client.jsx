@@ -3,10 +3,13 @@ import {
   QueryClient, QueryClientProvider, dehydrate, hydrate,
 } from '@tanstack/react-query';
 import { readSessionCache, writeSessionCache } from './sessionCache.js';
+import { getLibraryRevision } from '../api.jsx';
+import { libraryRevisionKey } from './keys.js';
 
 const QUERY_CACHE_AREA = 'queries';
 const PERSISTED_QUERY_TYPES = new Set([
   'entries', 'entryCounts', 'customLists', 'stats', 'dashboardBootstrap',
+  'libraryBootstrap', 'libraryRevision',
 ]);
 const MAX_PERSISTED_ENTRY_QUERIES = 12;
 
@@ -63,11 +66,25 @@ const restoredUsername = currentUsername();
 const restoredState = readSessionCache(QUERY_CACHE_AREA, restoredUsername);
 if (restoredState) {
   hydrate(queryClient, restoredState);
-  // Keep the restored data visible, but verify it as soon as a page observes it.
-  queryClient.invalidateQueries({ predicate: isPersistedQuery });
 }
 
 export function DataProvider({ children }) {
+  useEffect(() => {
+    const username = currentUsername();
+    if (!username || !restoredState) return;
+    const previous = queryClient.getQueryData(libraryRevisionKey())?.revision;
+    getLibraryRevision()
+      .then(current => {
+        queryClient.setQueryData(libraryRevisionKey(), current);
+        if (previous == null || previous !== current?.revision) {
+          queryClient.invalidateQueries({
+            predicate: query => isPersistedQuery(query) && query.queryKey?.[0] !== 'libraryRevision',
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     let timer;
     const save = () => {

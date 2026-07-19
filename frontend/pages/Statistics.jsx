@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePreferences } from '../preferences.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
-import { useStats, invalidateEntryData } from '../data/hooks.jsx';
+import { useStats, invalidateEntryData, revalidateLibraryRevision } from '../data/hooks.jsx';
 import { SkeletonChartBox, SkeletonLine } from './components/Skeletons.jsx';
 import {
   Bar,
@@ -176,7 +176,7 @@ export default function Statistics() {
   const error = statsQuery.error?.message || '';
 
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
-  useRevalidateOnFocus(() => { invalidateEntryData(qc); return true; });
+  useRevalidateOnFocus(() => revalidateLibraryRevision(qc));
 
   useEffect(() => {
     if (loading) return;

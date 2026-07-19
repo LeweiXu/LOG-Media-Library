@@ -2,12 +2,13 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { useQueryClient } from '@tanstack/react-query';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import {
-  useDashboardBootstrap, useEntryMutations, useCoverBundle,
+  useDashboardBootstrap, useEntryMutations,
   prefetchEntriesWithCovers, invalidateEntryData, syncUpdatedEntry, syncDeletedEntry,
+  revalidateLibraryRevision,
 } from '../data/hooks.jsx';
 import { defaultLibraryParams } from '../data/keys.js';
-import { prefetchFullCover } from '../api.jsx';
-import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverErrorPlaceholder, coverSrc, tableGapVars } from '../utils.jsx';
+import { coverImgUrl, prefetchFullCover } from '../api.jsx';
+import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverErrorPlaceholder, tableGapVars } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
@@ -86,7 +87,7 @@ function CoverThumb({ url, title }) {
     <div className="cover-thumb">
       {url && (
         <img src={url} alt={title}
-          loading="lazy"
+          loading="eager"
           referrerPolicy="no-referrer"
           onError={onCoverErrorPlaceholder} />
       )}
@@ -140,13 +141,6 @@ export default function DashboardAlt({ onFilterChange }) {
       .slice(0, 8);
   }, [dashboardData]);
 
-  // All rendered table covers, bundled into one tiny-thumbnail request.
-  const coverUrls = useMemo(
-    () => [...current, ...planned, ...recent].map(e => e.cover_url).filter(Boolean),
-    [current, planned, recent],
-  );
-  const coverMap = useCoverBundle(coverUrls, 'thumb');
-
   const reload = useCallback(() => invalidateEntryData(qc), [qc]);
 
   // Hovering a sidebar filter warms the Library query (+ its covers) that clicking
@@ -158,7 +152,7 @@ export default function DashboardAlt({ onFilterChange }) {
   }, [qc, prefs]);
 
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
-  useRevalidateOnFocus(() => { reload(); return true; });
+  useRevalidateOnFocus(() => revalidateLibraryRevision(qc));
 
   const monthBarsData = stats?.entries_per_month ?? [];
   useEffect(() => {
@@ -328,10 +322,12 @@ export default function DashboardAlt({ onFilterChange }) {
 
   function renderRow(e, table, statusMode) {
     return (
-      <tr key={e.id} className="library-row-clickable" onMouseEnter={() => prefetchFullCover(e.cover_url)} onClick={() => setDetailEntry(e)}>
+      <tr key={e.id} className="library-row-clickable"
+        onMouseEnter={() => prefetchFullCover(e.cover_url, e.cover_key)}
+        onClick={() => setDetailEntry(e)}>
         <td>
           <div className="cover-cell">
-            <CoverThumb url={coverSrc(coverMap, e.cover_url)} title={e.title} />
+            <CoverThumb url={coverImgUrl(e.cover_url, 'thumb', e.cover_key)} title={e.title} />
             <span className="media-name">{e.title}</span>
           </div>
         </td>

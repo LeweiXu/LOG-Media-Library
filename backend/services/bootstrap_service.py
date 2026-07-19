@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
-from schemas import DashboardBootstrapResponse
+from models import User
+from schemas import DashboardBootstrapResponse, LibraryBootstrapResponse
 from services import entry_service
 from services.stats_service import get_dashboard_stats
 
@@ -38,4 +39,25 @@ def get_dashboard_bootstrap(
             **shared, status="planned", limit=20,
             sort="updated_at", order="desc",
         ),
+        revision=db.get(User, username).library_revision,
+    )
+
+
+def get_library_bootstrap(
+    db: Session,
+    username: str,
+    visible_mediums: set[str] | None,
+    **entry_params,
+) -> LibraryBootstrapResponse:
+    """Build the first Library view in one authenticated request."""
+    return LibraryBootstrapResponse(
+        entries=entry_service.get_entries(
+            db,
+            username=username,
+            visible_mediums=visible_mediums,
+            **entry_params,
+        ),
+        counts=entry_service.get_entry_counts(db, username, visible_mediums),
+        custom_lists=entry_service.get_custom_lists(db, username, visible_mediums),
+        revision=db.get(User, username).library_revision,
     )

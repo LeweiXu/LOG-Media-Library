@@ -331,27 +331,31 @@ export const fetchImdbDetail = (id) =>
  * Multipart, so it bypasses the JSON `req()` helper.
  */
 /** URL of one cached sized cover (thumb|medium|full), for direct <img src>. */
-export const coverImgUrl = (coverUrl, size = 'full') =>
-  coverUrl ? `${BASE}/covers/img?${new URLSearchParams({ url: coverUrl, size })}` : '';
+export const coverImgUrl = (coverUrl, size = 'full', coverKey = '') => {
+  if (coverKey) return `${BASE}/covers/${size}/${coverKey}.jpg`;
+  return coverUrl ? `${BASE}/covers/img?${new URLSearchParams({ url: coverUrl, size })}` : '';
+};
 
 /**
  * Warm the browser cache for a cover's full size, so the detail modal image is
  * instant on click. It's a plain immutable GET, so the browser HTTP cache does
  * the work — no React Query needed. Best-effort; a 404 (uncached) is harmless.
  */
-export function prefetchFullCover(coverUrl) {
-  if (!coverUrl) return;
-  const img = new Image();
-  img.src = coverImgUrl(coverUrl, 'full');
+export function prefetchFullCover(coverUrl, coverKey = '') {
+  if (!coverUrl) return Promise.resolve();
+  return prefetchCoverImages([{ cover_url: coverUrl, cover_key: coverKey }], 'full');
 }
 
 const coverImagePrefetches = new Map();
 
 /** Warm and decode cached cover files so a subsequent render can paint them. */
-export function prefetchCoverImages(coverUrls, size = 'medium') {
-  const urls = [...new Set((coverUrls || []).filter(Boolean))];
-  return Promise.all(urls.map(coverUrl => {
-    const src = coverImgUrl(coverUrl, size);
+export function prefetchCoverImages(covers, size = 'medium') {
+  const sources = [...new Set((covers || []).map(cover => (
+    typeof cover === 'string'
+      ? coverImgUrl(cover, size)
+      : coverImgUrl(cover?.cover_url, size, cover?.cover_key)
+  )).filter(Boolean))];
+  return Promise.all(sources.map(src => {
     if (coverImagePrefetches.has(src)) return coverImagePrefetches.get(src);
     const task = new Promise(resolve => {
       const img = new Image();
@@ -366,14 +370,6 @@ export function prefetchCoverImages(coverUrls, size = 'medium') {
     return task;
   }));
 }
-
-/**
- * Fetch a bundle of cached covers at one size in a single request.
- * Returns { images: { <cover_url>: "data:image/jpeg;base64,…" } } — uncached
- * URLs are omitted (caller falls back to the raw URL for those).
- */
-export const fetchCoverBundle = (urls, size) =>
-  req('/covers/bundle', { method: 'POST', body: JSON.stringify({ size, urls }) });
 
 export async function uploadCover(coverUrl, blob) {
   const body = new FormData();
@@ -436,6 +432,13 @@ export async function startCoverCache(onEvent) {
 
 export const getStats = () => req('/stats');
 export const getDashboardBootstrap = () => req('/bootstrap/dashboard');
+export const getLibraryBootstrap = (params = {}) => {
+  const qs = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, value]) => value !== '' && value != null)),
+  ).toString();
+  return req(`/bootstrap/library${qs ? `?${qs}` : ''}`);
+};
+export const getLibraryRevision = () => req('/library/revision');
 
 export const deleteAllEntries = () => req('/entries', { method: 'DELETE' });
 

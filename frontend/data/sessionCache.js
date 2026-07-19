@@ -1,4 +1,4 @@
-const CACHE_PREFIX = 'logarium-session-v1';
+const CACHE_PREFIX = 'logarium-session-v2';
 const MAX_AGE_MS = 12 * 60 * 60_000;
 
 function cacheKey(area, username) {

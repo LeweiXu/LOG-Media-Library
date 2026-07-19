@@ -3,9 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import {
   coverImgUrl, getExplore, prefetchCoverImages, restoreExplore, writeExploreCache,
 } from '../api.jsx';
-import { MEDIUMS, statusLabel, onCoverErrorPlaceholder, coverSrc, visibleMediumsFromPrefs } from '../utils.jsx';
+import { MEDIUMS, statusLabel, onCoverErrorPlaceholder, visibleMediumsFromPrefs } from '../utils.jsx';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCoverBundle, prefetchCoverBundle } from '../data/hooks.jsx';
 import { queryClient } from '../data/client.jsx';
 import { readSessionCache, writeSessionCache } from '../data/sessionCache.js';
 import { loadAvailableSources } from './components/searchSources.js';
@@ -164,11 +163,9 @@ function cacheEntryFromData(data, want, personalize, visibleMediums) {
   };
 }
 
-function warmExploreCovers(qc, items) {
+function warmExploreCovers(_qc, items) {
   const cached = (items || []).filter(item => item.cover_cached && item.cover_url);
-  const missing = (items || []).filter(item => !item.cover_cached && item.cover_url);
-  prefetchCoverImages(cached.map(item => item.cover_url), 'medium');
-  prefetchCoverBundle(qc, missing.map(item => item.cover_url), 'medium');
+  prefetchCoverImages(cached, 'medium');
 }
 
 // Warm the default Explore view (aggregate "All") + its card covers, so hovering
@@ -583,18 +580,6 @@ export default function Explore() {
   const recTotalPages = Math.max(1, Math.ceil(totalSuggestions / REC_PAGE_SIZE));
   const pagedItems = visibleItems;
 
-  // Cached covers use normal immutable image URLs so the browser can reuse each
-  // file across pages and reloads. Only covers still being generated use the
-  // small polling bundle fallback.
-  const missingCoverUrls = useMemo(
-    () => pagedItems
-      .filter(({ item }) => !item.cover_cached)
-      .map(({ item }) => item.cover_url)
-      .filter(Boolean),
-    [pagedItems],
-  );
-  const missingCoverMap = useCoverBundle(missingCoverUrls, 'medium');
-
   // Hovering pagination fetches that small metadata page and decodes its covers.
   const prefetchExplorePage = useCallback((targetPage) => {
     if (targetPage < 1 || targetPage > recTotalPages) return;
@@ -832,9 +817,7 @@ export default function Explore() {
                 <div className="explore-cover">
                   {item.cover_url
                     ? <img
-                        src={item.cover_cached
-                          ? coverImgUrl(item.cover_url, 'medium')
-                          : coverSrc(missingCoverMap, item.cover_url)}
+                        src={coverImgUrl(item.cover_url, 'medium', item.cover_key)}
                         alt=""
                         loading="lazy"
                         referrerPolicy="no-referrer"

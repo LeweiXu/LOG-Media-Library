@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { statusLabel, fmtDate, progressPercent, progressLabel, MEDIUMS, STATUSES, ORIGINS, onCoverErrorPlaceholder, coverSrc, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
+import { statusLabel, fmtDate, progressPercent, progressLabel, MEDIUMS, STATUSES, ORIGINS, onCoverErrorPlaceholder, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
 import {
-  useEntries, useEntryCounts, useCustomLists, useEntryMutations, useCoverBundle,
+  useEntries, useEntryCounts, useCustomLists, useEntryMutations, useLibraryBootstrap,
   invalidateEntryData, syncUpdatedEntry, syncDeletedEntry, prefetchEntriesWithCovers,
+  revalidateLibraryRevision,
 } from '../data/hooks.jsx';
 import { entriesKey } from '../data/keys.js';
-import { prefetchFullCover } from '../api.jsx';
+import { coverImgUrl, prefetchFullCover } from '../api.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ListsModal from './components/ListsModal.jsx';
@@ -262,25 +263,29 @@ export default function Library({ initialFilters = {} }) {
   // keepPreviousData shows the prior page while the new one loads (no skeleton
   // flash), and a hover-prefetched page renders instantly from cache on click.
   const entryParams = useMemo(() => buildEntryParams(), [buildEntryParams]);
+  const initialBootstrapParamsRef = useRef(null);
+  if (settingsApplied && initialBootstrapParamsRef.current === null) {
+    initialBootstrapParamsRef.current = entryParams;
+  }
+  const bootstrapQuery = useLibraryBootstrap(initialBootstrapParamsRef.current || entryParams, {
+    enabled: settingsApplied && initialBootstrapParamsRef.current !== null,
+  });
+  const bootstrapSettled = bootstrapQuery.isSuccess || bootstrapQuery.isError;
   const entriesQuery = useEntries(entryParams, {
-    enabled: settingsApplied,
+    enabled: settingsApplied && bootstrapSettled,
     placeholderData: keepPreviousData,
   });
   const entries = entriesQuery.data?.items ?? EMPTY_ARR;
   const total = entriesQuery.data?.total ?? 0;
-  const loading = !settingsApplied || entriesQuery.isLoading;
-  const error = entriesQuery.error?.message || '';
+  const loading = !settingsApplied || (!bootstrapSettled && bootstrapQuery.isLoading) || entriesQuery.isLoading;
+  const error = entriesQuery.error?.message || (!bootstrapSettled ? bootstrapQuery.error?.message || '' : '');
 
-  // Every row's cover, bundled into one tiny-thumbnail request per page.
-  const coverUrls = useMemo(() => entries.map(e => e.cover_url).filter(Boolean), [entries]);
-  const coverMap = useCoverBundle(coverUrls, 'thumb');
-
-  const countsQuery = useEntryCounts();
+  const countsQuery = useEntryCounts({ enabled: bootstrapSettled });
   const counts = useMemo(() => buildCounts(countsQuery.data), [countsQuery.data]);
   const unlistedCount = countsQuery.data?.unlisted || 0;
   const loadingCounts = countsQuery.isLoading;
 
-  const listsQuery = useCustomLists();
+  const listsQuery = useCustomLists({ enabled: bootstrapSettled });
   const lists = listsQuery.data ?? EMPTY_ARR;
   const loadingLists = listsQuery.isLoading;
   const listNames = useMemo(() => lists.map(l => l.name), [lists]);
@@ -359,7 +364,7 @@ export default function Library({ initialFilters = {} }) {
 
   // Pick up entries added elsewhere (e.g. the extension) when the tab refocuses.
   // Invalidation refetches entries + counts + lists in place without flashing.
-  useRevalidateOnFocus(() => { invalidateEntryData(qc); return true; });
+  useRevalidateOnFocus(() => revalidateLibraryRevision(qc));
 
   function handleSort(field) {
     setPage(1);
@@ -943,7 +948,7 @@ export default function Library({ initialFilters = {} }) {
                 {entries.map(entry => (
                   <tr key={entry.id}
                     className={`${selectedIds.has(entry.id) ? 'row-selected ' : ''}library-row-clickable library-row-selectable`.trim()}
-                    onMouseEnter={() => prefetchFullCover(entry.cover_url)}
+                    onMouseEnter={() => prefetchFullCover(entry.cover_url, entry.cover_key)}
                     onMouseDown={ev => { if (ev.shiftKey) ev.preventDefault(); }}
                     onClick={ev => handleSelectClick(ev, entry.id)}>
                     <td className="col-select">
@@ -957,7 +962,7 @@ export default function Library({ initialFilters = {} }) {
                     <td>
                       <div className="cover-cell">
                         <div className="cover-thumb">
-                          {entry.cover_url && <img src={coverSrc(coverMap, entry.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverErrorPlaceholder} />}
+                          {entry.cover_url && <img src={coverImgUrl(entry.cover_url, 'thumb', entry.cover_key)} alt="" loading="eager" referrerPolicy="no-referrer" onError={onCoverErrorPlaceholder} />}
                         </div>
                         <span className="media-name">{entry.title}</span>
                       </div>
@@ -1005,11 +1010,11 @@ export default function Library({ initialFilters = {} }) {
                 {entries.map(e => {
                   const isConfirmDel = confirmDeleteId === e.id;
                   return (
-                    <tr key={e.id} className="library-row-clickable" onMouseEnter={() => prefetchFullCover(e.cover_url)} onClick={() => { setDetailEntry(e); setStartEditing(false); }}>
+                    <tr key={e.id} className="library-row-clickable" onMouseEnter={() => prefetchFullCover(e.cover_url, e.cover_key)} onClick={() => { setDetailEntry(e); setStartEditing(false); }}>
                       <td>
                         <div className="cover-cell">
                           <div className="cover-thumb">
-                            {e.cover_url && <img src={coverSrc(coverMap, e.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverErrorPlaceholder} />}
+                            {e.cover_url && <img src={coverImgUrl(e.cover_url, 'thumb', e.cover_key)} alt="" loading="eager" referrerPolicy="no-referrer" onError={onCoverErrorPlaceholder} />}
                           </div>
                           <span className="media-name">{e.title}</span>
                         </div>

@@ -133,6 +133,7 @@ class EntryRead(EntryBase):
     created_at:   datetime
     updated_at:   datetime
     completed_at: Optional[datetime] = None
+    cover_key:     Optional[str] = None
     model_config = {"from_attributes": True}
 
 class EntryListResponse(BaseModel):
@@ -420,6 +421,7 @@ class ExploreItem(BaseModel):
     origin:          Optional[str]   = None
     year:            Optional[int]   = None
     cover_url:       Optional[str]   = None
+    cover_key:       Optional[str]   = None
     total:           Optional[int]   = None
     external_id:     Optional[str]   = None
     source:          str             = ""
@@ -572,3 +574,15 @@ class DashboardBootstrapResponse(BaseModel):
     on_hold: EntryListResponse
     dropped: EntryListResponse
     planned: EntryListResponse
+    revision: int = 0
+
+
+class LibraryRevisionResponse(BaseModel):
+    revision: int = 0
+
+
+class LibraryBootstrapResponse(BaseModel):
+    entries: EntryListResponse
+    counts: EntryCountsResponse
+    custom_lists: list[CustomListRead]
+    revision: int = 0

@@ -7,7 +7,7 @@ import { BASE } from './api.jsx';
 import { queryClient } from './data/client.jsx';
 import { clearUserSessionData } from './data/sessionCache.js';
 import {
-  prefetchCounts, prefetchDashboard, prefetchEntriesWithCovers, prefetchLists, prefetchStats,
+  prefetchDashboard, prefetchLibraryBootstrap, prefetchStats,
 } from './data/hooks.jsx';
 import { defaultLibraryParams } from './data/keys.js';
 
@@ -34,9 +34,7 @@ function prefetchRouteData(path, prefs) {
       prefetchDashboard(queryClient);
       break;
     case '/library':
-      prefetchEntriesWithCovers(queryClient, defaultLibraryParams(prefs));
-      prefetchCounts(queryClient);
-      prefetchLists(queryClient);
+      prefetchLibraryBootstrap(queryClient, defaultLibraryParams(prefs));
       break;
     case '/statistics':
       prefetchStats(queryClient);

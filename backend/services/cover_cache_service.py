@@ -68,6 +68,12 @@ def _cover_cache_dir(kind: str) -> Path:
     return Path(settings.COVER_CACHE_DIR).expanduser() / kind
 
 
+def cover_size_dir(size: str) -> Path:
+    if size not in SIZES:
+        raise CoverCacheError(f"Unknown cover size: {size}")
+    return _cover_cache_dir(size)
+
+
 def sized_cover_path(cover_url: str, size: str) -> Path:
     if size not in SIZES:
         raise CoverCacheError(f"Unknown cover size: {size}")

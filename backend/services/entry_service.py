@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import func, select, asc, desc, and_, or_, nullslast
+from sqlalchemy import func, select, asc, desc, and_, or_, nullslast, update
 from sqlalchemy.orm import Session
 
-from models import Entry
+from models import Entry, User
 from schemas import (
     EntryCreate,
     EntryUpdate,
@@ -15,6 +15,7 @@ from schemas import (
     EntryCountsResponse,
     DuplicateCheckItem,
 )
+from services.cover_cache_service import cover_cache_key
 
 # Columns that the frontend is allowed to sort by
 SORTABLE_COLUMNS: dict[str, object] = {
@@ -62,6 +63,13 @@ def _apply_visible_mediums(q, visible_mediums: set[str] | None):
     if visible_mediums is None:
         return q
     return q.where(or_(Entry.medium.is_(None), Entry.medium.in_(visible_mediums)))
+
+
+def entry_read(entry: Entry) -> EntryRead:
+    result = EntryRead.model_validate(entry)
+    if entry.cover_url:
+        result.cover_key = cover_cache_key(entry.cover_url)
+    return result
 
 
 # ── Read ──────────────────────────────────────────────────────────────────────
@@ -118,7 +126,7 @@ def get_entries(
     ).scalars().all()
 
     return EntryListResponse(
-        items=[EntryRead.model_validate(r) for r in rows],
+        items=[entry_read(r) for r in rows],
         total=total if total is not None else len(rows),
         limit=limit,
         offset=offset,
@@ -323,7 +331,7 @@ def find_duplicate_groups(db: Session, username: str) -> list[dict]:
         groups.setdefault(key, []).append(entry)
 
     return [
-        {"key": f"{title} · {medium or '—'}", "entries": members}
+        {"key": f"{title} · {medium or '—'}", "entries": [entry_read(e) for e in members]}
         for (title, medium), members in groups.items()
         if len(members) > 1
     ]
@@ -355,5 +363,12 @@ def check_duplicates(db: Session, username: str, items: list[DuplicateCheckItem]
 
 
 def delete_all_entries(db: Session, username: str) -> None:
-    db.query(Entry).filter(Entry.username == username).delete()
+    affected = db.query(Entry).filter(Entry.username == username).delete()
+    if affected:
+        db.execute(
+            update(User)
+            .where(User.username == username)
+            .values(library_revision=User.library_revision + 1),
+            execution_options={"synchronize_session": "fetch"},
+        )
     db.commit()

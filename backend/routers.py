@@ -18,11 +18,12 @@ from schemas import (
     UserCreate, UserRead, Token, ChangePassword,
     UserSettings, UserSettingsUpdate,
     DuplicateCheckRequest, DuplicateCheckResponse,
-    DashboardBootstrapResponse, ExploreCacheWriteRequest, ExploreResponse,
+    DashboardBootstrapResponse, LibraryBootstrapResponse, LibraryRevisionResponse,
+    ExploreCacheWriteRequest, ExploreResponse,
     deep_merge, deep_merge_ui,
 )
 from services import entry_service
-from services.bootstrap_service import get_dashboard_bootstrap
+from services.bootstrap_service import get_dashboard_bootstrap, get_library_bootstrap
 from services.entry_service import delete_all_entries
 from services import auth_service
 from services.search_service import search_media, lookup_chapter_count
@@ -40,7 +41,8 @@ from services.backup_service import run_backup_for_user
 from services.email_service import SMTPNotConfigured
 from services.cover_cache_service import (
     CoverCacheError, MAX_SOURCE_BYTES, SIZES, cache_one_cover, cache_uncached_covers,
-    ensure_covers_cached, sized_cover_path, store_cover_bytes,
+    cover_cache_key, ensure_covers_cached, sized_cover_path,
+    store_cover_bytes,
 )
 
 router = APIRouter()
@@ -97,12 +99,6 @@ async def get_cached_cover(
     upload, the cache-all sweep, or the on-create background task.
     """
     return _serve_sized_cover(url, size)
-
-
-# Back-compat alias: the old fallback endpoint served the (native) full cover.
-@router.get("/covers/full")
-async def get_cached_cover_full(url: str = Query(..., min_length=1, max_length=2000)):
-    return _serve_sized_cover(url, "full")
 
 
 @router.post("/covers/bundle")
@@ -224,6 +220,43 @@ def dashboard_bootstrap(
         current_user.username,
         _visible_mediums(current_user),
     )
+
+
+@router.get("/bootstrap/library", response_model=LibraryBootstrapResponse)
+def library_bootstrap(
+    status_filter: str = Query(None, alias="status"),
+    medium: str = Query(None),
+    origin: str = Query(None),
+    title: str = Query(None),
+    custom_list: str = Query(None),
+    custom_list_empty: bool = Query(False),
+    sort: str = Query("updated_at"),
+    order: str = Query("desc"),
+    limit: int = Query(40, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    return get_library_bootstrap(
+        db,
+        current_user.username,
+        _visible_mediums(current_user),
+        status=status_filter,
+        medium=medium,
+        origin=origin,
+        title=title,
+        custom_list=custom_list,
+        custom_list_empty=custom_list_empty,
+        sort=sort,
+        order=order,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/library/revision", response_model=LibraryRevisionResponse)
+def library_revision(current_user: User = Depends(auth_service.get_current_user)):
+    return LibraryRevisionResponse(revision=current_user.library_revision)
 
 @router.get("/auth/me/settings", response_model=UserSettings)
 def get_settings(
@@ -398,7 +431,7 @@ def get_entry(
     entry = entry_service.get_entry_by_id(db, entry_id)
     if not entry or entry.username != current_user.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
-    return entry
+    return entry_service.entry_read(entry)
 
 def _cache_cover_background(cover_url: str | None) -> None:
     """Best-effort: warm the 3-size cache for a cover after an entry is saved.
@@ -423,7 +456,7 @@ def create_entry(
 ):
     entry = entry_service.create_entry(db, payload, username=current_user.username)
     background.add_task(_cache_cover_background, entry.cover_url)
-    return entry
+    return entry_service.entry_read(entry)
 
 @router.put("/entries/{entry_id}", response_model=EntryRead)
 def update_entry(
@@ -438,7 +471,7 @@ def update_entry(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
     updated = entry_service.update_entry(db, entry, payload)
     background.add_task(_cache_cover_background, updated.cover_url)
-    return updated
+    return entry_service.entry_read(updated)
 
 @router.post("/entries/check-duplicates", response_model=DuplicateCheckResponse)
 def check_duplicates(
@@ -629,6 +662,7 @@ async def explore(
     for item in result.items or []:
         if not item.cover_url:
             continue
+        item.cover_key = cover_cache_key(item.cover_url)
         item.cover_cached = sized_cover_path(item.cover_url, "medium").exists()
         if not item.cover_cached:
             missing_covers.append(item.cover_url)

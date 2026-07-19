@@ -1,15 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getEntries, getEntryCounts, getCustomLists, getStats, getDashboardBootstrap,
+  getLibraryBootstrap, getLibraryRevision,
   updateEntry, createEntry, deleteEntry, batchUpdateEntries, batchDeleteEntries,
-  fetchCoverBundle,
+  prefetchCoverImages,
 } from '../api.jsx';
 import { extractItems } from '../utils.jsx';
 import {
-  entriesKey, countsKey, listsKey, statsKey, dashboardBootstrapKey, coverBundleKey,
+  entriesKey, countsKey, listsKey, statsKey, dashboardBootstrapKey,
+  libraryBootstrapKey, libraryRevisionKey,
 } from './keys.js';
-
-const EMPTY_MAP = {};
 
 // Normalize /entries into the shape pages consume: { items, total, limit, offset }.
 export function fetchEntriesPayload(params) {
@@ -91,72 +91,63 @@ export function useDashboardBootstrap(options = {}) {
   });
 }
 
+function seedLibraryQueries(qc, params, data) {
+  if (data?.entries) qc.setQueryData(entriesKey(params), data.entries);
+  if (data?.counts) qc.setQueryData(countsKey(), data.counts);
+  if (data?.custom_lists) qc.setQueryData(listsKey(), data.custom_lists);
+  if (Number.isFinite(data?.revision)) {
+    qc.setQueryData(libraryRevisionKey(), { revision: data.revision });
+  }
+  return data;
+}
+
+async function fetchLibraryBootstrapPayload(qc, params) {
+  try {
+    return seedLibraryQueries(qc, params, await getLibraryBootstrap(params));
+  } catch (error) {
+    if (!String(error?.message || '').startsWith('404 ')) throw error;
+    const [entries, counts, customLists, revision] = await Promise.all([
+      fetchEntriesPayload(params), getEntryCounts(), fetchLists(), getLibraryRevision(),
+    ]);
+    return seedLibraryQueries(qc, params, {
+      entries, counts, custom_lists: customLists, revision: revision?.revision,
+    });
+  }
+}
+
+export function useLibraryBootstrap(params, options = {}) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: libraryBootstrapKey(params),
+    queryFn: () => fetchLibraryBootstrapPayload(qc, params),
+    ...options,
+  });
+}
+
+export function prefetchLibraryBootstrap(qc, params) {
+  return qc.fetchQuery({
+    queryKey: libraryBootstrapKey(params),
+    queryFn: () => fetchLibraryBootstrapPayload(qc, params),
+  }).then(data => prefetchCoverImages(data?.entries?.items || [], 'thumb'))
+    .catch(() => {});
+}
+
 export function prefetchDashboard(qc) {
   return qc.fetchQuery({
     queryKey: dashboardBootstrapKey(),
     queryFn: () => fetchDashboardPayload(qc),
-  }).then(data => prefetchCoverBundle(qc, [
+  }).then(data => prefetchCoverImages([
     ...(data.current?.items || []),
     ...(data.planned?.items || []),
     ...(data.completed?.items || []),
-  ].map(entry => entry.cover_url), 'thumb'));
-}
-
-// ── Cover bundles (all of a view's covers at one size, in one request) ────────
-
-function bundleQuery(qc, size, urls) {
-  const unique = [...new Set(urls.filter(Boolean))];
-  const queryKey = coverBundleKey(size, unique);
-  return {
-    queryKey,
-    queryFn: () => {
-      const existing = qc.getQueryData(queryKey) || {};
-      const missing = unique.filter(url => !existing[url]);
-      if (!missing.length) return existing;
-      return fetchCoverBundle(missing, size).then(r => ({
-        ...existing,
-        ...(r?.images || {}),
-      }));
-    },
-    enabled: unique.length > 0,
-    // Covers are immutable per URL — keep them around and never auto-refetch.
-    staleTime: Infinity,
-    gcTime: 30 * 60_000,
-    // Some covers may still be caching server-side (e.g. just-rerolled Explore
-    // recommendations, cached in the background). Poll a few times while the
-    // bundle is incomplete, then give up — anything still missing is uncached
-    // (Cloudflare/NU) and stays a placeholder until the extension uploads it.
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return false;
-      if (Object.keys(data).length >= unique.length) return false;
-      if (query.state.dataUpdateCount > 6) return false;
-      return 2500;
-    },
-  };
-}
-
-/** Returns a `{ coverUrl: dataURI }` map for the given URLs at `size`. */
-export function useCoverBundle(urls, size) {
-  const qc = useQueryClient();
-  const query = useQuery(bundleQuery(qc, size, urls));
-  return query.data || EMPTY_MAP;
-}
-
-// Warm a cover bundle once. staleTime is Infinity, so a second hover of the same
-// set no-ops (preload once). If some covers were still caching server-side when
-// this first ran, the mounted useCoverBundle's poll (refetchInterval) fills them
-// in when the view is actually shown — we don't re-hit the network on every hover.
-export function prefetchCoverBundle(qc, urls, size) {
-  const q = bundleQuery(qc, size, urls);
-  return q.enabled ? qc.prefetchQuery(q) : Promise.resolve();
+  ], 'thumb'));
 }
 
 // Prefetch an entries page AND its covers, so a hover warms the rows and their
 // images together. fetchQuery resolves the page so we know which covers to bundle.
 export function prefetchEntriesWithCovers(qc, params, size = 'thumb') {
   return qc.fetchQuery({ queryKey: entriesKey(params), queryFn: () => fetchEntriesPayload(params) })
-    .then(data => prefetchCoverBundle(qc, (data?.items || []).map(e => e.cover_url), size))
+    .then(data => prefetchCoverImages(data?.items || [], size))
     .catch(() => {});
 }
 
@@ -167,10 +158,8 @@ export function prefetchEntryGroupsWithCovers(qc, paramGroups, size = 'thumb') {
   return Promise.all(paramGroups.map(params =>
     qc.fetchQuery({ queryKey: entriesKey(params), queryFn: () => fetchEntriesPayload(params) })
   ))
-    .then(groups => prefetchCoverBundle(
-      qc,
-      groups.flatMap(data => (data?.items || []).map(e => e.cover_url)),
-      size,
+    .then(groups => prefetchCoverImages(
+      groups.flatMap(data => data?.items || []), size,
     ))
     .catch(() => {});
 }
@@ -227,6 +216,15 @@ export function invalidateEntryData(qc) {
   qc.invalidateQueries({ queryKey: ['customLists'] });
   qc.invalidateQueries({ queryKey: ['stats'] });
   qc.invalidateQueries({ queryKey: ['dashboardBootstrap'] });
+  qc.invalidateQueries({ queryKey: ['libraryBootstrap'] });
+}
+
+export async function revalidateLibraryRevision(qc) {
+  const previous = qc.getQueryData(libraryRevisionKey())?.revision;
+  const current = await getLibraryRevision();
+  qc.setQueryData(libraryRevisionKey(), current);
+  if (previous == null || previous !== current?.revision) invalidateEntryData(qc);
+  return true;
 }
 
 // For the modal edit/delete path: EntryFormModal still writes through the API

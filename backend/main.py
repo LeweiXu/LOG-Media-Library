@@ -4,12 +4,14 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from config import get_settings
 from db import SessionLocal, engine, Base
 from models import Entry, ExploreCache, User  # noqa: F401 — registers models with Base metadata
 from routers import router
 from services.backup_service import tick_due_backups
+from services.cover_cache_service import SIZES, cover_size_dir
 
 logging.basicConfig(
     level=logging.INFO,
@@ -99,6 +101,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class ImmutableCoverFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
+for cover_size in SIZES:
+    app.mount(
+        f"/covers/{cover_size}",
+        ImmutableCoverFiles(directory=cover_size_dir(cover_size), check_dir=False),
+        name=f"covers-{cover_size}",
+    )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(router)
