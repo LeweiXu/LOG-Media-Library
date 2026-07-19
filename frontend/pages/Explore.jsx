@@ -30,6 +30,23 @@ const EXPLORE_FETCH_LIMIT = 120;
 const REC_PAGE_SIZE = 30;
 const EXPLORE_CACHE_AREA = 'explore';
 
+async function readExplorePage({ medium, offset = 0, sources }) {
+  const data = await getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources });
+  if (Number.isFinite(data.total)) return data;
+
+  // During a staggered deployment, the previous backend ignores `offset` and
+  // has no total. Keep pagination working until the new API reaches production.
+  const legacy = await getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, sources });
+  const items = legacy.items || [];
+  return {
+    ...legacy,
+    items: items.slice(offset, offset + REC_PAGE_SIZE),
+    total: items.length,
+    offset,
+    limit: REC_PAGE_SIZE,
+  };
+}
+
 // Cover URLs for a medium's first recommendation page — mirrors the page's
 // visibleItems filter + first-page slice, so a hover-prefetch bundles the exact
 // same cover set the page will request (matching React Query key).
@@ -163,7 +180,7 @@ export function prefetchExploreHome(prefs) {
     return;
   }
   if (cached) warmCovers(cached.items);
-  getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources: want })
+  readExplorePage({ medium, offset, sources: want })
     .then(data => {
       const entry = storeExplore(medium, offset, cacheEntryFromData(data, want, personalize));
       warmCovers(entry.items);
@@ -378,7 +395,7 @@ export default function Explore() {
     setLoading(!cached); setError(''); setCardState({});
     try {
       const want = [...availableSet];
-      const data = await getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources: want });
+      const data = await readExplorePage({ medium, offset, sources: want });
       if (seq !== exploreRequestSeq.current) return;
       const entry = storeExplore(medium, offset, cacheEntryFromData(data, want, personalize));
       applyEntry(entry);
@@ -404,7 +421,7 @@ export default function Explore() {
     if (cached && !cached.needsRevalidation) { warmCovers(cached); return; }
     if (cached) warmCovers(cached);
     const want = [...availableSet];
-    getExplore({ medium: m, limit: REC_PAGE_SIZE, offset: 0, sources: want })
+    readExplorePage({ medium: m, offset: 0, sources: want })
       .then(data => {
         const entry = storeExplore(m, 0, cacheEntryFromData(data, want, personalize));
         warmCovers(entry);
@@ -564,7 +581,7 @@ export default function Explore() {
     if (cached && !cached.needsRevalidation) { warm(cached); return; }
     if (cached) warm(cached);
     const want = [...availableSet];
-    getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources: want })
+    readExplorePage({ medium, offset, sources: want })
       .then(data => warm(storeExplore(medium, offset, cacheEntryFromData(data, want, personalize))))
       .catch(() => {});
   }, [medium, recTotalPages, availableSet, personalize, qc]);
