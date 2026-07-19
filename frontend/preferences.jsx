@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getSettings, updateSettings } from './api.jsx';
+import { readSessionCache, writeSessionCache } from './data/sessionCache.js';
+
+const SETTINGS_CACHE_AREA = 'settings';
 
 // Mirror of backend schemas.DEFAULT_UI — the canonical shape of the single
 // UI-preferences document. The backend always returns a default-merged doc, so
@@ -109,8 +112,9 @@ const RETRY_DELAYS = [400, 800, 1600, 3200];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function PreferencesProvider({ authKey, children }) {
-  const [settings, setSettings] = useState(null);
-  const [loaded, setLoaded] = useState(false);
+  const initialSettings = readSessionCache(SETTINGS_CACHE_AREA, authKey);
+  const [settings, setSettings] = useState(initialSettings);
+  const [loaded, setLoaded] = useState(Boolean(initialSettings));
   const [error, setError] = useState(false);
   // Generation counter so a slow/late load for a previous authKey can't clobber
   // the current user's state once it finally resolves.
@@ -125,6 +129,7 @@ export function PreferencesProvider({ authKey, children }) {
         const s = await getSettings();
         if (genRef.current !== gen) return false;   // superseded by a newer load
         setSettings(s);
+        writeSessionCache(SETTINGS_CACHE_AREA, authKey, s);
         setError(false);
         setLoaded(true);
         return true;
@@ -143,7 +148,10 @@ export function PreferencesProvider({ authKey, children }) {
   useEffect(() => {
     genRef.current++;   // cancel any in-flight load
     if (!authKey) { setSettings(null); setLoaded(false); setError(false); return; }
-    setSettings(null); setLoaded(false); setError(false);
+    const cached = readSessionCache(SETTINGS_CACHE_AREA, authKey);
+    setSettings(cached);
+    setLoaded(Boolean(cached));
+    setError(false);
     loadSettings();
   }, [authKey, loadSettings]);
 
@@ -163,9 +171,10 @@ export function PreferencesProvider({ authKey, children }) {
   const update = useCallback(async (patch) => {
     const saved = await updateSettings(patch);
     setSettings(saved);
+    writeSessionCache(SETTINGS_CACHE_AREA, authKey, saved);
     setError(false);
     return saved;
-  }, []);
+  }, [authKey]);
 
   const updateUi = useCallback((uiPatch) => update({ ui: uiPatch }), [update]);
 

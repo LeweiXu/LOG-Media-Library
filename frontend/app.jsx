@@ -5,6 +5,7 @@ import AuthModal      from './pages/components/AuthModal.jsx';
 import { DEFAULT_UI, PreferencesProvider, usePreferences } from './preferences.jsx';
 import { BASE } from './api.jsx';
 import { queryClient } from './data/client.jsx';
+import { clearUserSessionData } from './data/sessionCache.js';
 import { prefetchEntries, prefetchEntriesWithCovers, prefetchEntryGroupsWithCovers, prefetchCounts, prefetchLists, prefetchStats } from './data/hooks.jsx';
 import { defaultLibraryParams } from './data/keys.js';
 
@@ -166,6 +167,7 @@ export default function App() {
   function handleAuth(newToken, newUsername) {
     // The query cache is shared across the app and not keyed by user, so wipe it
     // on any auth change to prevent one account seeing another's cached rows.
+    clearUserSessionData(newUsername);
     queryClient.clear();
     setToken(newToken);
     setUsername(newUsername);
@@ -175,6 +177,7 @@ export default function App() {
 
   function handleLogout() {
     setShowLogoutConfirm(false);
+    clearUserSessionData(username);
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_username');
     queryClient.clear();
@@ -317,7 +320,11 @@ export default function App() {
                 accent={accent}
                 onAccentChange={a => setAccent(a)}
                 onLogout={handleLogout}
-                onDataDeleted={() => navigate('/library')}
+                onDataDeleted={() => {
+                  clearUserSessionData(username);
+                  queryClient.clear();
+                  navigate('/library');
+                }}
               />
             : <Navigate to="/" replace />}
         />
