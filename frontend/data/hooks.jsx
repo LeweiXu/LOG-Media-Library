@@ -50,11 +50,20 @@ export function useStats(options = {}) {
 
 // ── Cover bundles (all of a view's covers at one size, in one request) ────────
 
-function bundleQuery(size, urls) {
+function bundleQuery(qc, size, urls) {
   const unique = [...new Set(urls.filter(Boolean))];
+  const queryKey = coverBundleKey(size, unique);
   return {
-    queryKey: coverBundleKey(size, unique),
-    queryFn: () => fetchCoverBundle(unique, size).then(r => r?.images || {}),
+    queryKey,
+    queryFn: () => {
+      const existing = qc.getQueryData(queryKey) || {};
+      const missing = unique.filter(url => !existing[url]);
+      if (!missing.length) return existing;
+      return fetchCoverBundle(missing, size).then(r => ({
+        ...existing,
+        ...(r?.images || {}),
+      }));
+    },
     enabled: unique.length > 0,
     // Covers are immutable per URL — keep them around and never auto-refetch.
     staleTime: Infinity,
@@ -75,7 +84,8 @@ function bundleQuery(size, urls) {
 
 /** Returns a `{ coverUrl: dataURI }` map for the given URLs at `size`. */
 export function useCoverBundle(urls, size) {
-  const query = useQuery(bundleQuery(size, urls));
+  const qc = useQueryClient();
+  const query = useQuery(bundleQuery(qc, size, urls));
   return query.data || EMPTY_MAP;
 }
 
@@ -84,7 +94,7 @@ export function useCoverBundle(urls, size) {
 // this first ran, the mounted useCoverBundle's poll (refetchInterval) fills them
 // in when the view is actually shown — we don't re-hit the network on every hover.
 export function prefetchCoverBundle(qc, urls, size) {
-  const q = bundleQuery(size, urls);
+  const q = bundleQuery(qc, size, urls);
   return q.enabled ? qc.prefetchQuery(q) : Promise.resolve();
 }
 

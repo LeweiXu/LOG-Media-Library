@@ -345,6 +345,28 @@ export function prefetchFullCover(coverUrl) {
   img.src = coverImgUrl(coverUrl, 'full');
 }
 
+const coverImagePrefetches = new Map();
+
+/** Warm and decode cached cover files so a subsequent render can paint them. */
+export function prefetchCoverImages(coverUrls, size = 'medium') {
+  const urls = [...new Set((coverUrls || []).filter(Boolean))];
+  return Promise.all(urls.map(coverUrl => {
+    const src = coverImgUrl(coverUrl, size);
+    if (coverImagePrefetches.has(src)) return coverImagePrefetches.get(src);
+    const task = new Promise(resolve => {
+      const img = new Image();
+      img.onload = async () => {
+        try { await img.decode?.(); } catch { /* The downloaded image is still reusable. */ }
+        resolve();
+      };
+      img.onerror = resolve;
+      img.src = src;
+    });
+    coverImagePrefetches.set(src, task);
+    return task;
+  }));
+}
+
 /**
  * Fetch a bundle of cached covers at one size in a single request.
  * Returns { images: { <cover_url>: "data:image/jpeg;base64,…" } } — uncached
@@ -432,8 +454,8 @@ export const runBackup       = () => req('/backup/run', { method: 'POST' });
 // is NOT passed as a query param from the page. Empty `medium` returns the
 // aggregate "All" view; a medium with `refresh: true` rerolls just that medium
 // (the only path that hits providers). Plain reads serve the cache.
-export const getExplore = ({ medium, limit, seed, refresh, sources } = {}) => {
-  const params = { medium, limit, seed };
+export const getExplore = ({ medium, limit, offset, seed, refresh, sources } = {}) => {
+  const params = { medium, limit, offset, seed };
   if (refresh) params.refresh = 'true';
   // Comma-separated list of sitewide-available sources; the backend applies it
   // as a response filter without making source selection part of cache identity.

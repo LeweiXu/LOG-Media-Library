@@ -51,4 +51,7 @@ export function clearUserSessionData(username) {
     }
     keys.forEach(key => sessionStorage.removeItem(key));
   } catch { /* Browser storage can be unavailable. */ }
+  window.dispatchEvent(new CustomEvent('logarium-session-cache-clear', {
+    detail: { username },
+  }));
 }

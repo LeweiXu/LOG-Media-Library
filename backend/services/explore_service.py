@@ -543,6 +543,8 @@ async def reroll_medium(
     sources:     Optional[set[str]] = None,
     personalize: bool = True,
     limit:       int  = 40,
+    offset:      int  = 0,
+    visible_mediums: Optional[set[str]] = None,
     seed:        Optional[int] = None,
 ) -> ExploreResponse:
     """Fetch a fresh recommendation set for one medium (the only provider-hitting
@@ -574,6 +576,7 @@ async def reroll_medium(
         prev_items = _parse_items(previous.items_json) if previous else []
         return _finalise(
             db, username, profile, prev_items, target, personalize, sources,
+            offset=offset, visible_mediums=visible_mediums,
             reroll_failed=True, reroll_error=msg,
         )
 
@@ -582,7 +585,10 @@ async def reroll_medium(
     # before caching to keep the row small and avoid stale "in library" tags.
     to_cache = [i.model_copy(update={"matches": [], "in_library": False}) for i in ranked]
     _write_success(db, username, medium, to_cache)
-    return _finalise(db, username, profile, ranked, target, personalize, sources)
+    return _finalise(
+        db, username, profile, ranked, target, personalize, sources,
+        offset=offset, visible_mediums=visible_mediums,
+    )
 
 
 def read_medium(
@@ -593,6 +599,8 @@ def read_medium(
     sources:     Optional[set[str]] = None,
     personalize: bool = True,
     limit:       int  = 40,
+    offset:      int  = 0,
+    visible_mediums: Optional[set[str]] = None,
 ) -> ExploreResponse:
     """Return one medium's cached recommendations plus its failed-reroll state.
     Never hits providers — a missing row yields an empty, non-failed response."""
@@ -601,6 +609,7 @@ def read_medium(
     items = _parse_items(row.items_json) if row else []
     return _finalise(
         db, username, profile, items, limit, personalize, sources,
+        offset=offset, visible_mediums=visible_mediums,
         reroll_failed=bool(row and row.reroll_failed),
         reroll_error=row.reroll_error if row else None,
     )
@@ -615,6 +624,8 @@ def write_external_success(
     sources:     Optional[set[str]] = None,
     personalize: bool = True,
     limit:       int  = 40,
+    offset:      int  = 0,
+    visible_mediums: Optional[set[str]] = None,
 ) -> ExploreResponse:
     """Persist client/extension fallback recommendations as a successful reroll.
 
@@ -629,7 +640,10 @@ def write_external_success(
         if item.medium == medium and item.source
     ]
     _write_success(db, username, medium, cleaned)
-    return _finalise(db, username, profile, cleaned, limit, personalize, sources)
+    return _finalise(
+        db, username, profile, cleaned, limit, personalize, sources,
+        offset=offset, visible_mediums=visible_mediums,
+    )
 
 
 def read_all(
@@ -639,6 +653,8 @@ def read_all(
     sources:     Optional[set[str]] = None,
     personalize: bool = True,
     limit:       int  = 40,
+    offset:      int  = 0,
+    visible_mediums: Optional[set[str]] = None,
 ) -> ExploreResponse:
     """Aggregate every medium's cached set into the "All" view, ordered by the
     full bias (genre + origin + medium-consumption), deterministically so the
@@ -652,8 +668,10 @@ def read_all(
 
     items = _dedupe_best(combined)
     ranked = _rank(items, profile, personalize=personalize, include_medium_axis=True, rng=None)
-    response_limit = max(limit, _MIN_RECOMMENDATIONS_PER_MEDIUM * 4)
-    return _finalise(db, username, profile, ranked, response_limit, personalize, sources)
+    return _finalise(
+        db, username, profile, ranked, limit, personalize, sources,
+        offset=offset, visible_mediums=visible_mediums,
+    )
 
 
 def clear_failed(
@@ -664,6 +682,8 @@ def clear_failed(
     sources:     Optional[set[str]] = None,
     personalize: bool = True,
     limit:       int  = 40,
+    offset:      int  = 0,
+    visible_mediums: Optional[set[str]] = None,
 ) -> ExploreResponse:
     """Restore previous results: clear the failed flag and return the cached
     items. Does not reroll."""
@@ -674,7 +694,8 @@ def clear_failed(
         db.commit()
     return read_medium(
         db, username=username, medium=medium, sources=sources,
-        personalize=personalize, limit=limit,
+        personalize=personalize, limit=limit, offset=offset,
+        visible_mediums=visible_mediums,
     )
 
 
@@ -687,6 +708,8 @@ def _finalise(
     personalize: bool = True,
     sources:     Optional[set[str]] = None,
     *,
+    offset:      int = 0,
+    visible_mediums: Optional[set[str]] = None,
     reroll_failed: bool = False,
     reroll_error:  Optional[str] = None,
 ) -> ExploreResponse:
@@ -700,15 +723,19 @@ def _finalise(
         i for i in items
         if _item_key(i) not in owned
         and (not source_filter or i.source in source_filter)
+        and (visible_mediums is None or not i.medium or i.medium in visible_mediums)
     ]
 
     for i in filtered:
         i.matches = profile.matches(i) if i.bias_matched else []
 
     return ExploreResponse(
-        items         = filtered[:limit],
+        items         = filtered[offset:offset + limit],
         affinity      = profile.snapshot(),
         personalised  = personalize and profile.sample_size > 0,
+        total          = len(filtered),
+        offset         = offset,
+        limit          = limit,
         reroll_failed = reroll_failed,
         reroll_error  = reroll_error,
     )

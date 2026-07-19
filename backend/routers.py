@@ -105,7 +105,7 @@ async def get_cached_cover_full(url: str = Query(..., min_length=1, max_length=2
 
 
 @router.post("/covers/bundle")
-async def bundle_cached_covers(
+def bundle_cached_covers(
     size: str = Body(..., embed=True),
     urls: list[str] = Body(..., embed=True),
     current_user: User = Depends(auth_service.get_current_user),
@@ -575,6 +575,7 @@ async def explore(
     background: BackgroundTasks,
     medium:  str  = Query("", description="Medium filter; empty = aggregate 'All' view"),
     limit:   int  = Query(40, ge=1, le=200),
+    offset:  int  = Query(0, ge=0),
     seed:    int  = Query(0,  ge=0, description="Shuffle seed; only consulted on a reroll"),
     refresh: bool = Query(False, description="Reroll: fetch fresh recommendations for the medium"),
     sources: str  = Query("", description="Comma-separated available sources to draw from"),
@@ -583,12 +584,14 @@ async def explore(
 ):
     source_set = {s for s in (sources or "").split(",") if s} or None
     personalize = _explore_personalize(current_user)
+    visible_mediums = set(_visible_mediums(current_user))
 
     # Empty medium = the aggregate "All" view (read-only, never rerolls).
     if not medium:
         result = read_all(
             db, username=current_user.username,
-            sources=source_set, personalize=personalize, limit=limit,
+            sources=source_set, personalize=personalize, limit=limit, offset=offset,
+            visible_mediums=visible_mediums,
         )
     else:
         if medium not in ALL_MEDIUMS:
@@ -597,19 +600,27 @@ async def explore(
             result = await reroll_medium(
                 db, username=current_user.username, medium=medium,
                 sources=source_set, personalize=personalize, limit=limit, seed=seed or None,
+                offset=offset, visible_mediums=visible_mediums,
             )
         else:
             result = read_medium(
                 db, username=current_user.username, medium=medium,
-                sources=source_set, personalize=personalize, limit=limit,
+                sources=source_set, personalize=personalize, limit=limit, offset=offset,
+                visible_mediums=visible_mediums,
             )
 
     # Explore items aren't library entries, so this is where we first see their
     # covers — cache the 3 sizes in the background so the serve path (bundle /img)
     # can hand them out directly instead of the frontend hotlinking external URLs.
-    covers = [it.cover_url for it in (result.items or []) if getattr(it, "cover_url", None)]
-    if covers:
-        background.add_task(ensure_covers_cached, covers)
+    missing_covers: list[str] = []
+    for item in result.items or []:
+        if not item.cover_url:
+            continue
+        item.cover_cached = sized_cover_path(item.cover_url, "medium").exists()
+        if not item.cover_cached:
+            missing_covers.append(item.cover_url)
+    if missing_covers:
+        background.add_task(ensure_covers_cached, missing_covers)
     return result
 
 

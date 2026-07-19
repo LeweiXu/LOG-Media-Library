@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getExplore, restoreExplore, writeExploreCache } from '../api.jsx';
+import {
+  coverImgUrl, getExplore, prefetchCoverImages, restoreExplore, writeExploreCache,
+} from '../api.jsx';
 import { MEDIUMS, statusLabel, onCoverErrorPlaceholder, coverSrc, visibleMediumsFromPrefs } from '../utils.jsx';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCoverBundle, prefetchCoverBundle } from '../data/hooks.jsx';
 import { queryClient } from '../data/client.jsx';
+import { readSessionCache, writeSessionCache } from '../data/sessionCache.js';
 import { loadAvailableSources } from './components/searchSources.js';
 import { SkeletonExploreGrid } from './components/Skeletons.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
@@ -25,6 +28,7 @@ const itemKey = (item) => `${(item.title || '').toLowerCase().trim()}|${item.med
 // page paginates client-side.
 const EXPLORE_FETCH_LIMIT = 120;
 const REC_PAGE_SIZE = 30;
+const EXPLORE_CACHE_AREA = 'explore';
 
 // Cover URLs for a medium's first recommendation page — mirrors the page's
 // visibleItems filter + first-page slice, so a hover-prefetch bundles the exact
@@ -37,13 +41,76 @@ function firstPageCovers(items, availableSet, visibleMediumSet) {
     .filter(Boolean);
 }
 
-// Per-medium recommendation cache that survives navigation within the SPA
-// session (module scope, not component state). Keyed by the real medium ('' for
-// the aggregate "All" view). Reads serve this when present so switching the
-// sidebar filter is instant.
-//   medium -> { items, affinity, personalised, rerollFailed, rerollError, sources, personalize }
+// Recommendation pages survive navigation and hard reloads within this browser
+// session. The owner is checked before every access so cached data cannot cross
+// accounts when somebody logs out and signs in as another user.
 const exploreCache = {};
-const clearExploreCache = () => { for (const k of Object.keys(exploreCache)) delete exploreCache[k]; };
+let exploreCacheOwner = null;
+
+window.addEventListener('logarium-session-cache-clear', event => {
+  if (event.detail?.username !== exploreCacheOwner) return;
+  for (const key of Object.keys(exploreCache)) delete exploreCache[key];
+  exploreCacheOwner = null;
+});
+
+const pageOffset = page => (page - 1) * REC_PAGE_SIZE;
+const viewKey = (medium, offset = 0) => `${medium}\u0000${offset}`;
+
+function currentUsername() {
+  try { return localStorage.getItem('auth_username') || ''; }
+  catch { return ''; }
+}
+
+function ensureExploreCacheOwner() {
+  const username = currentUsername();
+  if (username === exploreCacheOwner) return username;
+  for (const key of Object.keys(exploreCache)) delete exploreCache[key];
+  exploreCacheOwner = username;
+  const restored = readSessionCache(EXPLORE_CACHE_AREA, username) || {};
+  for (const [key, entry] of Object.entries(restored)) {
+    exploreCache[key] = { ...entry, needsRevalidation: true };
+  }
+  return username;
+}
+
+function persistExploreCache() {
+  const username = ensureExploreCacheOwner();
+  if (!username) return;
+  const serializable = Object.fromEntries(
+    Object.entries(exploreCache).map(([key, entry]) => {
+      const { needsRevalidation: _ignored, ...stored } = entry;
+      return [key, stored];
+    }),
+  );
+  writeSessionCache(EXPLORE_CACHE_AREA, username, serializable);
+}
+
+function cachedExplore(medium, offset = 0) {
+  ensureExploreCacheOwner();
+  return exploreCache[viewKey(medium, offset)];
+}
+
+function storeExplore(medium, offset, entry, persist = true) {
+  ensureExploreCacheOwner();
+  exploreCache[viewKey(medium, offset)] = { ...entry, needsRevalidation: false };
+  if (persist) persistExploreCache();
+  return exploreCache[viewKey(medium, offset)];
+}
+
+function clearMediumCache(medium, persist = true) {
+  ensureExploreCacheOwner();
+  const prefix = `${medium}\u0000`;
+  for (const key of Object.keys(exploreCache)) {
+    if (key.startsWith(prefix)) delete exploreCache[key];
+  }
+  if (persist) persistExploreCache();
+}
+
+const clearExploreCache = () => {
+  ensureExploreCacheOwner();
+  for (const key of Object.keys(exploreCache)) delete exploreCache[key];
+  persistExploreCache();
+};
 
 // In-flight rerolls (the only provider-hitting path), tracked at module scope so
 // a reroll started before navigating away (to another medium OR another page on
@@ -63,9 +130,17 @@ function cacheEntryFromData(data, want, personalize) {
     personalised: !!data.personalised,
     rerollFailed: !!data.reroll_failed,
     rerollError:  data.reroll_error || '',
+    total:        data.total ?? (data.items || []).length,
     sources:      want,
     personalize,
   };
+}
+
+function warmExploreCovers(qc, items) {
+  const cached = (items || []).filter(item => item.cover_cached && item.cover_url);
+  const missing = (items || []).filter(item => !item.cover_cached && item.cover_url);
+  prefetchCoverImages(cached.map(item => item.cover_url), 'medium');
+  prefetchCoverBundle(qc, missing.map(item => item.cover_url), 'medium');
 }
 
 // Warm the default Explore view (aggregate "All") + its card covers, so hovering
@@ -74,18 +149,24 @@ function cacheEntryFromData(data, want, personalize) {
 // chunk, and it writes into the same module cache the page reads on mount.
 export function prefetchExploreHome(prefs) {
   const medium = '';  // the default aggregate view (read-only, never rerolls)
+  const offset = 0;
   const want = loadAvailableSources();
   const personalize = (prefs?.explore || DEFAULT_UI.explore).personalize !== false;
   const warmCovers = (items) => {
     const visibleMediumSet = new Set(visibleMediumsFromPrefs(prefs));
-    prefetchCoverBundle(queryClient, firstPageCovers(items || [], new Set(want), visibleMediumSet), 'medium');
+    const firstPageUrls = new Set(firstPageCovers(items || [], new Set(want), visibleMediumSet));
+    warmExploreCovers(queryClient, (items || []).filter(item => firstPageUrls.has(item.cover_url)));
   };
-  const cached = exploreCache[medium];
-  if (cached && cached.personalize === personalize) { warmCovers(cached.items); return; }
-  getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, sources: want })
+  const cached = cachedExplore(medium, offset);
+  if (cached && cached.personalize === personalize && !cached.needsRevalidation) {
+    warmCovers(cached.items);
+    return;
+  }
+  if (cached) warmCovers(cached.items);
+  getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources: want })
     .then(data => {
-      exploreCache[medium] = cacheEntryFromData(data, want, personalize);
-      warmCovers(exploreCache[medium].items);
+      const entry = storeExplore(medium, offset, cacheEntryFromData(data, want, personalize));
+      warmCovers(entry.items);
     })
     .catch(() => {});
 }
@@ -137,8 +218,13 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
         }
       }
     }
-    exploreCache[targetMedium] = entry;
-    delete exploreCache['']; // the aggregate "All" view is now stale
+    clearMediumCache(targetMedium, false);
+    storeExplore(targetMedium, 0, {
+      ...entry,
+      items: entry.items.slice(0, REC_PAGE_SIZE),
+    }, false);
+    clearMediumCache('', false);
+    persistExploreCache();
     return entry;
   })().finally(() => {
     if (rerollTasks[targetMedium] === task) {
@@ -151,6 +237,7 @@ function rerollMediumTask(targetMedium, want, personalize, extPresent) {
 }
 
 export default function Explore() {
+  ensureExploreCacheOwner();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -164,8 +251,11 @@ export default function Explore() {
   const { prefs } = usePreferences();
   const expPrefs = prefs.explore || DEFAULT_UI.explore;
   const personalize = expPrefs.personalize !== false;
+  const initialOffset = pageOffset(1);
   const initialEntryRef = useRef(
-    exploreCache[medium]?.personalize === personalize ? exploreCache[medium] : null,
+    cachedExplore(medium, initialOffset)?.personalize === personalize
+      ? cachedExplore(medium, initialOffset)
+      : null,
   );
   const initialEntry = initialEntryRef.current;
 
@@ -178,6 +268,7 @@ export default function Explore() {
   // and mirrored in the per-medium cache, so it survives filter switches/reloads).
   const [rerollFailed, setRerollFailed] = useState(() => !!initialEntry?.rerollFailed);
   const [rerollError,  setRerollError]  = useState(() => initialEntry?.rerollError || '');
+  const [totalSuggestions, setTotalSuggestions] = useState(() => initialEntry?.total ?? initialEntry?.items?.length ?? 0);
   const exploreRequestSeq = useRef(0);
 
   // Latest selected medium, readable inside async callbacks without going stale.
@@ -229,6 +320,7 @@ export default function Explore() {
     setPersonalised(!!entry.personalised);
     setRerollFailed(!!entry.rerollFailed);
     setRerollError(entry.rerollError || '');
+    setTotalSuggestions(entry.total ?? entry.items?.length ?? 0);
   }, []);
 
   // Tick an elapsed counter while a reroll affecting the current view runs. The
@@ -273,22 +365,22 @@ export default function Explore() {
     // below shows the skeleton and applies the result when it lands.
     if (medium && rerollTasks[medium]) { setLoading(false); return; }
     if (!medium && rerollAllState.promise) { setLoading(false); return; }
-    const cached = exploreCache[medium];
+    const offset = pageOffset(recPage);
+    const cached = cachedExplore(medium, offset);
     if (!force && cached && cached.personalize === personalize) {
       setError('');
       setCardState({});
       applyEntry(cached);
       setLoading(false);
-      return;
+      if (!cached.needsRevalidation) return;
     }
     const seq = ++exploreRequestSeq.current;
-    setLoading(true); setError(''); setCardState({});
+    setLoading(!cached); setError(''); setCardState({});
     try {
       const want = [...availableSet];
-      const data = await getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, sources: want });
+      const data = await getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources: want });
       if (seq !== exploreRequestSeq.current) return;
-      const entry = cacheEntryFromData(data, want, personalize);
-      exploreCache[medium] = entry;
+      const entry = storeExplore(medium, offset, cacheEntryFromData(data, want, personalize));
       applyEntry(entry);
     } catch (e) {
       if (seq !== exploreRequestSeq.current) return;
@@ -296,7 +388,7 @@ export default function Explore() {
     } finally {
       if (seq === exploreRequestSeq.current) setLoading(false);
     }
-  }, [medium, availableSet, personalize, applyEntry]);
+  }, [medium, recPage, availableSet, personalize, applyEntry]);
 
   useEffect(() => { fetchExplore(); }, [fetchExplore]);
 
@@ -307,18 +399,18 @@ export default function Explore() {
     if (m === medium || rerollTasks[m]) return;
     // Warm the medium's first-page card covers (same set the page renders), even
     // when the recommendation data itself is already cached.
-    const warmCovers = (entry) =>
-      prefetchCoverBundle(qc, firstPageCovers(entry.items || [], availableSet, visibleMediumSet), 'medium');
-    if (exploreCache[m]) { warmCovers(exploreCache[m]); return; }
+    const warmCovers = (entry) => warmExploreCovers(qc, entry.items || []);
+    const cached = cachedExplore(m, 0);
+    if (cached && !cached.needsRevalidation) { warmCovers(cached); return; }
+    if (cached) warmCovers(cached);
     const want = [...availableSet];
-    getExplore({ medium: m, limit: EXPLORE_FETCH_LIMIT, sources: want })
+    getExplore({ medium: m, limit: REC_PAGE_SIZE, offset: 0, sources: want })
       .then(data => {
-        const entry = exploreCache[m] || cacheEntryFromData(data, want, personalize);
-        if (!exploreCache[m]) exploreCache[m] = entry;
+        const entry = storeExplore(m, 0, cacheEntryFromData(data, want, personalize));
         warmCovers(entry);
       })
       .catch(() => {});
-  }, [medium, availableSet, visibleMediumSet, personalize, qc]);
+  }, [medium, availableSet, personalize, qc]);
 
   // Stable refs so the rejoin effect (run only on medium change/mount) can call
   // the latest fetch/apply without re-subscribing and double-joining.
@@ -333,7 +425,10 @@ export default function Explore() {
     setRerollingMediums(prev => new Set(prev).add(targetMedium));
     try {
       const entry = await rerollMediumTask(targetMedium, [...availableSet], personalize, extPresent);
-      if (mediumRef.current === targetMedium) applyEntry(entry);
+      if (mediumRef.current === targetMedium) {
+        setRecPage(1);
+        applyEntry({ ...entry, items: entry.items.slice(0, REC_PAGE_SIZE) });
+      }
     } catch (e) {
       if (mediumRef.current === targetMedium) setError(e.message || String(e));
       throw e;
@@ -350,7 +445,7 @@ export default function Explore() {
       const want = [...availableSet];
       rerollAllState.promise = Promise.allSettled(
         visibleMediums.map(m => rerollMediumTask(m, want, personalize, extPresent)),
-      ).then(() => { delete exploreCache['']; })
+      ).then(() => { clearMediumCache(''); })
         .finally(() => { rerollAllState.promise = null; rerollAllState.startedAt = 0; });
     }
     setError('');
@@ -366,7 +461,12 @@ export default function Explore() {
     if (medium && rerollTasks[medium]) {
       const task = rerollTasks[medium];
       setRerollingMediums(prev => new Set(prev).add(medium));
-      task.then(entry => { if (mediumRef.current === medium) applyEntry(entry); })
+      task.then(entry => {
+        if (mediumRef.current === medium) {
+          setRecPage(1);
+          applyEntry({ ...entry, items: entry.items.slice(0, REC_PAGE_SIZE) });
+        }
+      })
         .catch(() => {})
         .finally(() => setRerollingMediums(prev => { const n = new Set(prev); n.delete(medium); return n; }));
     }
@@ -393,7 +493,9 @@ export default function Explore() {
       const want = [...availableSet];
       const data = await restoreExplore(medium, want);
       const entry = cacheEntryFromData(data, want, personalize);
-      exploreCache[medium] = entry;
+      setRecPage(1);
+      clearMediumCache(medium, false);
+      storeExplore(medium, 0, entry);
       applyEntry(entry);
     } catch (e) {
       setError(e.message || String(e));
@@ -436,28 +538,36 @@ export default function Explore() {
       ))
   ), [items, availableSet, visibleMediumSet]);
 
-  useEffect(() => { setRecPage(1); }, [medium, items]);
+  useEffect(() => { setRecPage(1); }, [medium]);
 
-  const recTotalPages = Math.max(1, Math.ceil(visibleItems.length / REC_PAGE_SIZE));
-  const pagedItems = useMemo(
-    () => visibleItems.slice((recPage - 1) * REC_PAGE_SIZE, recPage * REC_PAGE_SIZE),
-    [visibleItems, recPage],
-  );
+  const recTotalPages = Math.max(1, Math.ceil(totalSuggestions / REC_PAGE_SIZE));
+  const pagedItems = visibleItems;
 
-  // The 30 card covers, bundled into one medium-size request per page.
-  const coverUrls = useMemo(
-    () => pagedItems.map(({ item }) => item.cover_url).filter(Boolean),
+  // Cached covers use normal immutable image URLs so the browser can reuse each
+  // file across pages and reloads. Only covers still being generated use the
+  // small polling bundle fallback.
+  const missingCoverUrls = useMemo(
+    () => pagedItems
+      .filter(({ item }) => !item.cover_cached)
+      .map(({ item }) => item.cover_url)
+      .filter(Boolean),
     [pagedItems],
   );
-  const coverMap = useCoverBundle(coverUrls, 'medium');
+  const missingCoverMap = useCoverBundle(missingCoverUrls, 'medium');
 
-  // Hovering a pagination control warms that page's card covers, so paging repaints
-  // with images already in place (the items themselves are already client-side).
+  // Hovering pagination fetches that small metadata page and decodes its covers.
   const prefetchExplorePage = useCallback((targetPage) => {
-    if (targetPage < 1) return;
-    const items = visibleItems.slice((targetPage - 1) * REC_PAGE_SIZE, targetPage * REC_PAGE_SIZE);
-    prefetchCoverBundle(qc, items.map(({ item }) => item.cover_url), 'medium');
-  }, [visibleItems, qc]);
+    if (targetPage < 1 || targetPage > recTotalPages) return;
+    const offset = pageOffset(targetPage);
+    const warm = entry => warmExploreCovers(qc, entry.items || []);
+    const cached = cachedExplore(medium, offset);
+    if (cached && !cached.needsRevalidation) { warm(cached); return; }
+    if (cached) warm(cached);
+    const want = [...availableSet];
+    getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources: want })
+      .then(data => warm(storeExplore(medium, offset, cacheEntryFromData(data, want, personalize))))
+      .catch(() => {});
+  }, [medium, recTotalPages, availableSet, personalize, qc]);
 
   // What the main recommendation area should render.
   const showRerollSkeleton = !error && !loading && (thisMediumRerolling || (medium === '' && rerollAllBusy));
@@ -515,10 +625,13 @@ export default function Explore() {
     setCardState(s => ({ ...s, [key]: `added:${created?.status || pendingAdd.status}` }));
     if (created) setAddedEntries(prev => ({ ...prev, [key]: created }));
     // Keep the persisted cache in sync so the card stays "in library" on return.
-    const cached = exploreCache[medium];
+    const cached = cachedExplore(medium, pageOffset(recPage));
     if (cached) {
       const target = cached.items.find(it => itemKey(it) === key);
-      if (target) target.in_library = true;
+      if (target) {
+        target.in_library = true;
+        persistExploreCache();
+      }
     }
     setPendingAdd(null);
   }
@@ -578,7 +691,7 @@ export default function Explore() {
               <span className="page-desc">
                 {loading || showRerollSkeleton
                   ? <span className="loading-dots">scanning</span>
-                  : `${visibleItems.length} suggestions`}
+                  : `${totalSuggestions} suggestions`}
               </span>
             )}
           </div>
@@ -675,7 +788,15 @@ export default function Explore() {
                        onKeyDown={e => handleCardKeyDown(e, key, item, owned)}>
                 <div className="explore-cover">
                   {item.cover_url
-                    ? <img src={coverSrc(coverMap, item.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={onCoverErrorPlaceholder} />
+                    ? <img
+                        src={item.cover_cached
+                          ? coverImgUrl(item.cover_url, 'medium')
+                          : coverSrc(missingCoverMap, item.cover_url)}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={onCoverErrorPlaceholder}
+                      />
                     : <div className="explore-cover-empty">—</div>}
                 </div>
 

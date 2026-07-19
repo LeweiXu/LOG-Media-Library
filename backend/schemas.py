@@ -427,6 +427,8 @@ class ExploreItem(BaseModel):
     external_url:    Optional[str]   = None
     genres:          Optional[str]   = None
     external_rating: Optional[float] = None
+    # True when the medium-sized server cache file is ready for direct serving.
+    cover_cached:    bool            = False
     # Personalisation
     in_library:      bool            = False
     bias_matched:    bool            = False
@@ -454,6 +456,9 @@ class AffinitySnapshot(BaseModel):
 class ExploreResponse(BaseModel):
     items:    list[ExploreItem]
     affinity: AffinitySnapshot
+    total:    int = 0
+    offset:   int = 0
+    limit:    int = 30
     # 'true' iff personalisation was applied to ranking
     personalised: bool
     # Per-medium reroll outcome (always cleared for the aggregate "All" view).
