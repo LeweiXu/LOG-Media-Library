@@ -19,8 +19,8 @@ ways:
     the image first-party (where the user's `cf_clearance` is valid) and uploads
     the raw bytes, covering the Cloudflare case the server can't reach.
 
-The sized files are served proactively: tables/Explore via a bundled base64
-response (`POST /covers/bundle`), the modal via `GET /covers/img`.
+The sized files are served as public immutable static resources under
+`/covers/{size}/{sha256}.jpg`.
 """
 from __future__ import annotations
 

@@ -99,7 +99,7 @@ export const COVER_PLACEHOLDER =
 
 /** URL of the server-side cached copy of a cover (uploaded by the extension). */
 export const cachedCoverUrl = (coverUrl) =>
-  coverUrl ? `${BASE}/covers/full?${new URLSearchParams({ url: coverUrl })}` : '';
+  coverUrl ? `${BASE}/covers/img?${new URLSearchParams({ url: coverUrl, size: 'full' })}` : '';
 
 /**
  * Shared <img onError> handler with a 3-stage fallback:
@@ -135,8 +135,6 @@ export function onCoverError(e) {
 /** Resolve an <img> src for a table/card cover: the cached bundle data URI, or
  *  the placeholder. We never hotlink the external URL — covers are served only
  *  from our cache (filled at ingest: entry add, extension upload, Explore reroll). */
-export const coverSrc = (bundle, coverUrl) => (bundle && bundle[coverUrl]) || COVER_PLACEHOLDER;
-
 /** onError for a cached-cover <img>: fall straight to the placeholder (used when
  *  a cover isn't cached yet, e.g. a Cloudflare/NU cover awaiting the extension). */
 export function onCoverErrorPlaceholder(e) {

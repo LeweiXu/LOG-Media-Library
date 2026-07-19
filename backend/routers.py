@@ -1,7 +1,6 @@
-import base64
 import io
 import json
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -99,36 +98,6 @@ async def get_cached_cover(
     upload, the cache-all sweep, or the on-create background task.
     """
     return _serve_sized_cover(url, size)
-
-
-@router.post("/covers/bundle")
-def bundle_cached_covers(
-    size: str = Body(..., embed=True),
-    urls: list[str] = Body(..., embed=True),
-    current_user: User = Depends(auth_service.get_current_user),
-):
-    """Return every requested cover, at one size, as base64 data URIs in a single
-    response — so a whole table / Explore page loads its covers in one request
-    instead of dozens. Uncached URLs are simply omitted; the client falls back to
-    the raw URL for those.
-    """
-    if size not in SIZES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown cover size")
-
-    # Serve-only: we never fetch external images here. Covers are cached at ingest
-    # (entry add, extension upload, Explore reroll); uncached URLs are omitted and
-    # the client shows a placeholder.
-    images: dict[str, str] = {}
-    for url in dict.fromkeys(urls):  # dedupe, preserve order
-        if not url:
-            continue
-        path = sized_cover_path(url, size)
-        if not path.exists():
-            continue
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        images[url] = f"data:image/jpeg;base64,{encoded}"
-
-    return {"images": images}
 
 
 @router.post("/covers/cache-all")

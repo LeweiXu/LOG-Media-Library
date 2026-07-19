@@ -9,7 +9,7 @@ import {
   revalidateLibraryRevision,
 } from '../data/hooks.jsx';
 import { entriesKey } from '../data/keys.js';
-import { coverImgUrl, prefetchFullCover } from '../api.jsx';
+import { coverImgUrl, prefetchCoverImages, prefetchFullCover } from '../api.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import ListsModal from './components/ListsModal.jsx';
@@ -300,7 +300,19 @@ export default function Library({ initialFilters = {} }) {
     }
   }, [qc]);
   useEffect(() => {
-    if (entriesQuery.data) prefetchNearbyPages(entryParams, entriesQuery.data.total);
+    if (!entriesQuery.data) return undefined;
+    let cancelled = false;
+    let timer;
+    prefetchCoverImages(entriesQuery.data.items || [], 'thumb').then(() => {
+      if (cancelled) return;
+      timer = setTimeout(() => {
+        if (!cancelled) prefetchNearbyPages(entryParams, entriesQuery.data.total);
+      }, 1000);
+    });
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [entriesQuery.data, entryParams, prefetchNearbyPages]);
 
   // Warm the query a sidebar filter click would produce, on hover, so the click
