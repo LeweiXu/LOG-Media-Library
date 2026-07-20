@@ -6,7 +6,9 @@ import EntryForm, { formToPayload } from './EntryForm.jsx';
 import ConfirmEntryModal from './ConfirmEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
 import { Tabs, SelectRow } from './terminal.jsx';
-import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
+import {
+  useExtensionPresent, extensionMalPage, extensionMalSearch, extensionNuSearch, mergeResults,
+} from '../../extensionBridge.js';
 import { usePreferences } from '../../preferences.jsx';
 
 export default function AddEntryModal({ onClose, onCreated, initialEntry = null, initialTab = 'search', hideTabs = false }) {
@@ -23,6 +25,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
   const [selected,        setSelected]        = useState(new Set());
   const [confirmQueue,    setConfirmQueue]     = useState([]);
   const [nuSearching,     setNuSearching]      = useState(false);
+  const [malSearching,    setMalSearching]     = useState(false);
   const extPresent = useExtensionPresent();
 
   // Sitewide-available sources gate which chips show and what an unfiltered
@@ -31,6 +34,7 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
   const availableList = useMemo(() => SEARCH_SOURCES.filter(s => availableSet.has(s.value)), [availableSet]);
 
   const nuRequested = (selectedSources.size === 0 || selectedSources.has('novelupdates')) && availableSet.has('novelupdates');
+  const malRequested = (selectedSources.size === 0 || selectedSources.has('jikan')) && availableSet.has('jikan');
 
   async function runDupCheck(list) {
     if (!list.length) { setInLibrary([]); return; }
@@ -63,8 +67,18 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
           setSearchErr("URL import isn't supported for this site yet — try a title search or manual entry.");
           return;
         }
-        const data = await fetchByUrl(query.trim());
-        const found = (Array.isArray(data) ? data : [])
+        let raw = [];
+        try {
+          const data = await fetchByUrl(query.trim());
+          raw = Array.isArray(data) ? data : [];
+        } catch (error) {
+          if (!(src === 'jikan' && extPresent)) throw error;
+        }
+        if (raw.length === 0 && src === 'jikan' && extPresent) {
+          const scraped = await extensionMalPage(query.trim());
+          if (scraped) raw = [scraped];
+        }
+        const found = raw
           .filter(item => !item.medium || visibleMediumSet.has(item.medium));
         if (found.length === 0) {
           setSearchErr("Couldn't read that page — it may be unavailable or its layout changed. Try manual entry.");
@@ -80,6 +94,22 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
         .filter(item => !item.medium || visibleMediumSet.has(item.medium));
       setResults(list);
       await runDupCheck(list);
+
+      // Jikan stays primary. A first-party MAL scrape runs only when the API
+      // returned no MAL results.
+      if (malRequested && extPresent && !list.some(item => item.source === 'jikan')) {
+        setMalSearching(true);
+        try {
+          const mal = await extensionMalSearch(query.trim());
+          if (mal.length) {
+            list = mergeResults(list, mal).filter(item => !item.medium || visibleMediumSet.has(item.medium));
+            setResults(list);
+            await runDupCheck(list);
+          }
+        } finally {
+          setMalSearching(false);
+        }
+      }
 
       // Silent NovelUpdates fallback: NU keyword search is Cloudflare-blocked
       // server-side, so when the extension is present run it client-side and
@@ -234,7 +264,11 @@ export default function AddEntryModal({ onClose, onCreated, initialEntry = null,
               {results !== null && (
                 results.length === 0
                   ? <div className="add-no-results">
-                      {nuSearching ? <span className="loading-dots">Searching NovelUpdates</span> : 'No results — try manual entry.'}
+                      {malSearching
+                        ? <span className="loading-dots">Searching MyAnimeList</span>
+                        : nuSearching
+                          ? <span className="loading-dots">Searching NovelUpdates</span>
+                          : 'No results: try manual entry.'}
                       {!nuSearching && nuRequested && !extPresent && (
                         <div className="add-no-results-hint"><ExtensionInstallHint context="search" /></div>
                       )}

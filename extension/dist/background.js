@@ -40,6 +40,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'search failed' }));
     return true;
   }
+  // MyAnimeList keyword search fallback. The website asks for this only when
+  // Jikan returned no MAL results, so normal searches still use the API.
+  if (msg && msg.type === 'searchMal' && msg.query) {
+    searchMyAnimeList(msg.query)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'search failed' }));
+    return true;
+  }
+  // MyAnimeList URL import fallback for a URL pasted into the website.
+  if (msg && msg.type === 'malPage' && msg.url) {
+    scrapeMyAnimeListUrl(msg.url)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, reason: (e && e.message) || 'page scrape failed' }));
+    return true;
+  }
   // Goodreads Explore fallback: load a genre shelf first-party and return parsed
   // recommendation items (used when the server-side shelf fetch is blocked).
   if (msg && msg.type === 'exploreGoodreads') {
@@ -104,8 +119,9 @@ function detectSiteUrl(url) {
   let host = '';
   try { host = new URL(url).hostname.toLowerCase(); } catch { return { kind: 'unsupported' }; }
   if (host.includes('novelupdates.com')) return { kind: 'dom' };
+  if (host.includes('myanimelist.net')) return { kind: 'api', fallback: 'mal' };
   const API = [
-    'themoviedb.org', 'anilist.co', 'myanimelist.net', 'kitsu.io', 'kitsu.app',
+    'themoviedb.org', 'anilist.co', 'kitsu.io', 'kitsu.app',
     'mangadex.org', 'mangaupdates.com', 'baka-updates.com', 'igdb.com', 'rawg.io',
     'books.google.com', 'play.google.com', 'openlibrary.org',
     'comicvine.gamespot.com', 'vndb.org', 'jjwxc.net', 'qidian.com', 'imdb.com',
@@ -123,13 +139,23 @@ async function scrapeOrFetchEntry(tab, site, token, apiBase) {
     });
     return result && result.title ? result : null;
   }
-  const res = await fetch(`${apiBase}/search/from-url?url=${encodeURIComponent(tab.url)}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  try {
+    const res = await fetch(`${apiBase}/search/from-url?url=${encodeURIComponent(tab.url)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const first = Array.isArray(data) && data[0] ? { ...data[0], status: 'planned' } : null;
+      if (first && first.title) return first;
+    }
+  } catch (error) {
+    if (!site.fallback) throw error;
+  }
+  if (site.fallback !== 'mal') return null;
+  const [{ result } = {}] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id }, func: scrapeMyAnimeList,
   });
-  if (!res.ok) return null;
-  const data = await res.json();
-  const first = Array.isArray(data) && data[0] ? { ...data[0], status: 'planned' } : null;
-  return first && first.title ? first : null;
+  return result && result.title ? result : null;
 }
 
 async function embedLoadEntry(tabId, token, apiBase) {
@@ -427,6 +453,124 @@ async function apiPatchCover(apiBase, token, id, coverUrl) {
     body: JSON.stringify({ ids: [id], patch: { cover_url: coverUrl } }),
   });
   if (!res.ok) throw new Error(`patch ${res.status}`);
+}
+
+// ── MyAnimeList fallbacks (background tabs + injected scrapers) ───────────────
+
+async function searchMyAnimeList(query) {
+  const pages = await Promise.all([
+    scrapeMyAnimeListSearchPage('anime', query),
+    scrapeMyAnimeListSearchPage('manga', query),
+  ]);
+  const seen = new Set();
+  const results = [];
+  for (const item of pages.flat()) {
+    const key = `${item.source}:${item.external_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push(item);
+  }
+  return { ok: true, results };
+}
+
+async function scrapeMyAnimeListSearchPage(kind, query) {
+  const url = `https://myanimelist.net/${kind}.php?q=${encodeURIComponent(query)}&cat=${kind}`;
+  const tab = await chrome.tabs.create({ url, active: false });
+  try {
+    await waitForComplete(tab.id);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const [{ result } = {}] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id }, func: scrapeMyAnimeListSearchResults,
+      });
+      if (result && result.ready) return result.results || [];
+      await delay(1500);
+    }
+  } catch { /* return no results from this half of the search */ } finally {
+    try { await chrome.tabs.remove(tab.id); } catch { /* ignore */ }
+  }
+  return [];
+}
+
+async function scrapeMyAnimeListUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return { ok: false, reason: 'invalid URL' }; }
+  if (!parsed.hostname.toLowerCase().endsWith('myanimelist.net')
+      || !/^\/(anime|manga)\/\d+/.test(parsed.pathname)) {
+    return { ok: false, reason: 'not a MAL media page' };
+  }
+  const tab = await chrome.tabs.create({ url: parsed.href, active: false });
+  try {
+    await waitForComplete(tab.id);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const [{ result } = {}] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id }, func: scrapeMyAnimeList,
+      });
+      if (result && result.title) return { ok: true, entry: result };
+      await delay(1500);
+    }
+  } catch (error) {
+    return { ok: false, reason: (error && error.message) || 'page scrape failed' };
+  } finally {
+    try { await chrome.tabs.remove(tab.id); } catch { /* ignore */ }
+  }
+  return { ok: false, reason: 'nofind' };
+}
+
+// Injected into MAL's anime.php and manga.php result tables. The result page
+// includes enough data to add an entry without making a Jikan request.
+function scrapeMyAnimeListSearchResults() {
+  if (/just a moment|checking your browser/i.test(document.title || '')
+      || document.readyState === 'loading') {
+    return { ready: false };
+  }
+
+  const originalCover = (src) => String(src || '')
+    .replace(/\/r\/\d+x\d+(?=\/images\/)/, '')
+    .replace(/\?.*$/, '');
+  const results = [];
+  const rows = document.querySelectorAll('.js-categories-seasonal table tr');
+  for (const row of rows) {
+    const titleLink = row.querySelector('a.hoverinfo_trigger.fw-b[href*="myanimelist.net/anime/"], a.hoverinfo_trigger.fw-b[href*="myanimelist.net/manga/"]');
+    if (!titleLink) continue;
+    const match = (titleLink.getAttribute('href') || '').match(/myanimelist\.net\/(anime|manga)\/(\d+)/);
+    if (!match) continue;
+    const [, kind, external_id] = match;
+    const cells = row.querySelectorAll(':scope > td');
+    if (cells.length < 5) continue;
+
+    const type = cells[cells.length - 3].textContent.replace(/\s+/g, ' ').trim();
+    const medium = kind === 'anime' ? 'Anime' : /novel/i.test(type) ? 'Light Novel' : 'Manga';
+    const totalMatch = cells[cells.length - 2].textContent.replace(/,/g, '').match(/\d+/);
+    const score = Number.parseFloat(cells[cells.length - 1].textContent.trim());
+    const image = row.querySelector('.picSurround img');
+    const titleCell = titleLink.closest('td');
+    const descriptionEl = titleCell?.querySelector('.pt4');
+    const descriptionClone = descriptionEl?.cloneNode(true);
+    descriptionClone?.querySelectorAll('a').forEach((el) => el.remove());
+    const description = (descriptionClone?.textContent || '')
+      .replace(/\s+/g, ' ').replace(/read more\.?$/i, '').trim();
+
+    results.push({
+      title: titleLink.textContent.replace(/\s+/g, ' ').trim(),
+      medium,
+      origin: 'Japanese',
+      year: '',
+      cover_url: originalCover(image?.getAttribute('data-src') || image?.getAttribute('src') || ''),
+      // MAL's manga search table reports volumes, but Logarium's Manga total
+      // means chapters. Only anime episodes and light novel volumes line up.
+      total: medium === 'Manga' ? '' : totalMatch ? totalMatch[0] : '',
+      external_id,
+      source: 'jikan',
+      external_url: `https://myanimelist.net/${kind}/${external_id}`,
+      genres: '',
+      external_rating: Number.isFinite(score) ? Math.round(score * 10) / 10 : null,
+      description: description || null,
+    });
+    if (results.length >= 15) break;
+  }
+  const hasSearchPage = Array.from(document.querySelectorAll('.normal_header'))
+    .some((el) => /search results/i.test(el.textContent || ''));
+  return { ready: hasSearchPage || results.length > 0, results };
 }
 
 // ── NovelUpdates keyword search (background tab + injected scraper) ────────────
@@ -828,6 +972,72 @@ async function scrapeNovelUpdatesSeries(url, token, apiBase) {
     } catch { /* cover caching is best-effort; the URL is still useful */ }
   }
   return entry ? { ok: true, entry } : { ok: false, reason: 'nofind' };
+}
+
+// Self-contained MyAnimeList media-page scraper. Keep this in sync with
+// extension/src/lib/scrapers.js. It is used for popup imports and hidden-tab
+// URL imports when the backend's Jikan lookup returns nothing.
+function scrapeMyAnimeList() {
+  const pageMatch = location.pathname.match(/^\/(anime|manga)\/(\d+)/);
+  if (!pageMatch) return null;
+
+  const [, kind, external_id] = pageMatch;
+  const meta = (property) => {
+    const el = document.querySelector(`meta[property="${property}"]`);
+    return el ? (el.getAttribute('content') || '').trim() : '';
+  };
+  const labelledRow = (label) => Array.from(document.querySelectorAll('.spaceit_pad'))
+    .find((row) => (row.querySelector('.dark_text')?.textContent || '').trim() === `${label}:`);
+  const labelledText = (label) => {
+    const row = labelledRow(label);
+    if (!row) return '';
+    const clone = row.cloneNode(true);
+    clone.querySelector('.dark_text')?.remove();
+    return clone.textContent.replace(/\s+/g, ' ').trim();
+  };
+  const numberFrom = (value) => {
+    const match = String(value || '').replace(/,/g, '').match(/\d+/);
+    return match ? match[0] : '';
+  };
+
+  const title = (document.querySelector('.title-english')?.textContent || '').trim()
+    || (document.querySelector('.title-name')?.textContent || '').trim()
+    || meta('og:title');
+  if (!title) return null;
+
+  const type = labelledText('Type');
+  const medium = kind === 'anime'
+    ? 'Anime'
+    : /novel/i.test(type) ? 'Light Novel' : 'Manga';
+  const totalLabel = medium === 'Anime' ? 'Episodes' : medium === 'Light Novel' ? 'Volumes' : 'Chapters';
+  const dateText = labelledText(medium === 'Anime' ? 'Aired' : 'Published');
+  const yearMatch = dateText.match(/\b(?:18|19|20)\d{2}\b/);
+
+  const genreRow = labelledRow('Genres') || labelledRow('Genre');
+  const genres = genreRow
+    ? Array.from(genreRow.querySelectorAll('[itemprop="genre"]'))
+      .map((el) => el.textContent.trim()).filter(Boolean).slice(0, 5).join(', ')
+    : '';
+  const scoreText = (document.querySelector('[itemprop="ratingValue"]')?.textContent || '').trim();
+  const score = Number.parseFloat(scoreText);
+  const description = (document.querySelector('[itemprop="description"]')?.textContent || meta('og:description'))
+    .replace(/\s+/g, ' ').trim();
+
+  return {
+    title,
+    medium,
+    origin: 'Japanese',
+    year: yearMatch ? yearMatch[0] : '',
+    cover_url: meta('og:image'),
+    total: numberFrom(labelledText(totalLabel)),
+    external_id,
+    source: 'jikan',
+    external_url: `https://myanimelist.net/${kind}/${external_id}`,
+    genres,
+    external_rating: Number.isFinite(score) ? Math.round(score * 10) / 10 : null,
+    description: description || null,
+    status: 'planned',
+  };
 }
 
 // Self-contained NovelUpdates series-page scraper, injected into the page world

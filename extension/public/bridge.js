@@ -65,6 +65,24 @@
         .catch(() => {
           window.postMessage({ logarium: true, dir: 'fromExt', type: 'searchNuResult', id, ok: false }, window.location.origin);
         });
+    } else if (data.type === 'searchMal') {
+      const id = data.id;
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'searchMal', query: data.query }))
+        .then((resp) => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'searchMalResult', id, ...(resp || { ok: false }) }, window.location.origin);
+        })
+        .catch(() => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'searchMalResult', id, ok: false }, window.location.origin);
+        });
+    } else if (data.type === 'malPage') {
+      const id = data.id;
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'malPage', url: data.url }))
+        .then((resp) => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'malPageResult', id, ...(resp || { ok: false }) }, window.location.origin);
+        })
+        .catch(() => {
+          window.postMessage({ logarium: true, dir: 'fromExt', type: 'malPageResult', id, ok: false }, window.location.origin);
+        });
     } else if (data.type === 'exploreGoodreads') {
       // Same request/response shape as searchNu — load a Goodreads genre shelf
       // first-party and return parsed recommendation items.

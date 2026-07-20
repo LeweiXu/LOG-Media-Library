@@ -4,7 +4,9 @@ import { isUrl, inferSourceFromUrl, URL_SCRAPE_SOURCES, statusLabel, onCoverErro
 import { SEARCH_SOURCES, SOURCE_LABEL, resultToEntry, loadAvailableSources } from './searchSources.js';
 import AddEntryModal from './AddEntryModal.jsx';
 import ExtensionInstallHint from './ExtensionInstallHint.jsx';
-import { useExtensionPresent, extensionNuSearch, mergeResults } from '../../extensionBridge.js';
+import {
+  useExtensionPresent, extensionMalPage, extensionMalSearch, extensionNuSearch, mergeResults,
+} from '../../extensionBridge.js';
 import { usePreferences } from '../../preferences.jsx';
 
 /**
@@ -41,6 +43,7 @@ export default function AddEntryPanel({
   // Entry currently being added via the shared add form (manual tab).
   const [pendingAdd, setPendingAdd] = useState(null);
   const [nuSearching, setNuSearching] = useState(false);
+  const [malSearching, setMalSearching] = useState(false);
   const extPresent = useExtensionPresent();
 
   // Sitewide-available sources gate which chips show and what an unfiltered
@@ -49,6 +52,7 @@ export default function AddEntryPanel({
   const availableList = useMemo(() => SEARCH_SOURCES.filter(s => availableSet.has(s.value)), [availableSet]);
 
   const nuRequested = (selectedSources.size === 0 || selectedSources.has('novelupdates')) && availableSet.has('novelupdates');
+  const malRequested = (selectedSources.size === 0 || selectedSources.has('jikan')) && availableSet.has('jikan');
 
   async function runDupCheck(list) {
     if (!list.length) { setInLibrary([]); return; }
@@ -131,8 +135,17 @@ export default function AddEntryPanel({
           setSearchErr("URL import isn't supported for this site yet — try a title search or manual entry.");
           return;
         }
-        const data = await fetchByUrl(q);
-        const found = Array.isArray(data) ? data : [];
+        let found = [];
+        try {
+          const data = await fetchByUrl(q);
+          found = Array.isArray(data) ? data : [];
+        } catch (error) {
+          if (!(src === 'jikan' && extPresent)) throw error;
+        }
+        if (found.length === 0 && src === 'jikan' && extPresent) {
+          const scraped = await extensionMalPage(q);
+          if (scraped) found = [scraped];
+        }
         if (found.length === 0) {
           setSearchErr("Couldn't read that page — it may be unavailable or its layout changed. Try a title search.");
           return;
@@ -149,6 +162,22 @@ export default function AddEntryPanel({
         .filter(item => !item.medium || visibleMediumSet.has(item.medium));
       setResults(list);
       await runDupCheck(list);
+
+      // Jikan is the normal MAL source. Only scrape MAL through the extension
+      // when Jikan contributed no results at all.
+      if (malRequested && extPresent && !list.some(item => item.source === 'jikan')) {
+        setMalSearching(true);
+        try {
+          const mal = await extensionMalSearch(q);
+          if (mal.length) {
+            list = mergeResults(list, mal).filter(item => !item.medium || visibleMediumSet.has(item.medium));
+            setResults(list);
+            await runDupCheck(list);
+          }
+        } finally {
+          setMalSearching(false);
+        }
+      }
 
       // Silent NovelUpdates fallback via the extension (NU search is
       // Cloudflare-blocked server-side); merge its results in when present.
@@ -322,7 +351,9 @@ export default function AddEntryPanel({
       {results !== null && (
         shownResults.length === 0
           ? <div className="state-block"><div className="state-detail">
-              {nuSearching
+              {malSearching
+                ? <span className="loading-dots">Searching MyAnimeList</span>
+                : nuSearching
                 ? <span className="loading-dots">Searching NovelUpdates</span>
                 : results.length === 0
                   ? 'No results — try a different title or source.'

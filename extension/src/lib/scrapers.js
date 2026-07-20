@@ -107,3 +107,71 @@ export function scrapeNovelUpdates() {
     status: 'planned',
   };
 }
+
+/**
+ * Read an anime, manga, or light novel directly from its MyAnimeList page.
+ * The extension normally asks the backend first so Jikan remains the primary
+ * source. This runs in the active tab only when that lookup fails.
+ */
+export function scrapeMyAnimeList() {
+  const pageMatch = location.pathname.match(/^\/(anime|manga)\/(\d+)/);
+  if (!pageMatch) return null;
+
+  const [, kind, external_id] = pageMatch;
+  const meta = (property) => {
+    const el = document.querySelector(`meta[property="${property}"]`);
+    return el ? (el.getAttribute('content') || '').trim() : '';
+  };
+  const labelledRow = (label) => Array.from(document.querySelectorAll('.spaceit_pad'))
+    .find((row) => (row.querySelector('.dark_text')?.textContent || '').trim() === `${label}:`);
+  const labelledText = (label) => {
+    const row = labelledRow(label);
+    if (!row) return '';
+    const clone = row.cloneNode(true);
+    clone.querySelector('.dark_text')?.remove();
+    return clone.textContent.replace(/\s+/g, ' ').trim();
+  };
+  const numberFrom = (value) => {
+    const match = String(value || '').replace(/,/g, '').match(/\d+/);
+    return match ? match[0] : '';
+  };
+
+  const title = (document.querySelector('.title-english')?.textContent || '').trim()
+    || (document.querySelector('.title-name')?.textContent || '').trim()
+    || meta('og:title');
+  if (!title) return null;
+
+  const type = labelledText('Type');
+  const medium = kind === 'anime'
+    ? 'Anime'
+    : /novel/i.test(type) ? 'Light Novel' : 'Manga';
+  const totalLabel = medium === 'Anime' ? 'Episodes' : medium === 'Light Novel' ? 'Volumes' : 'Chapters';
+  const dateText = labelledText(medium === 'Anime' ? 'Aired' : 'Published');
+  const yearMatch = dateText.match(/\b(?:18|19|20)\d{2}\b/);
+
+  const genreRow = labelledRow('Genres') || labelledRow('Genre');
+  const genres = genreRow
+    ? Array.from(genreRow.querySelectorAll('[itemprop="genre"]'))
+      .map((el) => el.textContent.trim()).filter(Boolean).slice(0, 5).join(', ')
+    : '';
+  const scoreText = (document.querySelector('[itemprop="ratingValue"]')?.textContent || '').trim();
+  const score = Number.parseFloat(scoreText);
+  const description = (document.querySelector('[itemprop="description"]')?.textContent || meta('og:description'))
+    .replace(/\s+/g, ' ').trim();
+
+  return {
+    title,
+    medium,
+    origin: 'Japanese',
+    year: yearMatch ? yearMatch[0] : '',
+    cover_url: meta('og:image'),
+    total: numberFrom(labelledText(totalLabel)),
+    external_id,
+    source: 'jikan',
+    external_url: `https://myanimelist.net/${kind}/${external_id}`,
+    genres,
+    external_rating: Number.isFinite(score) ? Math.round(score * 10) / 10 : null,
+    description: description || null,
+    status: 'planned',
+  };
+}

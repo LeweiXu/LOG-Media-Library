@@ -1,4 +1,4 @@
-import { scrapeNovelUpdates } from './scrapers.js';
+import { scrapeMyAnimeList, scrapeNovelUpdates } from './scrapers.js';
 
 /**
  * Sites we scrape in-page (no API and/or Cloudflare-blocked server-side).
@@ -14,7 +14,7 @@ const DOM_SCRAPERS = {
  * the DOM-scraped ones above.
  */
 const API_DOMAINS = [
-  'themoviedb.org', 'anilist.co', 'myanimelist.net', 'kitsu.io', 'kitsu.app',
+  'themoviedb.org', 'anilist.co', 'kitsu.io', 'kitsu.app',
   'mangadex.org', 'mangaupdates.com', 'baka-updates.com', 'igdb.com', 'rawg.io',
   'books.google.com', 'play.google.com', 'openlibrary.org',
   'comicvine.gamespot.com', 'vndb.org', 'jjwxc.net', 'qidian.com', 'imdb.com',
@@ -37,6 +37,9 @@ export function detectSite(url) {
 
   for (const [domain, scraper] of Object.entries(DOM_SCRAPERS)) {
     if (host.includes(domain)) return { kind: 'dom', scraper };
+  }
+  if (host.includes('myanimelist.net')) {
+    return { kind: 'api', fallbackScraper: scrapeMyAnimeList };
   }
   if (API_DOMAINS.some((domain) => host.includes(domain))) return { kind: 'api' };
   return { kind: 'unsupported' };

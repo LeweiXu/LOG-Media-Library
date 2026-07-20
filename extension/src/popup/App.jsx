@@ -101,8 +101,18 @@ export default function App() {
       });
       return result;
     }
-    const results = await fetchByUrl(tab.url);
-    return Array.isArray(results) && results[0] ? { ...results[0], status: 'planned' } : null;
+    try {
+      const results = await fetchByUrl(tab.url);
+      if (Array.isArray(results) && results[0]) return { ...results[0], status: 'planned' };
+    } catch (error) {
+      if (!site.fallbackScraper) throw error;
+    }
+    if (!site.fallbackScraper) return null;
+    const [{ result } = {}] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: site.fallbackScraper,
+    });
+    return result;
   }
 
   // "New Entry": fetch the media details (if not already fetched) and switch to

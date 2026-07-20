@@ -79,6 +79,50 @@ export function extensionNuSearch(query, timeoutMs = 25000) {
   });
 }
 
+// ── MyAnimeList fallbacks ────────────────────────────────────────────────────
+// MAL title searches and URL imports normally go through Jikan. If Jikan gives
+// the website nothing, the extension can load MAL first-party and scrape it.
+
+let _malSearchReqId = 0;
+
+export function extensionMalSearch(query, timeoutMs = 25000) {
+  if (!extensionPresent() || !query?.trim()) return Promise.resolve([]);
+  return new Promise((resolve) => {
+    const id = ++_malSearchReqId;
+    const cleanup = () => { clearTimeout(timer); window.removeEventListener('message', onMsg); };
+    const timer = setTimeout(() => { cleanup(); resolve([]); }, timeoutMs);
+    function onMsg(e) {
+      if (e.source !== window) return;
+      const d = e.data;
+      if (!d || d.logarium !== true || d.dir !== 'fromExt' || d.type !== 'searchMalResult' || d.id !== id) return;
+      cleanup();
+      resolve(d.ok && Array.isArray(d.results) ? d.results : []);
+    }
+    window.addEventListener('message', onMsg);
+    post({ type: 'searchMal', id, query: query.trim() });
+  });
+}
+
+let _malPageReqId = 0;
+
+export function extensionMalPage(url, timeoutMs = 25000) {
+  if (!extensionPresent() || !url) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const id = ++_malPageReqId;
+    const cleanup = () => { clearTimeout(timer); window.removeEventListener('message', onMsg); };
+    const timer = setTimeout(() => { cleanup(); resolve(null); }, timeoutMs);
+    function onMsg(e) {
+      if (e.source !== window) return;
+      const d = e.data;
+      if (!d || d.logarium !== true || d.dir !== 'fromExt' || d.type !== 'malPageResult' || d.id !== id) return;
+      cleanup();
+      resolve(d.ok && d.entry ? d.entry : null);
+    }
+    window.addEventListener('message', onMsg);
+    post({ type: 'malPage', id, url });
+  });
+}
+
 // ── Goodreads Explore (silent fallback) ──────────────────────────────────────
 // Goodreads genre shelves are usually reachable server-side, but if they get
 // WAF-blocked the recommender returns no Goodreads books. When the extension is
