@@ -30,12 +30,13 @@ const REC_PAGE_SIZE = 30;
 const EXPLORE_CACHE_AREA = 'explore';
 
 async function readExplorePage({ medium, offset = 0, sources }) {
-  const data = await getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources });
+  const sourceList = Array.isArray(sources) ? sources : [...(sources || [])];
+  const data = await getExplore({ medium, limit: REC_PAGE_SIZE, offset, sources: sourceList });
   if (Number.isFinite(data.total)) return data;
 
   // During a staggered deployment, the previous backend ignores `offset` and
   // has no total. Keep pagination working until the new API reaches production.
-  const legacy = await getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, sources });
+  const legacy = await getExplore({ medium, limit: EXPLORE_FETCH_LIMIT, sources: sourceList });
   const items = legacy.items || [];
   return {
     ...legacy,
@@ -175,7 +176,7 @@ function warmExploreCovers(_qc, items) {
 export function prefetchExploreHome(prefs) {
   const medium = '';  // the default aggregate view (read-only, never rerolls)
   const offset = 0;
-  const want = loadAvailableSources();
+  const want = [...loadAvailableSources()];
   const personalize = (prefs?.explore || DEFAULT_UI.explore).personalize !== false;
   const visibleMediums = visibleMediumsFromPrefs(prefs);
   const warmCovers = (items) => {
@@ -192,6 +193,10 @@ export function prefetchExploreHome(prefs) {
   if (usableCached) warmCovers(cached.items);
   readExplorePage({ medium, offset, sources: want })
     .then(data => {
+      // A speculative hover should never replace useful state with a transient
+      // empty aggregate. The mounted page can still confirm and display a real
+      // empty library if its own read also returns no recommendations.
+      if (!(data.items || []).length) return;
       const entry = storeExplore(
         medium, offset, cacheEntryFromData(data, want, personalize, visibleMediums),
       );

@@ -463,7 +463,8 @@ export const getExplore = ({ medium, limit, offset, seed, refresh, sources } = {
   if (refresh) params.refresh = 'true';
   // Comma-separated list of sitewide-available sources; the backend applies it
   // as a response filter without making source selection part of cache identity.
-  if (Array.isArray(sources) && sources.length) params.sources = sources.join(',');
+  const sourceList = Array.isArray(sources) ? sources : [...(sources || [])];
+  if (sourceList.length) params.sources = sourceList.join(',');
   const qs = new URLSearchParams(
     Object.fromEntries(
       Object.entries(params).filter(([, v]) => v !== '' && v != null),
