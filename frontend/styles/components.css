@@ -1374,3 +1374,31 @@ html.light .skeleton-pie::after {
   gap: 12px;
   margin-top: 14px;
 }
+
+/* ── Share profile tool ──────────────────────────────────────────────────── */
+.share-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.share-link-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+.share-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.share-panel .settings-msg { margin-top: 12px; display: block; }
+
+/* Console sections a shared profile may look at but not touch. */
+.settings-section.is-locked {
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}

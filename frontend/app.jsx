@@ -150,16 +150,18 @@ export default function App() {
   // The landing page (logged-out) is always the static dark / blue terminal
   // look — the user's saved theme & accent only apply once authenticated, and
   // we never persist the forced override so their real choice survives logout.
+  // A shared profile renders in its owner's theme, but never overwrites the
+  // viewer's own saved theme/accent.
   useEffect(() => {
     const light = isAuthenticated && theme === 'light';
     document.documentElement.classList.toggle('light', light);
-    if (isAuthenticated) localStorage.setItem('theme', theme);
-  }, [theme, isAuthenticated]);
+    if (isAuthenticated && !isShare) localStorage.setItem('theme', theme);
+  }, [theme, isAuthenticated, isShare]);
 
   useEffect(() => {
     document.documentElement.dataset.accent = isAuthenticated ? accent : 'blue';
-    if (isAuthenticated) localStorage.setItem('accent', accent);
-  }, [accent, isAuthenticated]);
+    if (isAuthenticated && !isShare) localStorage.setItem('accent', accent);
+  }, [accent, isAuthenticated, isShare]);
 
   function handleAuth(newToken, newUsername) {
     // The query cache is shared across the app and not keyed by user, so wipe it

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react';
 import {
   changePassword, deleteAllEntries, getSettings, updateSettings,
   getBackupStatus, runBackup, getCustomLists, exportEntries,
@@ -22,6 +22,8 @@ import ImportPanel from './components/ImportPanel.jsx';
 import ImportAutoPanel from './components/ImportAutoPanel.jsx';
 import ImportMalPanel from './components/ImportMalPanel.jsx';
 import RatingDefinitionsPanel from './components/RatingDefinitionsPanel.jsx';
+import SharePanel from './components/SharePanel.jsx';
+import { useShare } from '../share.jsx';
 import ExtensionDownloadSection from './components/ExtensionDownloadSection.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 
@@ -278,10 +280,21 @@ function TwoZoneColumnEditor({ cols, standard, additional, shown, onChange }) {
 }
 
 // ── Full-width terminal layout primitives ──
+// Viewing someone's shared profile shows this page exactly as they see it, but
+// inert: every Section/ToolCard below reads this and greys itself out. A card
+// opts back in with `unlocked` (only Rating Definitions does).
+const LockContext = createContext(false);
+
+function useLocked(unlocked) {
+  return useContext(LockContext) && !unlocked;
+}
+
 // A bordered section with a header rule; body spans the full panel width.
-function Section({ title, desc, danger, children }) {
+function Section({ title, desc, danger, unlocked, children }) {
+  const locked = useLocked(unlocked);
   return (
-    <section className={`settings-section${danger ? ' is-danger' : ''}`}>
+    <section className={`settings-section${danger ? ' is-danger' : ''}${locked ? ' is-locked' : ''}`}
+      aria-disabled={locked || undefined}>
       <div className="settings-section-head">
         <span className="sh-title">{title}</span>
         {desc && <span className="sh-desc">{desc}</span>}
@@ -295,10 +308,12 @@ function Section({ title, desc, danger, children }) {
 // once expanded, so a panel's on-mount work (DedupPanel's duplicate scan, ListsPanel's
 // library load, an import/cache SSE stream) runs only when the user opens the card,
 // and aborts when they collapse it. Reuses the section header's toggle styling.
-function ToolCard({ title, desc, children, defaultOpen = false }) {
+function ToolCard({ title, desc, children, defaultOpen = false, unlocked }) {
   const [open, setOpen] = useState(defaultOpen);
+  const locked = useLocked(unlocked);
   return (
-    <section className="settings-section">
+    <section className={`settings-section${locked ? ' is-locked' : ''}`}
+      aria-disabled={locked || undefined}>
       <button type="button" className="settings-section-head settings-section-toggle"
         aria-expanded={open} onClick={() => setOpen(o => !o)}>
         <span className="sh-title">{title}</span>
@@ -344,6 +359,7 @@ function RowSelect(props) {
 
 export default function Console({ theme, onThemeChange, accent, onAccentChange, onLogout, onDataDeleted }) {
   const { prefs, loaded: prefsLoaded, error: prefsError, reload: reloadPrefs, updateUi } = usePreferences();
+  const { isShare } = useShare();
   const [reloading, setReloading] = useState(false);
 
   // ── Local mirror of the UI document for instant feedback; persisted on change. ──
@@ -565,6 +581,8 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   }, []);
 
   useEffect(() => {
+    // A shared profile never sees the owner's backup email, so skip the call.
+    if (isShare) return undefined;
     let cancelled = false;
     (async () => {
       try {
@@ -575,7 +593,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
       } catch { /* degrade gracefully */ }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [isShare]);
 
   useEffect(() => {
     if (!scalarsLoaded) return;
@@ -689,6 +707,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
   const dashColSel = table => dash.columns?.[table] ?? DEFAULT_UI.dashboard.columns[table];
 
   return (
+    <LockContext.Provider value={isShare}>
     <div className="stats-layout">
       <div className="settings-page">
         <div className="page-head console-page-head">
@@ -723,7 +742,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         {tab === 'tools' && (
         <>
         {/* ── Browser extension (only when not installed or out of date) ── */}
-        {showExtSection && (
+        {!isShare && showExtSection && (
           <>
             <p className="console-group-label">Browser Extension</p>
             <Section title="Logarium Browser Extension"
@@ -747,19 +766,27 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         <ToolCard title="Cache Covers (server)" desc="download & store uncached covers on the server">
           <div className="console-tool-body"><CacheCoversPanel /></div>
         </ToolCard>
-        <ToolCard title="Cache Covers (extension)"
-          desc="resync covers first-party via the browser extension">
-          <div className="console-tool-body">
-            {extPresent
-              ? <ResyncPanel />
-              : <p className="console-tool-note">
-                  Requires the Logarium browser extension.
-                </p>}
-          </div>
+        {!isShare && (
+          <ToolCard title="Cache Covers (extension)"
+            desc="resync covers first-party via the browser extension">
+            <div className="console-tool-body">
+              {extPresent
+                ? <ResyncPanel />
+                : <p className="console-tool-note">
+                    Requires the Logarium browser extension.
+                  </p>}
+            </div>
+          </ToolCard>
+        )}
+        <ToolCard title="Rating Definitions" desc="what each score means to this library"
+          unlocked defaultOpen={isShare}>
+          <div className="console-tool-body"><RatingDefinitionsPanel readOnly={isShare} /></div>
         </ToolCard>
-        <ToolCard title="Rating Definitions" desc="write down what each score means to you">
-          <div className="console-tool-body"><RatingDefinitionsPanel /></div>
-        </ToolCard>
+        {!isShare && (
+          <ToolCard title="Share Profile" desc="a read-only link to your library">
+            <div className="console-tool-body"><SharePanel /></div>
+          </ToolCard>
+        )}
         <ToolCard title="Quick Add" desc="backfill consumed media from recommendations">
           <div className="console-tool-body">
             <QuickAddModal inline onCreated={reloadLists} />
@@ -1097,6 +1124,7 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
         )}
       </div>
     </div>
+    </LockContext.Provider>
   );
 }
 
