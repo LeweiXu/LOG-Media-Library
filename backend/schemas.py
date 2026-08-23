@@ -367,6 +367,18 @@ class UserSettingsUpdate(BaseModel):
             raise ValueError(f"backup_freq must be one of {sorted(_VALID_BACKUP_FREQ)}")
         return v
 
+# --- Share Schemas ---
+
+class ShareLink(BaseModel):
+    """Owner's view of their share link. `token` is None when sharing is off."""
+    enabled: bool
+    token:   Optional[str] = None
+
+class ShareSession(BaseModel):
+    """What a share link resolves to, for the viewing client."""
+    username:  str
+    read_only: bool
+
 # --- Backup Schemas ---
 
 class BackupStatus(BaseModel):

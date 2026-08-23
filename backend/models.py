@@ -28,6 +28,13 @@ class User(Base):
     # it over DEFAULT_UI. See schemas.DEFAULT_UI for the canonical shape.
     ui_preferences:           Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     library_revision:         Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # Read-only profile sharing. NULL = sharing off (no valid link). Otherwise a
+    # "shr_"-prefixed opaque token that stands in for a bearer token: it resolves
+    # to this user but the API only ever serves reads for it. Regenerating writes
+    # a new token, which is what revokes the previous link.
+    share_token:              Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True,
+    )
     def __repr__(self) -> str:
         return f"<User username={self.username!r} email={self.email!r}>"
 

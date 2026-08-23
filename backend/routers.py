@@ -13,7 +13,7 @@ from schemas import (
     CustomListRead, CustomListRename,
     EntryCountsResponse, EntryCreate, EntryListResponse, EntryRead, EntryUpdate,
     ImportConfirmRequest, ImportConfirmResponse, ImportPreviewResponse,
-    SearchResult, StatsResponse,
+    SearchResult, ShareLink, ShareSession, StatsResponse,
     UserCreate, UserRead, Token, ChangePassword,
     UserSettings, UserSettingsUpdate,
     DuplicateCheckRequest, DuplicateCheckResponse,
@@ -25,6 +25,7 @@ from services import entry_service
 from services.bootstrap_service import get_dashboard_bootstrap, get_library_bootstrap
 from services.entry_service import delete_all_entries
 from services import auth_service
+from services import share_service
 from services.search_service import search_media, lookup_chapter_count
 from services.search_providers.imdb import fetch_imdb_detail
 from services.url_import_service import fetch_from_url
@@ -252,6 +253,58 @@ def update_settings(
     db.commit()
     db.refresh(current_user)
     return _settings_payload(current_user)
+
+# ── Share routes ──────────────────────────────────────────────────────────────
+# /share/link is owner-only (the guard in main.py blocks it for share tokens);
+# /share/session is what a viewer's client calls to resolve a link.
+
+@router.get("/share/session", response_model=ShareSession)
+def share_session(
+    token: str = Depends(auth_service.oauth2_scheme),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Who this session belongs to, and whether it can write."""
+    return ShareSession(
+        username=current_user.username,
+        read_only=share_service.is_share_token(token),
+    )
+
+
+@router.get("/share/link", response_model=ShareLink)
+def get_share_link(
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    token = share_service.get_token(current_user)
+    return ShareLink(enabled=token is not None, token=token)
+
+
+@router.post("/share/link", response_model=ShareLink)
+def enable_share_link(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Turn sharing on, keeping the current token if there already is one."""
+    return ShareLink(enabled=True, token=share_service.enable(db, current_user))
+
+
+@router.post("/share/link/regenerate", response_model=ShareLink)
+def regenerate_share_link(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Issue a new link. The previous one stops working immediately."""
+    return ShareLink(enabled=True, token=share_service.regenerate(db, current_user))
+
+
+@router.delete("/share/link", response_model=ShareLink)
+def disable_share_link(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user),
+):
+    """Turn sharing off. Any existing link stops working immediately."""
+    share_service.disable(db, current_user)
+    return ShareLink(enabled=False, token=None)
+
 
 # ── Entries endpoints ─────────────────────────────────────────────────────────
 

@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 import asyncio
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -12,6 +13,7 @@ from models import Entry, ExploreCache, User  # noqa: F401 — registers models 
 from routers import router
 from services.backup_service import tick_due_backups
 from services.cover_cache_service import SIZES, cover_size_dir
+from services.share_service import is_share_token
 
 logging.basicConfig(
     level=logging.INFO,
@@ -88,6 +90,41 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# ── Share-link guard ──────────────────────────────────────────────────────────
+# A share token (see services/share_service.py) is accepted anywhere a bearer
+# token is, so a shared profile reuses every read endpoint as-is. Read-only is
+# enforced here rather than route by route: one chokepoint covers everything,
+# including routes added later.
+#
+# Registered before CORS so the CORS middleware stays outermost and a rejection
+# still comes back with the right headers (a bare 403 would surface in the
+# browser as an opaque CORS failure instead).
+SHARE_READ_METHODS = {"GET", "HEAD", "OPTIONS"}
+# GETs a viewer must not reach even though they are reads: the account email,
+# a full library dump, the owner's API keys via search/explore, and the token
+# management route itself.
+SHARE_BLOCKED_PATHS = ("/backup/status", "/entries/export", "/search", "/explore", "/share/link")
+
+
+@app.middleware("http")
+async def share_link_guard(request: Request, call_next):
+    auth = request.headers.get("authorization") or ""
+    scheme, _, token = auth.partition(" ")
+    if scheme.lower() == "bearer" and is_share_token(token.strip()):
+        path = request.url.path
+        if request.method not in SHARE_READ_METHODS:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "This is a read-only shared profile."},
+            )
+        if any(path == blocked or path.startswith(blocked + "/") for blocked in SHARE_BLOCKED_PATHS):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Not available on a shared profile."},
+            )
+    return await call_next(request)
+
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(

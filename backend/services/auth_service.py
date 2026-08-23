@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from config import get_settings
 from db import get_db
 from models import User
+from services import share_service
 
 settings = get_settings()
 
@@ -64,6 +65,19 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    # A share token stands in for a bearer token and resolves to the profile's
+    # owner, so every read endpoint serves that user's data with no changes.
+    # Writes never get this far: the guard in main.py rejects them by method.
+    if share_service.is_share_token(token):
+        shared_user = share_service.resolve(db, token)
+        if shared_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This share link is no longer valid",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return shared_user
+
     username = _decode_token(token)
     user = get_user_by_username(db, username)
     if user is None:
