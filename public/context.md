@@ -389,6 +389,9 @@ How it works:
   owner's API keys, `/share/link` is token management).
 - The guard is registered before the CORS middleware so CORS stays outermost and
   a rejection reaches the browser as a real 403.
+- `/explore` is readable on a shared profile (the owner's cached
+  recommendations), but `?refresh=true` is refused: a reroll is a GET that
+  spends the owner's provider API keys and overwrites their cached set.
 
 ### Entries
 
@@ -592,7 +595,8 @@ Routes live in `frontend/app.jsx`:
   the whole app render the shared library. `frontend/share.jsx` exposes
   `useShare()` (`{ isShare, ownerUsername }`); pages use it to stop offering
   writes, and `useEntryMutations` throws for a share session as a backstop.
-  `/s/:token` (`pages/ShareLanding.jsx`) resolves a link; Explore is hidden.
+  `/s/:token` (`pages/ShareLanding.jsx`) resolves a link. Explore stays browsable
+  but inert: no search/add panel, no reroll, and the cards are not clickable.
 
 ### Preferences
 
