@@ -2,23 +2,42 @@
 # Sync the Logarium backend, apply migrations, and restart its user service.
 set -euo pipefail
 
-SERVER="${LOGARIUM_SERVER:-lingwei@192.168.20.9}"
+SERVER="${LOGARIUM_SERVER:-lingwei@192.168.20.17}"
+# Key-based auth, so a deploy never stops to ask for a password. Point
+# LOGARIUM_SSH_KEY somewhere else (or at a nonexistent path) to fall back to
+# whatever ~/.ssh/config says for the host.
+SSH_KEY="${LOGARIUM_SSH_KEY:-$HOME/.ssh/homeserver_ed25519}"
 DEST="LOG_Project/"
 SERVICE="logarium-api"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# BatchMode makes a missing/rejected key fail immediately instead of dropping to
+# a password prompt half way through a deploy.
+SSH_OPTS=(-o BatchMode=yes)
+if [[ -f "$SSH_KEY" ]]; then
+  SSH_OPTS+=(-i "$SSH_KEY" -o IdentitiesOnly=yes)
+else
+  echo "No SSH key at $SSH_KEY, falling back to ~/.ssh/config for $SERVER" >&2
+fi
+
+# Same options for rsync's transport, quoted so a path with spaces survives.
+RSYNC_SSH="ssh"
+for opt in "${SSH_OPTS[@]}"; do
+  RSYNC_SSH+=" $(printf '%q' "$opt")"
+done
+
 echo "Syncing backend to $SERVER:~/$DEST"
-rsync -avz --delete \
+rsync -avz --delete -e "$RSYNC_SSH" \
   --exclude-from="$HERE/deploy-exclude.txt" \
   "$HERE/backend/" "$SERVER:$DEST"
 
 echo "Installing the $SERVICE user service"
-ssh "$SERVER" 'mkdir -p "$HOME/.config/systemd/user"'
-rsync -avz "$HERE/logarium-api.service" \
+ssh "${SSH_OPTS[@]}" "$SERVER" 'mkdir -p "$HOME/.config/systemd/user"'
+rsync -avz -e "$RSYNC_SSH" "$HERE/logarium-api.service" \
   "$SERVER:.config/systemd/user/$SERVICE.service"
 
 echo "Checking the backend and applying database migrations"
-ssh "$SERVER" bash -s -- "$DEST" "$SERVICE" <<'REMOTE'
+ssh "${SSH_OPTS[@]}" "$SERVER" bash -s -- "$DEST" "$SERVICE" <<'REMOTE'
 set -euo pipefail
 dest="$1"
 service="$2"
