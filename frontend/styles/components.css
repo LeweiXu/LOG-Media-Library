@@ -1331,3 +1331,46 @@ html.light .skeleton-pie::after {
 /* Wide variant — the Explore page's main column is far wider than the
    add-entry modal, so the source chips get more columns there. */
 .source-select-wide .source-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+/* ── Rating definitions tool ─────────────────────────────────────────────── */
+.rating-defs-intro { margin-bottom: 14px; }
+.rating-defs-rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+.rating-def-row {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rating-def-score {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: right;
+  padding-top: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.rating-def-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 34px;
+  line-height: 1.5;
+}
+.rating-def-static {
+  margin: 0;
+  padding-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg);
+}
+.rating-defs-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}

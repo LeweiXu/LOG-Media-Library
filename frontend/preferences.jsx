@@ -15,6 +15,22 @@ export const DEFAULT_UI = {
   // Granularity for rating entry/editing across the app: the up/down step size
   // and the grid ratings snap to on save. One of 0.1, 0.5, 1.0.
   rating_step: 1.0,
+  // What each rating means to this user — free text, purely a reference (shown
+  // in Console, and on a shared profile). Keys are the rating value as a string
+  // so half-step text survives a granularity change and back. Rows rendered
+  // follow `rating_step`, except 0.1 which uses the 0.5 grid.
+  rating_definitions: {
+    '10': 'Perfect. Nothing I would change, and long enough to earn it. A lifetime favourite.',
+    '9':  'Outstanding. A couple of trivial nitpicks at most. Recommend without reservation.',
+    '8':  'Very good. Clearly flawed somewhere (pacing, an arc, the length) but the highs are high.',
+    '7':  'Good. Enjoyed it. Worth recommending to people who like the genre, not to everyone.',
+    '6':  'Decent. More good than bad. Worth the time if the premise appeals.',
+    '5':  'Mixed. The good and the bad cancel out. Finished it without regret or enthusiasm.',
+    '4':  'Weak. A few redeeming parts, but I would not tell anyone to bother.',
+    '3':  'Bad. Occasional flashes of something, mostly a slog.',
+    '2':  'Very bad. Finished out of stubbornness or morbid curiosity.',
+    '1':  'Worthless. No redeeming qualities.',
+  },
   mediums: {
     visible: [
       'Film', 'TV Show', 'Anime', 'Book', 'Manga',

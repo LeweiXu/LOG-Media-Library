@@ -35,6 +35,19 @@ export const roundToStep = (v, step) => {
   return Math.min(10, Math.max(0, parseFloat(r.toFixed(2))));
 };
 
+// The rating values a user can write a definition for, highest first. Follows
+// the chosen granularity, except 0.1 (101 rows is not a usable form) which uses
+// the 0.5 grid. 0 is skipped: an unrated entry has no rating at all.
+export function ratingScale(step) {
+  const grid = step === 0.5 || step === 0.1 ? 0.5 : 1;
+  const out = [];
+  for (let v = 10; v >= grid; v -= grid) out.push(parseFloat(v.toFixed(1)));
+  return out;
+}
+
+// Key a rating value into the rating_definitions map ("8", "8.5").
+export const ratingKey = (value) => String(parseFloat(Number(value).toFixed(1)));
+
 export const ORIGINS = ['Japanese', 'Korean', 'Chinese', 'Western', 'Other'];
 
 export const STATUS_LABELS = {

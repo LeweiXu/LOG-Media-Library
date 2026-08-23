@@ -21,6 +21,7 @@ import ResyncPanel from './components/ResyncPanel.jsx';
 import ImportPanel from './components/ImportPanel.jsx';
 import ImportAutoPanel from './components/ImportAutoPanel.jsx';
 import ImportMalPanel from './components/ImportMalPanel.jsx';
+import RatingDefinitionsPanel from './components/RatingDefinitionsPanel.jsx';
 import ExtensionDownloadSection from './components/ExtensionDownloadSection.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 
@@ -755,6 +756,9 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
                   Requires the Logarium browser extension.
                 </p>}
           </div>
+        </ToolCard>
+        <ToolCard title="Rating Definitions" desc="write down what each score means to you">
+          <div className="console-tool-body"><RatingDefinitionsPanel /></div>
         </ToolCard>
         <ToolCard title="Quick Add" desc="backfill consumed media from recommendations">
           <div className="console-tool-body">
