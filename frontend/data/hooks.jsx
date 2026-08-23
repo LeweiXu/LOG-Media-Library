@@ -10,6 +10,7 @@ import {
   entriesKey, countsKey, listsKey, statsKey, dashboardBootstrapKey,
   libraryBootstrapKey, libraryRevisionKey,
 } from './keys.js';
+import { readShareToken } from './shareSession.js';
 
 // Normalize /entries into the shape pages consume: { items, total, limit, offset }.
 export function fetchEntriesPayload(params) {
@@ -240,11 +241,17 @@ export function syncDeletedEntry(qc, id) {
   invalidateEntryData(qc);
 }
 
+// A shared profile is read-only server-side; refuse writes here too so a stray
+// affordance can't fire a request that is only going to come back 403.
+function denyWhenShared() {
+  if (readShareToken()) throw new Error('This is a read-only shared profile.');
+}
+
 export function useEntryMutations() {
   const qc = useQueryClient();
 
   const update = useMutation({
-    mutationFn: ({ id, patch }) => updateEntry(id, patch),
+    mutationFn: ({ id, patch }) => { denyWhenShared(); return updateEntry(id, patch); },
     onMutate: async ({ id, patch }) => {
       await qc.cancelQueries({ queryKey: ['entries'] });
       const snapshot = qc.getQueriesData({ queryKey: ['entries'] });
@@ -257,12 +264,12 @@ export function useEntryMutations() {
   });
 
   const create = useMutation({
-    mutationFn: (data) => createEntry(data),
+    mutationFn: (data) => { denyWhenShared(); return createEntry(data); },
     onSettled: () => invalidateEntryData(qc),
   });
 
   const remove = useMutation({
-    mutationFn: (id) => deleteEntry(id),
+    mutationFn: (id) => { denyWhenShared(); return deleteEntry(id); },
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: ['entries'] });
       const snapshot = qc.getQueriesData({ queryKey: ['entries'] });
@@ -274,12 +281,12 @@ export function useEntryMutations() {
   });
 
   const batchUpdate = useMutation({
-    mutationFn: ({ ids, patch }) => batchUpdateEntries(ids, patch),
+    mutationFn: ({ ids, patch }) => { denyWhenShared(); return batchUpdateEntries(ids, patch); },
     onSettled: () => invalidateEntryData(qc),
   });
 
   const batchDelete = useMutation({
-    mutationFn: (ids) => batchDeleteEntries(ids),
+    mutationFn: (ids) => { denyWhenShared(); return batchDeleteEntries(ids); },
     onSettled: () => invalidateEntryData(qc),
   });
 

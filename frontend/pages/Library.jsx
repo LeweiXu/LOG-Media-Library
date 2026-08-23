@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { statusLabel, fmtDate, progressPercent, progressLabel, MEDIUMS, STATUSES, ORIGINS, onCoverErrorPlaceholder, visibleMediumsFromPrefs, tableGapVars } from '../utils.jsx';
 import { useRevalidateOnFocus } from '../hooks.jsx';
+import { useShare } from '../share.jsx';
 import {
   useEntries, useEntryCounts, useCustomLists, useEntryMutations, useLibraryBootstrap,
   invalidateEntryData, syncUpdatedEntry, syncDeletedEntry, prefetchEntriesWithCovers,
@@ -113,7 +114,10 @@ export default function Library({ initialFilters = {} }) {
     return 'view';
   })();
   const [mode, setMode] = useState(initialMode);
-  const isManage = mode === 'manage';
+  // A shared profile is read-only: multi-select/batch editing is never offered,
+  // whatever the owner's saved default mode says.
+  const { isShare } = useShare();
+  const isManage = mode === 'manage' && !isShare;
   function changeMode(next) {
     // In-page toggle only — the saved default lives in Settings, so switching
     // here is transient and resets to `default_mode` on the next visit.
@@ -155,6 +159,9 @@ export default function Library({ initialFilters = {} }) {
   // View toggles + column selection are seeded from saved prefs, then mirrored
   // locally so sidebar toggles feel instant (the save is fired in the background).
   const [showActions, setShowActions] = useState(() => !!(libPrefs.quick_actions ?? DEFAULT_UI.library.quick_actions));
+  // The per-row edit/delete column never renders on a shared profile, even if
+  // the owner has quick actions switched on.
+  const showActionsCol = showActions && !isShare;
   const [fixTitle, setFixTitle] = useState(() => !!(libPrefs.fix_title ?? DEFAULT_UI.library.fix_title));
   // Which columns are currently shown. Mirrored locally so the sidebar's extra-
   // column toggles feel instant; the save is fired in the background.
@@ -619,6 +626,13 @@ export default function Library({ initialFilters = {} }) {
   }
 
   function listCell(entry) {
+    if (isShare) {
+      return (
+        <td key="custom_list" className="col-custom-list">
+          <span className="col-dim">{entry.custom_list || '—'}</span>
+        </td>
+      );
+    }
     return (
       <td key="custom_list" className="col-custom-list" onClick={ev => ev.stopPropagation()}>
         <InlineListSelect entry={entry} listNames={listNames}
@@ -665,8 +679,9 @@ export default function Library({ initialFilters = {} }) {
                 }}
                 onBlur={() => handleProgressSave(e.id, editingProgress.value)} />
             ) : (
-              <div className="progress-cell is-editable" title="Click to edit progress"
-                onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
+              <div className={`progress-cell${isShare ? '' : ' is-editable'}`}
+                title={isShare ? undefined : 'Click to edit progress'}
+                onClick={isShare ? undefined : () => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
                 {progressLabel(e)}
                 {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ '--progress-pct': `${pct}%` }} /></div>}
               </div>
@@ -674,7 +689,9 @@ export default function Library({ initialFilters = {} }) {
           </td>
         );
       }
-      case 'status': return (
+      case 'status': return isShare ? (
+        <td key={col} className="col-status"><span className={`badge badge-${e.status}`}>{statusLabel(e.status)}</span></td>
+      ) : (
         <td key={col} className="col-status" onClick={ev => ev.stopPropagation()}>
           <CustomSelect className="inline-select" value={e.status}
             options={STATUSES.map(status => ({ value: status, label: statusLabel(status) }))}
@@ -696,8 +713,9 @@ export default function Library({ initialFilters = {} }) {
               }}
               onBlur={() => handleRatingSave(e.id, editingRating.value)} />
           ) : (
-            <span className="rating-cell is-editable" title="Click to edit rating"
-              onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
+            <span className={`rating-cell${isShare ? '' : ' is-editable'}`}
+              title={isShare ? undefined : 'Click to edit rating'}
+              onClick={isShare ? undefined : () => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
               {e.rating != null ? e.rating : '—'}<span>/10</span>
             </span>
           )}
@@ -793,7 +811,7 @@ export default function Library({ initialFilters = {} }) {
     ...(isManage ? ['Sel'] : []),
     'Title',
     ...activeCols.map(c => LIB_COLS[c].label),
-    ...(showActions ? ['Actions'] : []),
+    ...(showActionsCol ? ['Actions'] : []),
   ];
 
   return (
@@ -869,7 +887,7 @@ export default function Library({ initialFilters = {} }) {
             <button type="button" className="drawer-toggle"
               onClick={() => setDrawer(d => d === 'right' ? '' : 'right')}
               aria-label="Toggle sort and tools" title="Sort & tools">⋯</button>
-            {isManage
+            {isShare ? null : isManage
               ? <button className="btn" onClick={() => openListsModal('add')}>+ Add List</button>
               : <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>}
           </div>
@@ -911,7 +929,7 @@ export default function Library({ initialFilters = {} }) {
           unlistedCount={unlistedCount}
           onChange={value => { setPage(1); setListFilter(value); }}
           onHover={prefetchList}
-          onNew={() => openListsModal('add')}
+          onNew={isShare ? undefined : () => openListsModal('add')}
           loading={loadingLists || loadingCounts}
         />
 
@@ -942,7 +960,7 @@ export default function Library({ initialFilters = {} }) {
         {!error && !loading && entries.length > 0 && isManage && (
           <div className="table-size-scope">
             <table className={`media-table library-table manage-entry-table${fixedTableClass}`} data-mobile-show={mobileShow}
-              style={tableGapVars(activeCols, { actions: showActions, select: true })}>
+              style={tableGapVars(activeCols, { actions: showActionsCol, select: true })}>
               <thead>
                 <tr>
                   <th className="col-select">
@@ -953,7 +971,7 @@ export default function Library({ initialFilters = {} }) {
                   </th>
                   <SortTh field="title">Title</SortTh>
                   {activeCols.map(renderHead)}
-                  {showActions && <th className="action-cell">Actions</th>}
+                  {showActionsCol && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -980,7 +998,7 @@ export default function Library({ initialFilters = {} }) {
                       </div>
                     </td>
                     {activeCols.map(c => renderManageCell(entry, c))}
-                    {showActions && (
+                    {showActionsCol && (
                       <td className="action-cell" onClick={ev => ev.stopPropagation()}>
                         <div className="action-cell-inner">
                           <button className="icon-btn table-action-btn"
@@ -1010,12 +1028,12 @@ export default function Library({ initialFilters = {} }) {
         {!error && !loading && entries.length > 0 && !isManage && (
           <div className="table-size-scope">
             <table className={`media-table library-table${fixedTableClass}`} data-mobile-show={mobileShow}
-              style={tableGapVars(activeCols, { actions: showActions })}>
+              style={tableGapVars(activeCols, { actions: showActionsCol })}>
               <thead>
                 <tr>
                   <SortTh field="title">Title</SortTh>
                   {activeCols.map(renderHead)}
-                  {showActions && <th className="action-cell">Actions</th>}
+                  {showActionsCol && <th className="action-cell">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1032,7 +1050,7 @@ export default function Library({ initialFilters = {} }) {
                         </div>
                       </td>
                       {activeCols.map(c => renderViewCell(e, c))}
-                      {showActions && (
+                      {showActionsCol && (
                         <td className="action-cell" onClick={ev => ev.stopPropagation()}>
                           <div className="action-cell-inner">
                             {isConfirmDel ? (
@@ -1098,18 +1116,22 @@ export default function Library({ initialFilters = {} }) {
         )}
 
         <p className="panel-title library-view-title">View</p>
-        <button type="button" className={`source-chip library-view-chip${isManage ? ' is-on' : ''}`}
-          onClick={() => changeMode(isManage ? 'view' : 'manage')}
-          title="Select multiple entries to batch-edit or delete">
-          <span className="source-box">{isManage ? '[x]' : '[ ]'}</span>
-          Multi-select
-        </button>
-        <button type="button" className={`source-chip library-view-chip${showActions ? ' is-on' : ''}`}
-          onClick={toggleQuickActions}
-          title="Show per-row action buttons in the table">
-          <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
-          Quick Actions
-        </button>
+        {!isShare && (
+          <>
+            <button type="button" className={`source-chip library-view-chip${isManage ? ' is-on' : ''}`}
+              onClick={() => changeMode(isManage ? 'view' : 'manage')}
+              title="Select multiple entries to batch-edit or delete">
+              <span className="source-box">{isManage ? '[x]' : '[ ]'}</span>
+              Multi-select
+            </button>
+            <button type="button" className={`source-chip library-view-chip${showActions ? ' is-on' : ''}`}
+              onClick={toggleQuickActions}
+              title="Show per-row action buttons in the table">
+              <span className="source-box">{showActions ? '[x]' : '[ ]'}</span>
+              Quick Actions
+            </button>
+          </>
+        )}
         <button type="button" className={`source-chip library-view-chip${!fixTitle ? ' is-on' : ''}`}
           onClick={toggleFixTitle}
           title="Use fluid table sizing instead of the compact fixed table layout">

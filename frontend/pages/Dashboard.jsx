@@ -11,6 +11,7 @@ import { coverImgUrl, prefetchFullCover } from '../api.jsx';
 import { statusLabel, badgeClass, fmtDate, progressLabel, progressPercent, timeAgo, STATUSES, ORIGINS, logDotClass, onCoverErrorPlaceholder, tableGapVars } from '../utils.jsx';
 import AddEntryModal from './components/AddEntryModal.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
+import { useShare } from '../share.jsx';
 import { SkeletonActivity, SkeletonLine, SkeletonSidebarRows, SkeletonStatGrid, SkeletonTable } from './components/Skeletons.jsx';
 import ExtensionUpdateLink from './components/ExtensionUpdateLink.jsx';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
@@ -100,6 +101,7 @@ export default function DashboardAlt({ onFilterChange }) {
   const dash = prefs.dashboard || DEFAULT_UI.dashboard;
   const sidebarClass = `${dash.sidebars?.left ? ' always-show-left' : ''}${dash.sidebars?.right ? ' always-show-right' : ''}`;
   const qc = useQueryClient();
+  const { isShare } = useShare();
   const { update } = useEntryMutations();
   const [showAdd,         setShowAdd]         = useState(false);
   const [detailEntry,     setDetailEntry]     = useState(null);
@@ -273,8 +275,9 @@ export default function DashboardAlt({ onFilterChange }) {
                 onKeyDown={ev => { if (ev.key === 'Enter') handleProgressSave(e.id, editingProgress.value); if (ev.key === 'Escape') setEditingProgress(null); }}
                 onBlur={() => handleProgressSave(e.id, editingProgress.value)} />
             ) : (
-              <div className="progress-cell is-editable" title="Click to edit progress"
-                onClick={() => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
+              <div className={`progress-cell${isShare ? '' : ' is-editable'}`}
+                title={isShare ? undefined : 'Click to edit progress'}
+                onClick={isShare ? undefined : () => setEditingProgress({ id: e.id, value: String(e.progress ?? '') })}>
                 {progressLabel(e)}
                 {pct > 0 && <div className="progress-mini"><div className="progress-mini-fill" style={{ '--progress-pct': `${pct}%` }} /></div>}
               </div>
@@ -293,8 +296,9 @@ export default function DashboardAlt({ onFilterChange }) {
                 onKeyDown={ev => { if (ev.key === 'Enter') handleRatingSave(e.id, editingRating.value); if (ev.key === 'Escape') setEditingRating(null); }}
                 onBlur={() => handleRatingSave(e.id, editingRating.value)} />
             ) : (
-              <span className="rating-cell is-editable" title="Click to edit rating"
-                onClick={() => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
+              <span className={`rating-cell${isShare ? '' : ' is-editable'}`}
+                title={isShare ? undefined : 'Click to edit rating'}
+                onClick={isShare ? undefined : () => setEditingRating({ id: e.id, value: String(e.rating ?? '') })}>
                 {e.rating != null ? e.rating : '—'}<span>/10</span>
               </span>
             )}
@@ -302,7 +306,7 @@ export default function DashboardAlt({ onFilterChange }) {
         );
       }
       case 'status':
-        if (statusMode === 'badge') {
+        if (statusMode === 'badge' || isShare) {
           return <td key={col} className="col-status"><span className={badgeClass(e.status)}>{statusLabel(e.status)}</span></td>;
         }
         return (
@@ -422,7 +426,7 @@ export default function DashboardAlt({ onFilterChange }) {
               aria-label="Toggle summary"
               title="Summary"
             >⋯</button>
-            <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>
+            {!isShare && <button className="btn" onClick={() => setShowAdd(true)}>+ Add Entry</button>}
           </div>
         </div>
 

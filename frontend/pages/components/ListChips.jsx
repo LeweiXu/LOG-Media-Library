@@ -44,9 +44,12 @@ export default function ListChips({
         </span>
       )}
       {lists.map(list => chip(list.name, list.name, list.count, value === list.name))}
-      <button type="button" className="list-chip list-chip-new" onClick={onNew} title="Create or manage custom lists">
-        + New
-      </button>
+      {/* No onNew (shared profile) means list creation isn't on offer. */}
+      {onNew && (
+        <button type="button" className="list-chip list-chip-new" onClick={onNew} title="Create or manage custom lists">
+          + New
+        </button>
+      )}
     </div>
   );
 }

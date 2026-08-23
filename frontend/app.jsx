@@ -10,6 +10,9 @@ import {
   prefetchDashboard, prefetchLibraryBootstrap, prefetchStats,
 } from './data/hooks.jsx';
 import { defaultLibraryParams } from './data/keys.js';
+import { ShareProvider } from './share.jsx';
+import ShareLanding from './pages/ShareLanding.jsx';
+import { readShareSession, clearShareSession } from './data/shareSession.js';
 
 // Each page is its own lazily-loaded chunk (this splits recharts out of the main
 // bundle, into Statistics'). The loader fns are reused for hover/idle preloading,
@@ -53,7 +56,7 @@ function prefetchRouteData(path, prefs) {
 // The authenticated topbar nav. Split into its own component so it can read UI
 // prefs (for Library's default query key) and drive hover/idle preloading — App
 // itself sits above PreferencesProvider and can't use the hook.
-function TopNav({ onLibraryClick }) {
+function TopNav({ onLibraryClick, isShare }) {
   const { prefs } = usePreferences();
 
   useEffect(() => {
@@ -100,7 +103,7 @@ function TopNav({ onLibraryClick }) {
     <nav className="topbar-nav">
       {link('/dashboard', 'Dashboard')}
       {link('/library', 'Library', { onClick: onLibraryClick })}
-      {link('/explore', 'Explore')}
+      {!isShare && link('/explore', 'Explore')}
       {link('/statistics', 'Statistics')}
       {link('/console', 'Console')}
     </nav>
@@ -135,8 +138,14 @@ export default function App() {
   const [username,      setUsername]      = useState(() => localStorage.getItem('auth_username') || '');
   const [showAuthModal,  setShowAuthModal]  = useState(false);
   const [authModalTab,   setAuthModalTab]   = useState('login');
+  // Shared-profile session for this tab (someone else's library, read-only).
+  const [share,          setShare]          = useState(() => readShareSession());
 
-  const isAuthenticated = Boolean(token);
+  const isShare = Boolean(share);
+  // A shared profile is "authenticated" for routing purposes: the pages render
+  // normally, they just have no writes on offer.
+  const isAuthenticated = Boolean(token) || isShare;
+  const viewedUsername = isShare ? share.username : username;
 
   // The landing page (logged-out) is always the static dark / blue terminal
   // look — the user's saved theme & accent only apply once authenticated, and
@@ -161,6 +170,20 @@ export default function App() {
     setUsername(newUsername);
     setShowAuthModal(false);
     navigate('/dashboard');
+  }
+
+  function exitShare() {
+    clearShareSession();
+    queryClient.clear();
+    setShare(null);
+    navigate('/');
+  }
+
+  function handleShareResolved(session) {
+    // Someone else's library is about to render: drop anything cached for this
+    // tab's previous session so no rows leak across profiles.
+    queryClient.clear();
+    setShare(session);
   }
 
   function handleLogout() {
@@ -220,7 +243,8 @@ export default function App() {
   }
 
   return (
-    <PreferencesProvider authKey={isAuthenticated ? username : ''}>
+    <ShareProvider session={share}>
+    <PreferencesProvider authKey={isShare ? `share:${share.username}` : (isAuthenticated ? username : '')}>
     <DisplayPreferenceSync
       isAuthenticated={isAuthenticated}
       onThemeChange={setTheme}
@@ -232,14 +256,23 @@ export default function App() {
         <span className="topbar-logo">LOG</span>
         {isAuthenticated && <span className="topbar-sep">|</span>}
 
-        {isAuthenticated && <TopNav onLibraryClick={() => setLibraryFilters({})} />}
+        {isAuthenticated && <TopNav onLibraryClick={() => setLibraryFilters({})} isShare={isShare} />}
 
         <div className="topbar-right">
           {online === null && <span className="text-dim">connecting…</span>}
           {online === true  && <span className="online">● online</span>}
           {online === false && <span className="offline">● offline</span>}
           <span className="text-dim">{BASE.slice(BASE.indexOf('//') + 2)}</span>
-          {isAuthenticated ? (
+          {isShare ? (
+            <>
+              <span className="topbar-user topbar-user-shared">
+                <span className="topbar-user-label">viewing</span>
+                <span className="topbar-user-name">{share.username}</span>
+                <span className="topbar-user-ro">read-only</span>
+              </span>
+              <button type="button" className="btn-logout" onClick={exitShare}>exit</button>
+            </>
+          ) : isAuthenticated ? (
             <>
               <span className="topbar-user">
                 <span className="topbar-user-name">{username}</span>
@@ -275,34 +308,36 @@ export default function App() {
         />
         <Route path="/dashboard"
           element={isAuthenticated
-            ? <Dashboard key={username} onFilterChange={handleFilterChange} />
+            ? <Dashboard key={viewedUsername} onFilterChange={handleFilterChange} />
             : <Navigate to="/" replace />}
         />
         <Route path="/library"
           element={isAuthenticated
-            ? <Library key={username + JSON.stringify(libraryFilters)} initialFilters={libraryFilters} />
+            ? <Library key={viewedUsername + JSON.stringify(libraryFilters)} initialFilters={libraryFilters} />
             : <Navigate to="/" replace />}
         />
         <Route path="/explore"
-          element={isAuthenticated
-            ? <Explore key={username} />
-            : <Navigate to="/" replace />}
+          element={!isAuthenticated
+            ? <Navigate to="/" replace />
+            : isShare
+            ? <Navigate to="/dashboard" replace />
+            : <Explore key={username} />}
         />
         {/* Manage merged into Library — keep the old path working for bookmarks. */}
         <Route path="/manage"
           element={isAuthenticated
-            ? <Library key={`${username}:manage`} initialFilters={{ mode: 'manage' }} />
+            ? <Library key={`${viewedUsername}:manage`} initialFilters={{ mode: 'manage' }} />
             : <Navigate to="/" replace />}
         />
         <Route path="/statistics"
           element={isAuthenticated
-            ? <Statistics key={username} />
+            ? <Statistics key={viewedUsername} />
             : <Navigate to="/" replace />}
         />
         <Route path="/console"
           element={isAuthenticated
             ? <Console
-                key={username}
+                key={viewedUsername}
                 theme={theme}
                 onThemeChange={t => setTheme(t === 'light' ? 'light' : 'dark')}
                 accent={accent}
@@ -316,6 +351,9 @@ export default function App() {
               />
             : <Navigate to="/" replace />}
         />
+        {/* A shared profile link. Resolves the token, then runs the whole app
+            against that user's library in read-only mode. */}
+        <Route path="/s/:token" element={<ShareLanding onResolved={handleShareResolved} />} />
         {/* Settings merged into Console — keep the old path working for bookmarks. */}
         <Route path="/settings" element={<Navigate to="/console" replace />} />
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />
@@ -364,5 +402,6 @@ export default function App() {
       </footer>}
     </div>
     </PreferencesProvider>
+    </ShareProvider>
   );
 }

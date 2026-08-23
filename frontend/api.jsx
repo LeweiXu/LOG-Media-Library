@@ -1,6 +1,10 @@
+import { readShareToken } from './data/shareSession.js';
+
 export const BASE = import.meta.env.VITE_API_BASE;
 
-const getToken = () => localStorage.getItem('auth_token');
+// A shared-profile token (per tab) wins over the signed-in account's token, so
+// opening someone's share link renders their library without touching your login.
+const getToken = () => readShareToken() || localStorage.getItem('auth_token');
 const BACKEND_NETWORK_ERROR_KEY = 'logarium_backend_network_error';
 
 export function markBackendNetworkError() {
@@ -41,6 +45,16 @@ async function req(path, options = {}) {
   if (res.status === 204) return null;
   return res.json();
 }
+
+// ── Share profile ─────────────────────────────────────────────────────────────
+
+// Who the current bearer token belongs to, and whether it can write. Used by
+// the /s/<token> route to resolve a link (and to reject a dead one).
+export const getShareSession   = ()  => req('/share/session');
+export const getShareLink      = ()  => req('/share/link');
+export const enableShareLink   = ()  => req('/share/link', { method: 'POST' });
+export const regenerateShareLink = () => req('/share/link/regenerate', { method: 'POST' });
+export const disableShareLink  = ()  => req('/share/link', { method: 'DELETE' });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { deleteEntry, fetchByUrl, fetchChapterCount, fetchImdbDetail } from '../../api.jsx';
+import { useShare } from '../../share.jsx';
 import { statusLabel, fmtDate, progressLabel, onCoverErrorPlaceholder } from '../../utils.jsx';
 import { coverImgUrl } from '../../api.jsx';
 import EntryFormModal from './EntryFormModal.jsx';
@@ -50,7 +51,9 @@ function cleanUrl(url) {
 }
 
 export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted, initialEditing = false }) {
-  const [editing,         setEditing]         = useState(initialEditing);
+  // A shared profile can open an entry to read it, but never to change it.
+  const { isShare } = useShare();
+  const [editing,         setEditing]         = useState(initialEditing && !isShare);
   const [current,         setCurrent]         = useState(entry);
   const [confirmDelete,   setConfirmDelete]   = useState(false);
   const [deleting,        setDeleting]        = useState(false);
@@ -233,6 +236,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
               {deleteError || refreshError}
             </div>
           )}
+          {!isShare && (
           <div className="entry-detail-actions">
             {confirmDelete ? (
               <div className="entry-detail-confirm">
@@ -264,6 +268,7 @@ export default function EntryDetailModal({ entry, onClose, onUpdated, onDeleted,
               <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

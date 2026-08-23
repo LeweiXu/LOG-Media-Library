@@ -353,3 +353,36 @@
 .icon-btn:hover        { border-color: var(--text); color: var(--text); }
 .icon-btn.danger:hover { border-color: var(--red);  color: var(--red); }
 .icon-btn.is-on        { border-color: var(--accent); color: var(--accent); }
+
+/* ── Shared profile (read-only view of someone else's library) ────────────── */
+.topbar-right .topbar-user-shared {
+  gap: 6px;
+  border: 1px solid var(--accent);
+  padding: 2px 8px;
+}
+.topbar-right .topbar-user-shared .topbar-user-label,
+.topbar-right .topbar-user-shared .topbar-user-ro { color: var(--dim); }
+.topbar-right .topbar-user-shared .topbar-user-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.share-landing {
+  max-width: 520px;
+  margin: 18vh auto 0;
+  padding: 24px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: center;
+}
+.share-landing-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+.share-landing-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--dim);
+}
