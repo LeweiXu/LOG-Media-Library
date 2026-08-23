@@ -56,7 +56,7 @@ function prefetchRouteData(path, prefs) {
 // The authenticated topbar nav. Split into its own component so it can read UI
 // prefs (for Library's default query key) and drive hover/idle preloading — App
 // itself sits above PreferencesProvider and can't use the hook.
-function TopNav({ onLibraryClick, isShare }) {
+function TopNav({ onLibraryClick }) {
   const { prefs } = usePreferences();
 
   useEffect(() => {
@@ -103,7 +103,7 @@ function TopNav({ onLibraryClick, isShare }) {
     <nav className="topbar-nav">
       {link('/dashboard', 'Dashboard')}
       {link('/library', 'Library', { onClick: onLibraryClick })}
-      {!isShare && link('/explore', 'Explore')}
+      {link('/explore', 'Explore')}
       {link('/statistics', 'Statistics')}
       {link('/console', 'Console')}
     </nav>
@@ -258,7 +258,7 @@ export default function App() {
         <span className="topbar-logo">LOG</span>
         {isAuthenticated && <span className="topbar-sep">|</span>}
 
-        {isAuthenticated && <TopNav onLibraryClick={() => setLibraryFilters({})} isShare={isShare} />}
+        {isAuthenticated && <TopNav onLibraryClick={() => setLibraryFilters({})} />}
 
         <div className="topbar-right">
           {online === null && <span className="text-dim">connecting…</span>}
@@ -319,11 +319,9 @@ export default function App() {
             : <Navigate to="/" replace />}
         />
         <Route path="/explore"
-          element={!isAuthenticated
-            ? <Navigate to="/" replace />
-            : isShare
-            ? <Navigate to="/dashboard" replace />
-            : <Explore key={username} />}
+          element={isAuthenticated
+            ? <Explore key={viewedUsername} />
+            : <Navigate to="/" replace />}
         />
         {/* Manage merged into Library — keep the old path working for bookmarks. */}
         <Route path="/manage"

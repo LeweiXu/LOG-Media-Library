@@ -102,9 +102,13 @@ app = FastAPI(
 # browser as an opaque CORS failure instead).
 SHARE_READ_METHODS = {"GET", "HEAD", "OPTIONS"}
 # GETs a viewer must not reach even though they are reads: the account email,
-# a full library dump, the owner's API keys via search/explore, and the token
-# management route itself.
-SHARE_BLOCKED_PATHS = ("/backup/status", "/entries/export", "/search", "/explore", "/share/link")
+# a full library dump, the owner's API keys via search, and the token management
+# route itself.
+SHARE_BLOCKED_PATHS = ("/backup/status", "/entries/export", "/search", "/share/link")
+# Explore itself is readable on a shared profile (it shows the owner's cached
+# recommendations), but a reroll is a GET that spends their provider API keys
+# and overwrites their cached set, so that one query is refused.
+SHARE_TRUTHY = {"1", "true", "yes", "on"}
 
 
 @app.middleware("http")
@@ -122,6 +126,11 @@ async def share_link_guard(request: Request, call_next):
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "Not available on a shared profile."},
+            )
+        if path == "/explore" and request.query_params.get("refresh", "").lower() in SHARE_TRUTHY:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Rerolling is not available on a shared profile."},
             )
     return await call_next(request)
 

@@ -754,6 +754,10 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
 
         {/* ── Library tools — each a collapsed card; opening one mounts (and runs) it ── */}
         <p className="console-group-label">Library Tools</p>
+        <ToolCard title="Rating Definitions" desc="what each score means to this library"
+          unlocked defaultOpen={isShare}>
+          <div className="console-tool-body"><RatingDefinitionsPanel readOnly={isShare} /></div>
+        </ToolCard>
         <ToolCard title="Manage Lists" desc="build, rename or delete custom lists">
           <div className="console-tool-body">
             <ListsPanel initialTab="manage" existingLists={customLists}
@@ -778,20 +782,16 @@ export default function Console({ theme, onThemeChange, accent, onAccentChange, 
             </div>
           </ToolCard>
         )}
-        <ToolCard title="Rating Definitions" desc="what each score means to this library"
-          unlocked defaultOpen={isShare}>
-          <div className="console-tool-body"><RatingDefinitionsPanel readOnly={isShare} /></div>
+        <ToolCard title="Quick Add" desc="backfill consumed media from recommendations">
+          <div className="console-tool-body">
+            <QuickAddModal inline onCreated={reloadLists} />
+          </div>
         </ToolCard>
         {!isShare && (
           <ToolCard title="Share Profile" desc="a read-only link to your library">
             <div className="console-tool-body"><SharePanel /></div>
           </ToolCard>
         )}
-        <ToolCard title="Quick Add" desc="backfill consumed media from recommendations">
-          <div className="console-tool-body">
-            <QuickAddModal inline onCreated={reloadLists} />
-          </div>
-        </ToolCard>
 
         {/* ── Import / Export ── */}
         <p className="console-group-label">Import / Export</p>

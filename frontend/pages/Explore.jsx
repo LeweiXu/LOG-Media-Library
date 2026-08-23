@@ -14,6 +14,7 @@ import AddEntryPanel from './components/AddEntryPanel.jsx';
 import EntryDetailModal from './components/EntryDetailModal.jsx';
 import { useExtensionPresent, extensionGoodreadsExplore, extensionNuExplore, mergeResults } from '../extensionBridge.js';
 import { usePreferences, DEFAULT_UI } from '../preferences.jsx';
+import { useShare } from '../share.jsx';
 
 // 32-bit unsigned integer; backend re-seeds Python's RNG with it on a reroll.
 const newSeed = () => Math.floor(Math.random() * 0xffffffff);
@@ -272,6 +273,9 @@ function rerollMediumTask(targetMedium, want, personalize, visibleMediums, extPr
 
 export default function Explore() {
   ensureExploreCacheOwner();
+  // A shared profile can browse the owner's recommendations but not act on them:
+  // no adding, no rerolling (a reroll spends their provider API keys), no search.
+  const { isShare } = useShare();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -551,7 +555,7 @@ export default function Explore() {
   const thisRerollBusy = medium ? thisMediumRerolling : rerollAllBusy;
   const rerollLabel = medium ? `Reroll ${medium}` : 'Reroll All';
 
-  const rerollControl = confirmReroll ? (
+  const rerollControl = isShare ? null : confirmReroll ? (
     <div className="explore-reroll-confirm">
       <span className="explore-reroll-confirm-msg">This may take a while.</span>
       <div className="explore-reroll-confirm-actions">
@@ -735,8 +739,8 @@ export default function Explore() {
           </div>
         </div>
 
-        {/* Always-on search / add section. */}
-        <AddEntryPanel
+        {/* Always-on search / add section. Not offered on a shared profile. */}
+        {!isShare && <AddEntryPanel
           onCreated={handleAddPanelCreated}
           medium={medium}
           selectedSources={selectedSources}
@@ -744,7 +748,7 @@ export default function Explore() {
           onActiveChange={setSearchActive}
           initialQuery={initialUrlQuery.current}
           onSearch={handlePanelSearch}
-        />
+        />}
 
         {/* Recommendations — hidden while a search/URL query is active. */}
         {!searchActive && (
@@ -779,7 +783,7 @@ export default function Explore() {
           <div className="state-block">
             <div className="state-title">Recommendations unavailable.</div>
             <div className="state-detail">{rerollError || 'The reroll did not return any recommendations.'}</div>
-            {items.length > 0 && (
+            {items.length > 0 && !isShare && (
               <button className="btn btn-outline state-retry-btn" onClick={handleRestore}>
                 Display previous results
               </button>
@@ -809,7 +813,7 @@ export default function Explore() {
             const errMsg  = isError ? state.slice('error:'.length) : '';
             const addedAs = isAdded ? state.slice('added:'.length) : '';
             const owned       = item.in_library || isAdded;
-            const interactive = !owned || !!addedEntries[key];
+            const interactive = !isShare && (!owned || !!addedEntries[key]);
             const hasMatches  = personalised && item.matches && item.matches.length > 0;
 
             return (
@@ -817,8 +821,8 @@ export default function Explore() {
                        className={'explore-card' + (owned ? ' is-owned' : '') + (interactive ? '' : ' not-interactive')}
                        role={interactive ? 'button' : undefined}
                        tabIndex={interactive ? 0 : undefined}
-                       onClick={() => handleCardClick(key, item, owned)}
-                       onKeyDown={e => handleCardKeyDown(e, key, item, owned)}>
+                       onClick={isShare ? undefined : () => handleCardClick(key, item, owned)}
+                       onKeyDown={isShare ? undefined : e => handleCardKeyDown(e, key, item, owned)}>
                 <div className="explore-cover">
                   {item.cover_url
                     ? <img
@@ -939,7 +943,7 @@ export default function Explore() {
             </div>
           </>
         )}
-        <div className="explore-reroll-wrap">{rerollControl}</div>
+        {rerollControl && <div className="explore-reroll-wrap">{rerollControl}</div>}
       </aside>
 
       {pendingAdd && (
