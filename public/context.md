@@ -289,6 +289,9 @@ Backend scripts:
 - `backup_freq`: real backend column, used by backup scheduling/behavior.
 - `last_backup_at`.
 - `ui_preferences`: JSON document for all client-facing layout/preferences.
+- `share_token`: nullable, unique, indexed. `NULL` = profile sharing off.
+  Otherwise a `shr_`-prefixed opaque token that grants read-only access to this
+  user's library (see Share Profile below).
 
 `Entry`:
 
@@ -364,6 +367,28 @@ Settings shape:
 - Console's settings import/export uses this API for `{ backup_freq, ui }` and
   also serializes `localStorage.available_sources`, the one settings value that
   is not server-backed.
+
+### Share Profile
+
+- `GET /share/session` - who the current bearer token belongs to, and whether it
+  is read-only. The only share route a share token may call.
+- `GET /share/link` - owner's link state, `{ enabled, token }`.
+- `POST /share/link` - turn sharing on (keeps an existing token).
+- `POST /share/link/regenerate` - issue a new token; the previous link dies.
+- `DELETE /share/link` - turn sharing off.
+
+How it works:
+
+- A `shr_`-prefixed token is accepted anywhere a bearer token is and resolves to
+  the owning user (`services/auth_service.get_current_user`), so every read
+  endpoint serves that user's data unchanged.
+- Read-only is enforced by one chokepoint, the `share_link_guard` middleware in
+  `main.py`: any method other than GET/HEAD/OPTIONS is 403, as are the GETs in
+  `SHARE_BLOCKED_PATHS` (`/backup/status` carries the account email,
+  `/entries/export` is a full library dump, `/search` and `/explore` spend the
+  owner's API keys, `/share/link` is token management).
+- The guard is registered before the CORS middleware so CORS stays outermost and
+  a rejection reaches the browser as a real 403.
 
 ### Entries
 
@@ -537,8 +562,12 @@ Routes live in `frontend/app.jsx`:
 - Contains extension download/update UI, theme/accent controls, per-page layout
   settings, visible-medium selection, Explore settings, search-source
   availability, password change, backup controls, entry/settings import/export,
-  custom lists, duplicates, cover caching, Quick Add, resync, and data wipe
-  tools.
+  custom lists, duplicates, cover caching, Quick Add, resync, rating
+  definitions, share profile, and data wipe tools.
+- Viewed through a share link the whole page renders greyed and inert (a
+  `LockContext` every `Section`/`ToolCard` reads). Rating Definitions opts out
+  with `unlocked` and auto-expands read-only; the extension cards and the Share
+  Profile card are not rendered at all.
 - Former modals are now mostly inline/collapsible `*Panel` components.
 
 `LandingPage.jsx`:
@@ -555,7 +584,15 @@ Routes live in `frontend/app.jsx`:
 - `app.jsx` performs a health check every 30 seconds.
 - Theme is a root `light` class.
 - Accent is `document.documentElement.dataset.accent`.
-- Theme/accent are persisted only while authenticated.
+- Theme/accent are persisted only while authenticated, and never while viewing
+  a shared profile (the owner's theme applies for the visit only).
+- Shared-profile session lives in `sessionStorage` (`share_token`,
+  `share_username`, see `frontend/data/shareSession.js`), so it is per-tab and
+  ends with the tab. `api.jsx` prefers it over `auth_token`, which is what makes
+  the whole app render the shared library. `frontend/share.jsx` exposes
+  `useShare()` (`{ isShare, ownerUsername }`); pages use it to stop offering
+  writes, and `useEntryMutations` throws for a share session as a backstop.
+  `/s/:token` (`pages/ShareLanding.jsx`) resolves a link; Explore is hidden.
 
 ### Preferences
 
@@ -568,6 +605,8 @@ Current `DEFAULT_UI` shape:
   - `theme`
   - `accent`
 - `rating_step`
+- `rating_definitions` (map of rating value string to the user's own free-text
+  definition; rows follow `rating_step`, except 0.1 which uses the 0.5 grid)
 - `mediums`
   - `visible`
 - `library`
