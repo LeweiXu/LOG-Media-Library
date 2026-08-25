@@ -14,7 +14,7 @@ from schemas import (
     EntryCountsResponse, EntryCreate, EntryListResponse, EntryRead, EntryUpdate,
     ImportConfirmRequest, ImportConfirmResponse, ImportPreviewResponse,
     SearchResult, ShareLink, ShareSession, StatsResponse,
-    UserCreate, UserRead, Token, ChangePassword,
+    UserCreate, UserRead, Token, DemoToken, ChangePassword,
     UserSettings, UserSettingsUpdate,
     DuplicateCheckRequest, DuplicateCheckResponse,
     DashboardBootstrapResponse, LibraryBootstrapResponse, LibraryRevisionResponse,
@@ -153,6 +153,33 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
             headers={"WWW-Authenticate": "Bearer"},
         )
     return Token(access_token=auth_service.create_token(user.username))
+
+@router.post("/auth/demo", response_model=DemoToken)
+def demo_login(db: Session = Depends(get_db)):
+    """Hand out a session for the public demo account, no credentials needed.
+
+    The demo user is public on purpose (its credentials are printed on the
+    landing page) and everything in it is wiped and re-seeded from the
+    maintainer's library every 24h, so minting sessions for it freely costs
+    nothing. Only the single account named by DEMO_USERNAME is ever reachable
+    this way; blank that setting to switch the endpoint off.
+    """
+    username = (get_app_settings().DEMO_USERNAME or "").strip()
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No demo account is configured on this server.",
+        )
+    user = auth_service.get_user_by_username(db, username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The demo account has not been set up on this server.",
+        )
+    return DemoToken(
+        access_token=auth_service.create_token(user.username),
+        username=user.username,
+    )
 
 @router.post("/auth/change-password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password(

@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "changeme-replace-with-a-strong-random-secret"
     JWT_ALGORITHM: str = "HS256"
 
+    # Public demo account. /auth/demo hands out a normal session for this user
+    # to anyone who asks, which is what makes the site's /demo link work. The
+    # account is public by design (credentials are in the README) and is wiped
+    # and re-seeded every 24h by scripts/demo_script.py. Set to "" to turn the
+    # endpoint off entirely.
+    DEMO_USERNAME: str = "demo_user"
+
     # External API keys (all optional)
     TMDB_API_KEY: str = ""
     IGDB_CLIENT_ID: str = ""

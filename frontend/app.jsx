@@ -12,6 +12,7 @@ import {
 import { defaultLibraryParams } from './data/keys.js';
 import { ShareProvider } from './share.jsx';
 import ShareLanding from './pages/ShareLanding.jsx';
+import DemoLanding from './pages/DemoLanding.jsx';
 import { readShareSession, clearShareSession } from './data/shareSession.js';
 
 // Each page is its own lazily-loaded chunk (this splits recharts out of the main
@@ -168,6 +169,10 @@ export default function App() {
     // on any auth change to prevent one account seeing another's cached rows.
     clearUserSessionData(newUsername);
     queryClient.clear();
+    // Signing in ends any shared-profile session this tab was in, so the app
+    // doesn't stay in read-only mode on top of a real account.
+    clearShareSession();
+    setShare(null);
     setToken(newToken);
     setUsername(newUsername);
     setShowAuthModal(false);
@@ -354,6 +359,8 @@ export default function App() {
         {/* A shared profile link. Resolves the token, then runs the whole app
             against that user's library in read-only mode. */}
         <Route path="/s/:token" element={<ShareLanding onResolved={handleShareResolved} />} />
+        {/* Signs straight into the public demo account. */}
+        <Route path="/demo" element={<DemoLanding onAuth={handleAuth} />} />
         {/* Settings merged into Console — keep the old path working for bookmarks. */}
         <Route path="/settings" element={<Navigate to="/console" replace />} />
         <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />} />

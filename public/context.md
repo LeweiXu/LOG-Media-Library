@@ -349,6 +349,11 @@ Authorization: Bearer <token>
 
 - `POST /auth/register`
 - `POST /auth/login`
+- `POST /auth/demo` - mints a normal (writable) session for the public demo
+  account named by `settings.DEMO_USERNAME`, no credentials required. Backs the
+  frontend's `/demo` route. 404s when the setting is blank or the account does
+  not exist. The account is public by design and `scripts/demo_script.py` wipes
+  and re-seeds it every 24h.
 - `POST /auth/change-password`
 - `GET /auth/me/settings`
 - `PUT /auth/me/settings`
@@ -595,7 +600,10 @@ Routes live in `frontend/app.jsx`:
   the whole app render the shared library. `frontend/share.jsx` exposes
   `useShare()` (`{ isShare, ownerUsername }`); pages use it to stop offering
   writes, and `useEntryMutations` throws for a share session as a backstop.
-  `/s/:token` (`pages/ShareLanding.jsx`) resolves a link. Explore stays browsable
+  `/s/:token` (`pages/ShareLanding.jsx`) resolves a link.
+- `/demo` (`pages/DemoLanding.jsx`) signs the visitor into the demo account via
+  `POST /auth/demo` and lands on the dashboard. It clears any share session in
+  the tab first, since `api.jsx` would otherwise keep preferring that token. Explore stays browsable
   but inert: no search/add panel, no reroll, and the cards are not clickable.
 
 ### Preferences

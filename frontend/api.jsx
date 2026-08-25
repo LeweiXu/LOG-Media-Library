@@ -58,6 +58,18 @@ export const disableShareLink  = ()  => req('/share/link', { method: 'DELETE' })
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
+// Start a session on the public demo account. Deliberately a bare fetch with no
+// Authorization header: /demo must work while a share session (or another
+// account's token) is live in the tab, and the share guard refuses POSTs.
+export async function demoLogin() {
+  const res = await fetch(`${BASE}/auth/demo`, { method: 'POST' });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  }
+  return res.json(); // { access_token, token_type, username }
+}
+
 export async function login(username, password) {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',

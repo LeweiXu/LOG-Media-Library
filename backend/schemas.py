@@ -199,6 +199,10 @@ class Token(BaseModel):
     access_token: str
     token_type:   str = "bearer"
 
+class DemoToken(Token):
+    """Response for /auth/demo: a normal session, plus who it belongs to."""
+    username: str
+
 class ChangePassword(BaseModel):
     current_password: str
     new_password:     str = Field(..., min_length=6)

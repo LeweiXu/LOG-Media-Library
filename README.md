@@ -19,7 +19,9 @@ three to land in the same backlog, count toward the same yearly stats, and be
 discoverable from the same search.
 
 **Public demo:** [https://logarium.vercel.app](https://logarium.vercel.app)
-Register an account, or sign in with the throwaway demo user:
+Open [https://logarium.vercel.app/demo](https://logarium.vercel.app/demo) to be
+signed straight into the demo account, or register your own. The demo
+credentials also work on the normal login form:
 
 - username: `demo_user`
 - password: `password1`
