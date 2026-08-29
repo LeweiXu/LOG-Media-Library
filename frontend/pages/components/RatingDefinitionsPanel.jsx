@@ -11,7 +11,7 @@ import { ratingScale, ratingKey } from '../../utils.jsx';
 // it hits the API so a paragraph isn't one PUT per keystroke. `readOnly` renders
 // the same layout as static text (shared-profile view).
 
-const SAVE_DELAY_MS = 600;
+const SAVE_DELAY_MS = 1200;
 
 export default function RatingDefinitionsPanel({ readOnly = false }) {
   const { prefs, updateUi } = usePreferences();
