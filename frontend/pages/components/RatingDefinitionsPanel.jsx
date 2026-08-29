@@ -106,7 +106,8 @@ export default function RatingDefinitionsPanel({ readOnly = false }) {
           <button type="button" className="btn btn-outline" onClick={resetDefaults}>
             Reset to defaults
           </button>
-          {saved && <span className="settings-msg settings-msg-success">saved</span>}
+          <span className={`settings-msg settings-msg-success${saved ? ' is-on' : ''}`}
+            aria-live="polite">saved</span>
         </div>
       )}
     </div>

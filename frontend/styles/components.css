@@ -1374,6 +1374,20 @@ html.light .skeleton-pie::after {
   gap: 12px;
   margin-top: 14px;
 }
+/* The "saved" flash keeps its slot in the row at all times: mounting it with
+   the shared .settings-msg bottom margin made the row taller and bumped the
+   button. visibility (not opacity alone) keeps it out of the a11y tree while
+   it's idle. */
+.rating-defs-actions .settings-msg {
+  margin-bottom: 0;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.rating-defs-actions .settings-msg.is-on {
+  visibility: visible;
+  opacity: 1;
+}
 
 /* ── Share profile tool ──────────────────────────────────────────────────── */
 .share-link-row {
